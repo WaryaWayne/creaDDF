@@ -1,0 +1,17 @@
+import { Context, Effect, Layer, Ref } from "effect"
+import type { ODataGetQuery, ODataListQuery, ReplicationQuery } from "./types"
+
+export interface DdfClientConfig { clientId: string; clientSecret: string; baseUrl?: string; identityUrl?: string; fetch: typeof fetch }
+export const DdfConfig = Context.Service<DdfClientConfig>("DdfConfig")
+export const DdfAuth = Context.Service<{ getAccessToken: Effect.Effect<string, Error> }>("DdfAuth")
+export const DdfHttp = Context.Service<any>("DdfHttp")
+export const encodeODataQuery = (query?: any): string => { if (!query) return ""; const p = new URLSearchParams(); if (query.select?.length) p.set("$select", query.select.join(",")); if (query.count !== undefined) p.set("$count", String(query.count)); if (query.filter) p.set("$filter", query.filter); if (query.top !== undefined) p.set("$top", String(query.top)); if (query.skip !== undefined) p.set("$skip", String(query.skip)); if (query.orderby) p.set("$orderby", Array.isArray(query.orderby) ? query.orderby.join(",") : query.orderby); const s = p.toString(); return s ? `?${s}` : "" }
+const keyLiteral = (key: string | number) => typeof key === "number" ? String(key) : `'${key.replaceAll("'", "''")}'`
+
+export const makeDdfLayer = (config: DdfClientConfig) => {
+  const authLayer = Layer.effect(DdfAuth, Effect.gen(function* () { const cfg = yield* DdfConfig; const ref = yield* Ref.make<any>(null); const getAccessToken = Effect.fn("DdfAuth.getAccessToken")(function* () { const cached = yield* Ref.get(ref); const now = Date.now(); if (cached && cached.expiresAt > now + 60000) return cached.token; const res: Response = yield* Effect.tryPromise(() => cfg.fetch(cfg.identityUrl ?? "https://identity.crea.ca/connect/token", { method: "POST", body: new URLSearchParams({ grant_type: "client_credentials", client_id: cfg.clientId, client_secret: cfg.clientSecret }) })); const json: any = yield* Effect.tryPromise(() => res.json()); yield* Ref.set(ref, { token: json.access_token, expiresAt: now + json.expires_in * 1000 }); return json.access_token })(); return { getAccessToken } }))
+  const httpLayer = Layer.effect(DdfHttp, Effect.gen(function* () { const cfg = yield* DdfConfig; const auth = yield* DdfAuth; const requestJson = (path: string, init?: RequestInit) => Effect.fn("DdfHttp.requestJson")(function* () { const token = yield* auth.getAccessToken; const url = path.startsWith("http") ? path : `${cfg.baseUrl ?? "https://ddfapi.realtor.ca"}${path}`; const res: Response = yield* Effect.tryPromise(() => cfg.fetch(url, { ...init, headers: { ...(init?.headers ?? {}), authorization: `Bearer ${token}` } })); if (!res.ok) return yield* Effect.fail(new Error(`HTTP ${res.status}`)); return (yield* Effect.tryPromise(() => res.json())) as any })();
+  return { requestJson, listOData: (p:string,q?:ODataListQuery)=>requestJson(`${p}${encodeODataQuery(q)}`), getOData: (p:string,k:string|number,q?:ODataGetQuery)=>requestJson(`${p}(${keyLiteral(k)})${encodeODataQuery(q)}`), replicateIdentifiers: (p:string,q?:ReplicationQuery)=>requestJson(`${p}${encodeODataQuery(q)}`), paginateOData: (first:string)=>Effect.fn("DdfOData.paginate")(function*(){const out:any[]=[];let next:string|undefined=first;while(next){const page:any=yield* requestJson(next);out.push(...(page.value??[]));next=page["@odata.nextLink"];}return out})() }
+}))
+  return Layer.mergeAll(Layer.succeed(DdfConfig, config), authLayer, httpLayer)
+}

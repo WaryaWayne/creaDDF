@@ -3305,7 +3305,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
 })
 
-export const PropertyListingValidationSchema = toStandardSchemaV1(
+export const PropertyListingValidationSchema: unknown = toStandardSchemaV1(
   PropertyListingSchema,
 )
 

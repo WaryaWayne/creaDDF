@@ -3,7 +3,8 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
@@ -15,33 +16,8 @@
     "skipLibCheck": true,
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    },
-    "plugins": [
-      {
-        "name": "@effect/language-service",
-        "ignoreEffectWarningsInTscExitCode": true,
-        "diagnosticSeverity": {
-          "instanceOfSchema": "warning",
-          "globalFetch": "warning",
-          "globalFetchInEffect": "warning",
-          "preferSchemaOverJson": "warning",
-          "extendsNativeError": "warning",
-          "nodeBuiltinImport": "warning",
-          "globalDate": "warning",
-          "globalDateInEffect": "warning",
-          "globalConsole": "warning",
-          "globalConsoleInEffect": "warning",
-          "globalRandom": "warning",
-          "globalRandomInEffect": "warning",
-          "globalTimers": "warning",
-          "globalTimersInEffect": "warning"
-        }
-      }
-    ]
+    "paths": {"@/*": ["./src/*"]}
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"],
-  "$schema": "https://raw.githubusercontent.com/Effect-TS/language-service/refs/heads/main/schema.json"
+  "exclude": ["dist", "node_modules"]
 }
