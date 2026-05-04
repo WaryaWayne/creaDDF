@@ -43,17 +43,17 @@ The docs show timestamp filtering against replication:
 $filter=ModificationTimestamp gt 2024-01-25T00:00:00.00Z
 ```
 
-The SDK should not try to invent a full OData expression builder on night one. Start with:
+The SDK should support OData thoroughly without trying to model every possible DDF search as a separate method. Build:
 
 - pass-through `filter: string`
-- small helpers for common predicates, such as `modifiedAfter(field, date)`
+- helpers for common predicates, such as `modifiedAfter(field, date)`
 - strict URL encoding
 
 ## Query Builder Scope
 
-Build a small OData query encoder, not a giant typed DSL for every DDF field.
+Build a complete OData query encoder, not a giant typed DSL for every DDF field.
 
-Good first surface:
+Good surface:
 
 ```ts
 type ODataQuery = {
@@ -75,7 +75,7 @@ The encoder should:
 - Reject invalid `$top` values above the API maximum of `100`.
 - Follow `@odata.nextLink` exactly after the first request.
 
-Add lightweight helper functions only where they remove real footguns:
+Add helper functions where they remove real footguns:
 
 ```ts
 filters.modifiedAfter("ModificationTimestamp", date)
@@ -84,7 +84,7 @@ filters.and(a, b)
 filters.or(a, b)
 ```
 
-The SDK can always accept raw `filter` strings for advanced DDF/OData cases. This keeps the helper library flexible without spending the first build on every possible search combination.
+The SDK should always accept raw `filter` strings for advanced DDF/OData cases. This keeps the helper library flexible while still allowing thorough API method coverage.
 
 ## Response Envelope
 

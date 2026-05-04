@@ -1,36 +1,32 @@
 import { Schema } from "effect"
 
 export const OpenHouseSchema = Schema.Struct({
-  OpenHouseKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseKey. Reason: ${_tag}.`,
+  OpenHouseKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for OpenHouseKey.",
     description:
       "A unique identifier for this record from the immediate source.",
     title: "OpenHouse Key",
     identifier: "OpenHouseKey",
     examples: ["28335177"], // TODO: Add Examples
   }),
-  ListingKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListingKey. Reason: ${_tag}.`,
+  ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListingKey.",
     description:
       "A unique identifier for the listing record related to this Open House.",
     title: "Listing Key",
     identifier: "ListingKey",
     examples: ["26034183", "26507412", "26935822"],
   }),
-  ListingId: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListingId. Reason: ${_tag}.`,
+  ListingId: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListingId.",
     description:
       "The well known identifier for the listing related to this Open House.",
     title: "Listing Id",
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.Union(Schema.DateFromString, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseDate. Reason: ${_tag}.`,
+  OpenHouseDate: Schema.Union([Schema.DateFromString, Schema.Null]).annotate({
+    message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",
     identifier: "OpenHouseDate",
@@ -40,25 +36,22 @@ export const OpenHouseSchema = Schema.Struct({
       new Date("2026-09-12"),
     ],
   }),
-  OpenHouseStartTime: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseStartTime. Reason: ${_tag}.`,
+  OpenHouseStartTime: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for OpenHouseStartTime.",
     description: "The time the open house begins (in local time).",
     title: "OpenHouse Start Time",
     identifier: "OpenHouseStartTime",
     examples: ["12:00:00.00", "11:00:00.00", "15:00:00.00"],
   }),
-  OpenHouseEndTime: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseEndTime. Reason: ${_tag}.`,
+  OpenHouseEndTime: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for OpenHouseEndTime.",
     description: "The time the open house end (in local time).",
     title: "OpenHouse End Time",
     identifier: "OpenHouseEndTime",
     examples: ["15:00:00.00", "16:00:00.00", "13:00:00.00"],
   }),
-  OpenHouseRemarks: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseRemarks. Reason: ${_tag}.`,
+  OpenHouseRemarks: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for OpenHouseRemarks.",
     description: "Comments, instructions or information about the open house.",
     title: "OpenHouse Remarks",
     identifier: "OpenHouseRemarks",
@@ -66,8 +59,8 @@ export const OpenHouseSchema = Schema.Struct({
       "Over 2800 sq ft of living space in this awesome bungalow townhouse. 4 bedrooms 3 bathrooms and a pile of upgrades. Excellent gated community that is self managed and run very well.",
     ],
   }),
-  OpenHouseType: Schema.Union(
-    Schema.Literal(
+  OpenHouseType: Schema.Union([
+    Schema.Literals([
       "Open House",
       "Tour",
       "Showing",
@@ -76,31 +69,28 @@ export const OpenHouseSchema = Schema.Struct({
       "Seminar",
       "Training",
       "Live Stream Open House",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for OpenHouseType.",
     description:
       "The type of open house. i.e. Public, Broker, Office, Association, Private (invitation or targeted publication).",
     title: "OpenHouse Type",
     identifier: "OpenHouseType",
     examples: ["Conference", "Open House", "Tour"],
   }),
-  OpenHouseStatus: Schema.Union(
-    Schema.Literal("Active", "Canceled", "Ended"),
+  OpenHouseStatus: Schema.Union([
+    Schema.Literals(["Active", "Canceled", "Ended"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OpenHouseStatus. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for OpenHouseStatus.",
     description: "Status of the open house, i.e. Active, Cancelled, Ended.",
     title: "OpenHouse Status",
     identifier: "OpenHouseStatus",
     examples: ["Active", "Canceled", "Ended"],
   }),
-  LivestreamOpenHouseURL: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivestreamOpenHouseURL. Reason: ${_tag}.`,
+  LivestreamOpenHouseURL: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for LivestreamOpenHouseURL.",
     description: "A link to an open house livestream event.",
     title: "Livestream Open House URL",
     identifier: "LivestreamOpenHouseURL",
@@ -111,7 +101,7 @@ export const OpenHouseSchema = Schema.Struct({
 export const OpenHouseType = OpenHouseSchema.Type
 
 export const OpenHouseResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union(Schema.String, Schema.Null),
-  "@odata.nextLink": Schema.Union(Schema.String, Schema.Null),
+  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
+  "@odata.nextLink": Schema.Union([Schema.String, Schema.Null]),
   value: Schema.Array(OpenHouseSchema),
 })

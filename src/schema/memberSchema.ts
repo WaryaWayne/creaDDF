@@ -2,32 +2,32 @@ import { Schema } from "effect"
 import { MediaSchema } from "./mediaSchema"
 
 export const MemberSchema = Schema.Struct({
-  MemberKey: Schema.Union(Schema.Null, Schema.String),
-  MemberMlsId: Schema.Union(Schema.Null, Schema.String),
-  OfficeKey: Schema.Union(Schema.Null, Schema.String),
-  OfficeNationalAssociationId: Schema.Union(Schema.Null, Schema.String),
-  JobTitle: Schema.Union(Schema.Null, Schema.String),
-  MemberAORKey: Schema.Union(Schema.Null, Schema.String),
-  MemberAddress1: Schema.Union(Schema.Null, Schema.String),
-  MemberAddress2: Schema.Union(Schema.Null, Schema.String),
-  MemberFax: Schema.Union(Schema.Null, Schema.String),
-  MemberFirstName: Schema.Union(Schema.Null, Schema.String),
-  MemberLastName: Schema.Union(Schema.Null, Schema.String),
-  MemberMiddleName: Schema.Union(Schema.Null, Schema.String),
-  MemberNamePrefix: Schema.Union(Schema.Null, Schema.String),
-  MemberNameSuffix: Schema.Union(Schema.Null, Schema.String),
-  MemberNationalAssociationId: Schema.Union(Schema.Null, Schema.String),
-  MemberNickname: Schema.Union(Schema.Null, Schema.String),
-  MemberOfficePhone: Schema.Union(Schema.Null, Schema.String),
-  MemberOfficePhoneExt: Schema.Union(Schema.Null, Schema.String),
-  MemberPostalCode: Schema.Union(Schema.Null, Schema.String),
-  MemberPager: Schema.Union(Schema.Null, Schema.String),
-  MemberTollFreePhone: Schema.Union(Schema.Null, Schema.String),
-  ModificationTimestamp: Schema.Union(Schema.Null, Schema.DateFromString),
-  OriginalEntryTimestamp: Schema.Union(Schema.Null, Schema.DateFromString),
-  MemberCity: Schema.Union(Schema.Null, Schema.String),
-  MemberAOR: Schema.Union(
-    Schema.Literal(
+  MemberKey: Schema.Union([Schema.Null, Schema.String]),
+  MemberMlsId: Schema.Union([Schema.Null, Schema.String]),
+  OfficeKey: Schema.Union([Schema.Null, Schema.String]),
+  OfficeNationalAssociationId: Schema.Union([Schema.Null, Schema.String]),
+  JobTitle: Schema.Union([Schema.Null, Schema.String]),
+  MemberAORKey: Schema.Union([Schema.Null, Schema.String]),
+  MemberAddress1: Schema.Union([Schema.Null, Schema.String]),
+  MemberAddress2: Schema.Union([Schema.Null, Schema.String]),
+  MemberFax: Schema.Union([Schema.Null, Schema.String]),
+  MemberFirstName: Schema.Union([Schema.Null, Schema.String]),
+  MemberLastName: Schema.Union([Schema.Null, Schema.String]),
+  MemberMiddleName: Schema.Union([Schema.Null, Schema.String]),
+  MemberNamePrefix: Schema.Union([Schema.Null, Schema.String]),
+  MemberNameSuffix: Schema.Union([Schema.Null, Schema.String]),
+  MemberNationalAssociationId: Schema.Union([Schema.Null, Schema.String]),
+  MemberNickname: Schema.Union([Schema.Null, Schema.String]),
+  MemberOfficePhone: Schema.Union([Schema.Null, Schema.String]),
+  MemberOfficePhoneExt: Schema.Union([Schema.Null, Schema.String]),
+  MemberPostalCode: Schema.Union([Schema.Null, Schema.String]),
+  MemberPager: Schema.Union([Schema.Null, Schema.String]),
+  MemberTollFreePhone: Schema.Union([Schema.Null, Schema.String]),
+  ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
+  OriginalEntryTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
+  MemberCity: Schema.Union([Schema.Null, Schema.String]),
+  MemberAOR: Schema.Union([
+    Schema.Literals([
       "Alberta West",
       "AREA",
       "Barrie",
@@ -89,11 +89,11 @@ export const MemberSchema = Schema.Struct({
       "Woodstock-Ingersoll-Tillsonburg",
       "Yellowknife",
       "Yukon",
-    ),
+    ]),
     Schema.Null,
-  ),
-  MemberCountry: Schema.Union(
-    Schema.Literal(
+  ]),
+  MemberCountry: Schema.Union([
+    Schema.Literals([
       "Canada",
       "United States of America (the)",
       "Algeria",
@@ -342,12 +342,12 @@ export const MemberSchema = Schema.Struct({
       "Kosovo",
       "Saint Barthélemy",
       "South Sudan",
-    ),
+    ]),
     Schema.Null,
-  ),
-  MemberDesignation: Schema.Union(
+  ]),
+  MemberDesignation: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Accredited Buyer Representative",
         "Accredited Buyer Representative Manager",
         "At Home With Diversity Certification",
@@ -446,13 +446,13 @@ export const MemberSchema = Schema.Struct({
         "Certified Buyer Agent Expert",
         "Accredited Commercial Manager",
         "Canadian Certified Green Representative (CCGR)",
-      ),
+      ]),
     ),
     Schema.Null,
-  ),
-  MemberLanguages: Schema.Union(
+  ]),
+  MemberLanguages: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Afrikaans",
         "Albanian",
         "American Sign Language (ASL)",
@@ -562,17 +562,17 @@ export const MemberSchema = Schema.Struct({
         "Filipino",
         "Yoruba",
         "Igbo",
-      ),
+      ]),
     ),
     Schema.Null,
-  ),
-  MemberSocialMedia: Schema.Union(
+  ]),
+  MemberSocialMedia: Schema.Union([
     Schema.Array(
       Schema.Struct({
-        SocialMediaKey: Schema.Union(Schema.String, Schema.Null),
-        ResourceRecordKey: Schema.Union(Schema.String, Schema.Null),
-        SocialMediaType: Schema.Union(
-          Schema.Literal(
+        SocialMediaKey: Schema.Union([Schema.String, Schema.Null]),
+        ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]),
+        SocialMediaType: Schema.Union([
+          Schema.Literals([
             "Website",
             "FaceBook",
             "LinkedIn",
@@ -581,22 +581,22 @@ export const MemberSchema = Schema.Struct({
             "About Us Video",
             "About Me Video",
             "YouTube Channel",
-          ),
+          ]),
           Schema.Null,
-        ),
-        ModificationTimestamp: Schema.Union(Schema.Null, Schema.DateFromString),
-        ResourceName: Schema.Union(
-          Schema.Literal("Office", "Member", "Property"),
+        ]),
+        ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
+        ResourceName: Schema.Union([
+          Schema.Literals(["Office", "Member", "Property"]),
           Schema.Null,
-        ),
-        SocialMediaUrlOrId: Schema.Union(Schema.String, Schema.Null),
+        ]),
+        SocialMediaUrlOrId: Schema.Union([Schema.String, Schema.Null]),
       }),
     ),
     Schema.Null,
-  ),
+  ]),
   Media: MediaSchema,
-  MemberStateOrProvince: Schema.Union(
-    Schema.Literal(
+  MemberStateOrProvince: Schema.Union([
+    Schema.Literals([
       "Alberta",
       "British Columbia",
       "Manitoba",
@@ -610,12 +610,12 @@ export const MemberSchema = Schema.Struct({
       "Quebec",
       "Saskatchewan",
       "Yukon",
-    ),
+    ]),
     Schema.Null,
-  ),
-  MemberStatus: Schema.Union(Schema.Literal("active", "Inactive"), Schema.Null),
-  MemberType: Schema.Union(
-    Schema.Literal(
+  ]),
+  MemberStatus: Schema.Union([Schema.Literals(["active", "Inactive"]), Schema.Null]),
+  MemberType: Schema.Union([
+    Schema.Literals([
       "Broker",
       "Non-MLS®",
       "Salesperson",
@@ -634,10 +634,10 @@ export const MemberSchema = Schema.Struct({
       "Social Affiliate",
       "Dual",
       "Member",
-    ),
+    ]),
     Schema.Null,
-  ),
-  MemberEmailYN: Schema.Union(Schema.Boolean, Schema.Null),
+  ]),
+  MemberEmailYN: Schema.Union([Schema.Boolean, Schema.Null]),
 })
 
 export const MemberLanguageSubtagSchema = Schema.Struct({

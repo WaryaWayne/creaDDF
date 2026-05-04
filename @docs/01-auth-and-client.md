@@ -68,4 +68,4 @@ Good module split:
 - `DdfAuth` service - owns token acquisition/cache.
 - `DdfHttp` service - owns fetch, retries, request construction, and error decoding.
 - `DdfOData` helpers - builds query strings and follows `@odata.nextLink`.
-- Resource services - Property, Member, OpenHouse, Destination, later Office and Lead.
+- Resource services - Property, Member, OpenHouse, Destination, Office, and Lead.

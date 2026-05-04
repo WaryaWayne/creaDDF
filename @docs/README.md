@@ -6,7 +6,7 @@ This directory is a handoff pack for building the Effect TypeScript SDK in this 
 
 ## Start Here
 
-Core resources, in the order requested:
+Core resources, in the order requested. Build broad coverage for the exposed API; do not half-build the SDK surface if the docs/OpenAPI clearly expose a method.
 
 1. Property listings - primary listing records at `/odata/v1/Property`.
 2. Rooms - embedded child objects on `Property.Rooms`; no standalone room endpoint was exposed in the OpenAPI paths.
@@ -14,7 +14,8 @@ Core resources, in the order requested:
 4. Members - agent/broker records at `/odata/v1/Member`.
 5. Open houses - event records at `/odata/v1/OpenHouse`.
 6. Destination - exists in the API at `/odata/v1/Destination`; use it for data feed context, especially technology-provider flows.
-7. Office - exposed by metadata/OpenAPI and replication endpoints, but keep it later unless product needs it.
+7. Office - exposed by metadata/OpenAPI and replication endpoints; include after the requested core resources rather than omitting it.
+8. Lead - exposed by the API for contact form submission; keep separate from replication, but implement when method coverage is being completed.
 
 ## Files
 
@@ -22,6 +23,7 @@ Core resources, in the order requested:
 - `01-auth-and-client.md` - token, hosts, headers, client behavior.
 - `02-odata-querying.md` - supported OData query options and pagination rules.
 - `03-replication-sync.md` - how to do initial load, incremental sync, delete pruning, and the persistence boundary.
+- `04-implementation-standards.md` - required Effect implementation style and colocated test rules.
 - `ddfapi-openapi.json` - raw embedded OpenAPI 3.0.4 spec from the docs page, included as an offline fallback if web fetch fails.
 - `openapi-path-inventory.md` - generated list of every path from the embedded OpenAPI model.
 - `model-field-inventory.md` - generated field checklist for core models.
@@ -31,7 +33,7 @@ Core resources, in the order requested:
 - `resources/04-members.md` - Member endpoint guide.
 - `resources/05-open-houses.md` - OpenHouse endpoint guide.
 - `resources/06-destination.md` - Destination endpoint guide.
-- `resources/07-office-later.md` - Office endpoint notes for later.
+- `resources/07-office-later.md` - Office endpoint notes; despite the filename, Office is exposed and should be wrapped for thorough coverage.
 - `resources/08-leads.md` - Lead endpoint, which exists but is not part of replication.
 
 ## Important Findings
@@ -48,7 +50,9 @@ Core resources, in the order requested:
 - Replication endpoints exist for Property, Member, and Office only.
 - Replication responses return identifiers plus `ModificationTimestamp`, not full records. Hydrate details by key from the main resource endpoint.
 - Destination exists and has list/get endpoints.
-- Office exists in OpenAPI and metadata, but keep it as a later wrapper unless needed.
+- Office exists in OpenAPI and metadata and should be included for thorough SDK coverage after Property, Rooms, Media, Members, OpenHouse, and Destination.
 - Lead creation exists at `/v1/Lead/CreateLead`, but it is not part of data replication.
-- This SDK should not choose a database or ORM. Expose sync results and optional persistence hooks/sinks so the caller can save data with Drizzle, Prisma, raw SQL, Effect SQL, or any other app-owned storage layer.
-- Use a small OData encoder plus raw `filter` strings and lightweight helpers. Do not build a huge typed method for every possible DDF search.
+- The core SDK should not require a database for read/list/get methods. For persistence examples/adapters, the intended app-side target is Drizzle ORM, with Effect SQL integration where it fits cleanly.
+- Expose sync results and persistence hooks/sinks so the caller can save data with the Drizzle/Effect SQL adapter, or ignore persistence and manage storage itself.
+- Use a complete OData encoder plus raw `filter` strings and lightweight helpers. Do not replace the generic filter surface with hundreds of brittle one-off search methods.
+- Local reference repos may exist for Codex to inspect, but do not copy or commit reference repos into this package.

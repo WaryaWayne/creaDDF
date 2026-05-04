@@ -2,26 +2,23 @@ import { Schema } from "effect"
 
 export const MediaSchema = Schema.Array(
   Schema.Struct({
-    MediaKey: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for MediaKey. Reason: ${_tag}.`,
+    MediaKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for MediaKey.",
       description:
         "A unique identifier for this record from the immediate source. This may be a number, or string that can include URI or other forms. This is the system you are connecting to and not necessarily the original source of the record.",
       title: "Media Key",
       identifier: "MediaKey",
       examples: ["6308829675", "6308843527", "6357376500"],
     }),
-    LongDescription: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for LongDescription. Reason: ${_tag}.`,
+    LongDescription: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for LongDescription.",
       description: "The full description of the object.",
       title: "Long Description",
       identifier: "LongDescription",
       examples: ["Multi Use space", "Carpeted Den"],
     }),
-    MediaURL: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for MediaURL. Reason: ${_tag}.`,
+    MediaURL: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for MediaURL.",
       description: "The URI to the media file referenced by this record.",
       title: "Media URL",
       identifier: "MediaURL",
@@ -31,12 +28,11 @@ export const MediaSchema = Schema.Array(
         "https://ddfcdn.realtor.ca/listing/TS638684868443800000/reb76/highres/4/x9462414_10.jpg",
       ],
     }),
-    ModificationTimestamp: Schema.Union(
+    ModificationTimestamp: Schema.Union([
       Schema.Null,
       Schema.DateFromString,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ModificationTimestamp. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for ModificationTimestamp.",
       description:
         "Date/time this record was last modified (in Zulu time (UTC)).",
       title: "Modification Timestamp",
@@ -47,27 +43,24 @@ export const MediaSchema = Schema.Array(
         new Date("2025-12-05T19:24:51.550Z"),
       ],
     }),
-    Order: Schema.Union(Schema.Int, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for Order. Reason: ${_tag}.`,
+    Order: Schema.Union([Schema.Int, Schema.Null]).annotate({
+      message: "Value is invalid for Order.",
       description:
         "The order in which the media object is displayed. Zero is the primary photo per RETS convention.",
       title: "Order",
       identifier: "Order",
       examples: [1, 17, 4, 9],
     }),
-    PreferredPhotoYN: Schema.Union(Schema.Boolean, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for PreferredPhotoYN. Reason: ${_tag}.`,
+    PreferredPhotoYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+      message: "Value is invalid for PreferredPhotoYN.",
       description:
         "When set to true, the media record in question is the preferred photo. This will typically mean the photo to be shown when only one of the photos is to be displayed.",
       title: "Preferred Photo Yes or No",
       identifier: "PreferredPhotoYN",
       examples: [true, false],
     }),
-    ResourceRecordId: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ResourceRecordId. Reason: ${_tag}.`,
+    ResourceRecordId: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for ResourceRecordId.",
       description:
         "The well known identifier of the related record from the source resource.",
       title: "Resource Record ID",
@@ -75,29 +68,27 @@ export const MediaSchema = Schema.Array(
       examples: ["X9465222", "X9462522", "X9462414"],
     }),
 
-    ResourceRecordKey: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ResourceRecordKey. Reason: ${_tag}.`,
+    ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for ResourceRecordKey.",
       description:
         "The primary key of the related record from the source resource. For example the ListingKey, MemberKey, OfficeKey, etc. This is a foreign key from the resource selected in the ResourceName field.",
       title: "Resource Record Key",
       identifier: "ResourceRecordKey",
       examples: ["26034185", "26368062", "26197350"],
     }),
-    ResourceName: Schema.Union(
-      Schema.Literal("Property", "Member", "Office"),
+    ResourceName: Schema.Union([
+      Schema.Literals(["Property", "Member", "Office"]),
       Schema.Null,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ResourceName. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for ResourceName.",
       description:
         "The resource or table of the listing or other record the media relates to. i.e. Property, Member, Office, etc.",
       title: "Resource Name",
       identifier: "ResourceName",
       examples: ["Member", "Office", "Property"],
     }),
-    MediaCategory: Schema.Union(
-      Schema.Literal(
+    MediaCategory: Schema.Union([
+      Schema.Literals([
         "Alternate Feature Sheet Website",
         "Video Tour Website",
         "Sound Bite Website",
@@ -109,11 +100,10 @@ export const MediaSchema = Schema.Array(
         "Member Photo",
         "Property Photo",
         "Office Logo",
-      ),
+      ]),
       Schema.Null,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for MediaCategory. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for MediaCategory.",
       description:
         "Category describing the media type: Photos, Documents, Video, Unbranded Virtual Tour, Branded Virtual Tour, Floor Plan, Logo",
       title: "Media Category",

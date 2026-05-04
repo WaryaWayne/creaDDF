@@ -121,9 +121,9 @@ The caller owns cron/timer scheduling. The SDK owns safe request flow, token ren
 
 ## Persistence Boundary
 
-Do not choose an ORM or database for the SDK.
+The core SDK should remain usable without a database, but the intended persistence adapter target is Drizzle ORM with Effect SQL integration where it fits.
 
-The SDK should expose a small persistence boundary that can be implemented by the caller's app. This can be plain callback hooks at first, then optionally a formal adapter interface:
+The SDK should expose a persistence boundary that can be implemented by the caller's app. This can be plain callback hooks and/or a formal adapter interface:
 
 ```ts
 type PropertySyncSink = {
@@ -135,13 +135,15 @@ type PropertySyncSink = {
 }
 ```
 
-The app using this library can implement that sink with Drizzle, Prisma, raw SQL, Kysely, a queue, or anything else. Once the data is in the app database, the app owns querying and cross-linking.
+The app using this library can implement that sink with Drizzle ORM. Once the data is in the app database, the app owns querying and cross-linking.
 
-Effect SQL is a good optional path for examples because it is SQL-first and Effect-native. The current Effect SQL ecosystem uses `@effect/sql` for core abstractions plus database-specific packages such as `@effect/sql-pg`, SQLite adapters, MySQL, SQL Server, D1, LibSQL/Turso, ClickHouse, and `@effect/sql-drizzle` for Drizzle integration. Do not add these packages unless implementing a concrete example or optional adapter.
+Effect SQL is the preferred Effect-native SQL path for the persistence adapter because it provides core SQL abstractions and database-specific adapters. Drizzle ORM should be the intended ORM/query-builder layer for app persistence, with Effect SQL integration/driver support used where it fits cleanly.
 
-Recommended first implementation:
+Implementation guidance:
 
-- Build the SDK with no required DB dependency.
+- Build the core SDK so list/get/query methods have no required DB dependency.
 - Define the sink/callback interface in core types.
 - Provide an in-memory sink for tests/examples.
-- Add an optional `@effect/sql` example later if the app chooses a database driver.
+- Add a Drizzle persistence adapter when implementing database save examples.
+- Use Effect SQL integration/driver support for that adapter when it is practical.
+- Do not copy or commit large local reference repos into this package.

@@ -2,38 +2,34 @@ import { Schema } from "effect"
 
 export const RoomsSchema = Schema.Array(
   Schema.Struct({
-    RoomKey: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomKey. Reason: ${_tag}.`,
+    RoomKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for RoomKey.",
       description: "A unique identifier for this record.",
       title: "Room Key",
       identifier: "RoomKey",
       examples: ["1525032059", "1525032245", "1543188404"],
     }),
-    ListingId: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ListingId. Reason: ${_tag}.`,
+    ListingId: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for ListingId.",
       description:
         "This is the foreign ID relating to the Property Resource. The well known identifier for the listing.",
       title: "Listing Id",
       identifier: "ListingId",
       examples: ["X9465223", "SK015977", "X12348197"],
     }),
-    ListingKey: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ListingKey. Reason: ${_tag}.`,
+    ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for ListingKey.",
       description:
         "This is the foreign key relating to the property resource. A unique identifier for this record from the immediate source.",
       title: "Listing Key",
       identifier: "ListingKey",
       examples: ["26034183", "26507412", "26935822"],
     }),
-    ModificationTimestamp: Schema.Union(
+    ModificationTimestamp: Schema.Union([
       Schema.Null,
       Schema.DateFromString,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for ModificationTimestamp. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for ModificationTimestamp.",
       description:
         "Date/time this record was last modified (in Zulu time (UTC)).",
       title: "Modification Timestamp",
@@ -44,31 +40,28 @@ export const RoomsSchema = Schema.Array(
         new Date("2025-10-28T00:34:48.550Z"),
       ],
     }),
-    RoomDescription: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomDescription. Reason: ${_tag}.`,
+    RoomDescription: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for RoomDescription.",
       description: "A textual description of the given room.",
       title: "Room Description",
       identifier: "RoomDescription",
     }),
-    RoomDimensions: Schema.Union(Schema.String, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomDimensions. Reason: ${_tag}.`,
+    RoomDimensions: Schema.Union([Schema.String, Schema.Null]).annotate({
+      message: "Value is invalid for RoomDimensions.",
       description: "A textual description of the dimensions of the given room.",
       title: "Room Dimensions",
       identifier: "RoomDimensions",
     }),
-    RoomLength: Schema.Union(Schema.Number, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomLength. Reason: ${_tag}.`,
+    RoomLength: Schema.Union([Schema.Number, Schema.Null]).annotate({
+      message: "Value is invalid for RoomLength.",
       description:
         "A numeric representation of the length of the given room. See the RoomLengthWidthUnits for the unit of measurement used for the length and width.",
       title: "Room Length",
       identifier: "RoomLength",
       examples: [3.86, 3.17, 2.69, 1.82],
     }),
-    RoomLevel: Schema.Union(
-      Schema.Literal(
+    RoomLevel: Schema.Union([
+      Schema.Literals([
         "Second level",
         "Third level",
         "Fourth level",
@@ -89,39 +82,36 @@ export const RoomsSchema = Schema.Array(
         "Additional Accommodation",
         "Auxiliary Building",
         "Secondary Dwelling Unit",
-      ),
+      ]),
       Schema.Null,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomLevel. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for RoomLevel.",
       description:
         "The level within the dwelling on which the given room is located.",
       title: "Room Level",
       identifier: "RoomLevel",
       examples: ["Main level", "Second level", "Fourth level"],
     }),
-    RoomWidth: Schema.Union(Schema.Number, Schema.Null).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomWidth. Reason: ${_tag}.`,
+    RoomWidth: Schema.Union([Schema.Number, Schema.Null]).annotate({
+      message: "Value is invalid for RoomWidth.",
       description: "A numeric representation of the width of the given room.",
       title: "Room Width",
       identifier: "RoomWidth",
       examples: [3.86, 4.57, 3.86, 5.05, 1.52],
     }),
-    RoomLengthWidthUnits: Schema.Union(
-      Schema.Literal("meters", "feet"),
+    RoomLengthWidthUnits: Schema.Union([
+      Schema.Literals(["meters", "feet"]),
       Schema.Null,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomLengthWidthUnits. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for RoomLengthWidthUnits.",
       description:
         "The unit of measurement used for the value in the RoomLength and the RoomWidth fields. e.g. feet, meters, etc.",
       title: "Room Length Width Units",
       identifier: "RoomLengthWidthUnits",
       examples: ["feet", "meters"],
     }),
-    RoomType: Schema.Union(
-      Schema.Literal(
+    RoomType: Schema.Union([
+      Schema.Literals([
         "Living room",
         "Dining room",
         "Kitchen",
@@ -237,11 +227,10 @@ export const RoomsSchema = Schema.Array(
         "Entrance",
         "Studio",
         "Unfinished Room",
-      ),
+      ]),
       Schema.Null,
-    ).annotations({
-      message: ({ _tag, actual }) =>
-        `Value '${actual}' is invalid for RoomType. Reason: ${_tag}.`,
+    ]).annotate({
+      message: "Value is invalid for RoomType.",
       description:
         "The type of room being described by the other fields in the PropertyRooms resource.",
       title: "Room Type",

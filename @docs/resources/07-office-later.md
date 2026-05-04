@@ -1,6 +1,6 @@
-# Office Later
+# Office
 
-Office is exposed by the official OpenAPI model, but the user asked to keep it later unless metadata exposes it and the SDK needs it. Metadata/OpenAPI does expose it, so document it now and prioritize after Property, Rooms, Media, Members, OpenHouse, and Destination.
+Office is exposed by the official OpenAPI model and metadata. Implement it after Property, Rooms, Media, Members, OpenHouse, and Destination so the SDK has broad method coverage.
 
 ## Endpoints
 
@@ -35,7 +35,7 @@ Important fields:
 - embedded `Media`
 - embedded `OfficeSocialMedia`
 
-## SDK Methods For Later
+## SDK Methods
 
 - `listOffices(query)`
 - `getOffice(officeKey, query)`
@@ -43,4 +43,4 @@ Important fields:
 - `replicateOfficesForDestination(destinationId, query)`
 - `syncOffices(options)`
 
-Use this when the app needs brokerage/office pages, office logos, or office-level relationship data.
+Use this for brokerage/office pages, office logos, office-level relationship data, and complete DDF API coverage.

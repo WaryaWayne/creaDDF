@@ -1,19 +1,18 @@
 import { Schema } from "effect"
-import { standardSchemaV1 } from "effect/Schema"
+import { toStandardSchemaV1 } from "effect/Schema"
 import { RoomsSchema } from "./roomsSchema"
 import { MediaSchema } from "./mediaSchema"
 
 export const PropertyListingSchema = Schema.Struct({
-  ListingKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListingKey. Reason: ${_tag}.`,
+  ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListingKey.",
     description: "A unique identifier for this record.",
     title: "Listing Key",
     identifier: "ListingKey",
     examples: ["26034185", "1525032245", "1543188404"],
   }),
-  PropertySubType: Schema.Union(
-    Schema.Literal(
+  PropertySubType: Schema.Union([
+    Schema.Literals([
       "Single Family",
       "Multi-family",
       "Recreational",
@@ -27,20 +26,19 @@ export const PropertyListingSchema = Schema.Struct({
       "Institutional - Special Purpose",
       "Other",
       "Hospitality",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PropertySubType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PropertySubType.",
     description:
       "A list of types of residential and residential lease properties, i.e. Condo, etc. Or a list of Sub Types for Mobile, such as Expando, Manufactured, Modular, etc.",
     title: "Property SubType",
     identifier: "PropertySubType",
     examples: ["Multi-family", "Single Family", "Office", "Vacant Land"],
   }),
-  DocumentsAvailable: Schema.Union(
+  DocumentsAvailable: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Floor Plan",
         "Site Plan",
         "Original Blueprints",
@@ -50,28 +48,26 @@ export const PropertyListingSchema = Schema.Struct({
         "Unknown",
         "Financial Statements",
         "Financial Analysis",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for DocumentsAvailable. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for DocumentsAvailable.",
     description: "A list of the Documents available for the property.",
     title: "Documents Available",
     identifier: "DocumentsAvailable",
     examples: [["Drainage Plan", "Original Blueprints"]],
   }),
-  LeaseAmount: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LeaseAmount. Reason: ${_tag}.`,
+  LeaseAmount: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for LeaseAmount.",
     description:
       "The amount of any lease the business pays for it's current location.",
     title: "Lease Amount",
     identifier: "LeaseAmount",
     examples: [5200, 1820, 2020],
   }),
-  LeaseAmountFrequency: Schema.Union(
-    Schema.Literal(
+  LeaseAmountFrequency: Schema.Union([
+    Schema.Literals([
       "Bi-monthly",
       "Bi-weekly",
       "Daily",
@@ -82,20 +78,19 @@ export const PropertyListingSchema = Schema.Struct({
       "Unknown",
       "Weekly",
       "Yearly",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LeaseAmountFrequency. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for LeaseAmountFrequency.",
     description:
       "The frequency of the LeaseAmountFrequency is paid. Monthly, weekly, annual, etc.",
     title: "Lease Amount Frequency",
     identifier: "LeaseAmountFrequency",
     examples: ["Monthly", "Quarterly", "Seasonal", "Fixed"],
   }),
-  BusinessType: Schema.Union(
+  BusinessType: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Accommodation",
         "Agriculture, Forestry, Fishing and Hunting",
         "Automobile",
@@ -129,61 +124,57 @@ export const PropertyListingSchema = Schema.Struct({
         "Mining and Oil and Gas",
         "Unknown",
         "Information and Cultural Industries",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BusinessType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BusinessType.",
     description:
       "The type of business being sold. Retail, Recreation, Restaurant, Residential, etc.",
     title: "Business Type",
     identifier: "BusinessType",
     examples: [["Construction", "Retail and Wholesale", "Construction"]],
   }),
-  LeasePerUnit: Schema.Union(
-    Schema.Literal(
+  LeasePerUnit: Schema.Union([
+    Schema.Literals([
       "square feet",
       "square meters",
       "acres",
       "hectares",
-    ).annotations({
+    ]).annotate({
       description:
         "A pick list of the unit of measurement for the area. i.e. Square Feet, Square Meters, Acres, etc.",
     }),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LeasePerUnit. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for LeasePerUnit.",
     description:
       "A pick list of the unit of measurement used for the lease per unit.",
     title: "Lease Per Unit",
     identifier: "LeasePerUnit",
     examples: ["acres", "hectares", "square feet", "square meters"],
   }),
-  PricePerUnit: Schema.Union(
-    Schema.Literal(
+  PricePerUnit: Schema.Union([
+    Schema.Literals([
       "square feet",
       "square meters",
       "acres",
       "hectares",
-    ).annotations({
+    ]).annotate({
       description:
         "A pick list of the unit of measurement for the area. i.e. Square Feet, Square Meters, Acres, etc.",
     }),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PricePerUnit. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PricePerUnit.",
     description:
       "A pick list of the unit of measurement used for the price per unit.",
     title: "Price Per Unit",
     identifier: "PricePerUnit",
     examples: ["acres", "hectares", "square feet", "square meters"],
   }),
-  WaterBodyName: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for WaterBodyName. Reason: ${_tag}.`,
+  WaterBodyName: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for WaterBodyName.",
     description:
       "The name, if known, of the body of water on which the property is located. (E.g., lake name, river name, ocean name, sea name, canal name).",
     title: "Water Body Name",
@@ -195,9 +186,9 @@ export const PropertyListingSchema = Schema.Struct({
       "Atlantic Ocean",
     ],
   }),
-  View: Schema.Union(
+  View: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "City view",
         "Lake view",
         "Mountain view",
@@ -222,38 +213,35 @@ export const PropertyListingSchema = Schema.Struct({
         "Direct Water View",
         "Unobstructed Water View",
         "No Water View",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for View. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for View.",
     description: "A view as seen from the listed property.",
     title: "View",
     identifier: "View",
     examples: [["City view", "Harbour", "Mountain view"]],
   }),
-  NumberOfBuildings: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for NumberOfBuildings. Reason: ${_tag}.`,
+  NumberOfBuildings: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for NumberOfBuildings.",
     description:
       "Total number of separate buildings included in the income property.",
     title: "Number Of Buildings",
     identifier: "NumberOfBuildings",
     examples: [3, 6, 8],
   }),
-  NumberOfUnitsTotal: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for NumberOfUnitsTotal. Reason: ${_tag}.`,
+  NumberOfUnitsTotal: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for NumberOfUnitsTotal.",
     description:
       "Total number of units included in the income property, occupied or unoccupied.",
     title: "Number Of Units Total",
     identifier: "NumberOfUnitsTotal",
     examples: [2, 5, 10],
   }),
-  LotFeatures: Schema.Union(
+  LotFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Acreage",
         "Beach property",
         "Central location",
@@ -488,51 +476,47 @@ export const PropertyListingSchema = Schema.Struct({
         "Multi-family",
         "Hospitality",
         "VisitAble",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LotFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for LotFeatures.",
     description:
       "A list of features or description of the lot included in the sale/lease.",
     title: "Lot Features",
     identifier: "LotFeatures",
     examples: [["Beach property", "Front Driveway", "Balcony/Deck/Patio"]],
   }),
-  LotSizeArea: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LotSizeArea. Reason: ${_tag}.`,
+  LotSizeArea: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for LotSizeArea.",
     description:
       "The total area of the lot. See Lot Size Units for the units of measurement (Square Feet, Square Meters, Acres, etc.).",
     title: "Lot Size Area",
     identifier: "LotSizeArea",
     examples: [3200, 1870, 1980],
   }),
-  LotSizeDimensions: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LotSizeDimensions. Reason: ${_tag}.`,
+  LotSizeDimensions: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for LotSizeDimensions.",
     description:
       "The dimensions of the lot minimally represented as length and width (i.e. 250 x 180) or a measurement of all sides of the polygon representing the property lines of the property. i.e. 30 x 50 x 120 x 60 x 22.",
     title: "Lot Size Dimensions",
     identifier: "LotSizeDimensions",
     examples: ["34 x 110 FT ; 0"],
   }),
-  LotSizeUnits: Schema.Union(
+  LotSizeUnits: Schema.Union([
     Schema.Null,
-    Schema.Literal("square feet", "hectares", "square meters", "acres"),
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LotSizeDimensions. Reason: ${_tag}.`,
+    Schema.Literals(["square feet", "hectares", "square meters", "acres"]),
+  ]).annotate({
+    message: "Value is invalid for LotSizeDimensions.",
     description:
       "A pick list of the unit of measurement for the area. i.e. Square Feet, Square Meters, Acres, etc.",
     title: "Lot Size Units",
     identifier: "LotSizeUnits",
     examples: ["acres", "hectares", "square feet", "square meters"],
   }),
-  PoolFeatures: Schema.Union(
+  PoolFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Pool equipment",
         "Heated pool",
         "Kidney Shaped",
@@ -547,21 +531,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Outdoor pool",
         "Above ground pool",
         "On Ground Pool",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PoolFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PoolFeatures.",
     description:
       "A list of features or description of the pool included in the sale/lease.",
     title: "Pool Features",
     identifier: "PoolFeatures",
     examples: [["Above ground pool", "Inground pool", "Heated pool"]],
   }),
-  RoadSurfaceType: Schema.Union(
+  RoadSurfaceType: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Gravel road",
         "No thru road",
         "Paved road",
@@ -570,21 +553,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Dirt Road",
         "Unknown",
         "Cul de sac",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for RoadSurfaceType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for RoadSurfaceType.",
     description:
       "Pick list of types of surface of the Road to access the property. The surface of the road(s) for access to the property is an important factor in determining value of the property and it’s appropriateness for intended use.",
     title: "Road Surface Type",
     identifier: "RoadSurfaceType",
     examples: [["Cul de sac", "Dirt Road", "Road Not Maintained"]],
   }),
-  CurrentUse: Schema.Union(
+  CurrentUse: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Agriculture - active",
         "Agriculture - inactive",
         "Country residential",
@@ -612,21 +594,20 @@ export const PropertyListingSchema = Schema.Struct({
         "No special use",
         "No land",
         "Unknown",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CurrentUse. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for CurrentUse.",
     description:
       "A list of the type(s) of current use of the property. The current use of the property is an important factor in understanding the overall condition of the land and determining it's appropriateness for intended use.",
     title: "Current Use",
     identifier: "CurrentUse",
     examples: [["Agriculture - active", "Hobby Farm"]],
   }),
-  PossibleUse: Schema.Union(
+  PossibleUse: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Agriculture - active",
         "Agriculture - inactive",
         "Country residential",
@@ -654,30 +635,28 @@ export const PropertyListingSchema = Schema.Struct({
         "No special use",
         "No land",
         "Unknown",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PossibleUse. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PossibleUse.",
     description:
       "A list of the type(s) of possible or best uses of the property. Probable use gives a good indication of what the best use or potential use of the property could be. i.e. Primary, Vacation, Investment, Rental, Retirement.",
     title: "Possible Use",
     identifier: "PossibleUse",
     examples: [["Agriculture - active", "Hobby Farm"]],
   }),
-  AnchorsCoTenants: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AnchorsCoTenants. Reason: ${_tag}.`,
+  AnchorsCoTenants: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for AnchorsCoTenants.",
     description:
       "The main or most notable tenants as well as other tenants of the shopping center or mall in which the commercial property is located.",
     title: "Anchors Co Tenants",
     identifier: "AnchorsCoTenants",
     examples: ["Walmart", "Target", "Loblaws"],
   }),
-  WaterfrontFeatures: Schema.Union(
+  WaterfrontFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Waterfront",
         "Waterfront on lake",
         "Waterfront on ocean",
@@ -696,12 +675,11 @@ export const PropertyListingSchema = Schema.Struct({
         "Direct Waterfront",
         "Indirect Waterfront",
         "Waterfront Community",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for WaterfrontFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for WaterfrontFeatures.",
     description:
       "A list of the features or description of the waterfront on which the property is located.",
     title: "Water front Features",
@@ -714,9 +692,9 @@ export const PropertyListingSchema = Schema.Struct({
       ],
     ],
   }),
-  CommunityFeatures: Schema.Union(
+  CommunityFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Adult Oriented",
         "Family Oriented",
         "Golf Course Development",
@@ -744,41 +722,38 @@ export const PropertyListingSchema = Schema.Struct({
         "Rentals Not Allowed",
         "Rentals Allowed With Restrictions",
         "Age Restrictions",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CommunityFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for CommunityFeatures.",
     description:
       "A list of features related to, or available within, the community",
     title: "Community Features",
     identifier: "CommunityFeatures",
     examples: [["Adult Oriented", "Age Restrictions", "Community Centre"]],
   }),
-  FrontageLengthNumeric: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FrontageLengthNumeric. Reason: ${_tag}.`,
+  FrontageLengthNumeric: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for FrontageLengthNumeric.",
     description: "A numeric representation of the length of the frontage.",
     title: "Frontage Length Numeric",
     identifier: "FrontageLengthNumeric",
     examples: [90, 120, 65],
   }),
-  FrontageLengthNumericUnits: Schema.Union(
-    Schema.Literal("feet", "meters"),
+  FrontageLengthNumericUnits: Schema.Union([
+    Schema.Literals(["feet", "meters"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FrontageLengthNumericUnits. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for FrontageLengthNumericUnits.",
     description:
       "The unit of measurement used for the value in the FrontageLengthNumeric fields. e.g. feet, meters, etc.",
     title: "Frontage Length Numeric Units",
     identifier: "FrontageLengthNumericUnits",
     examples: ["feet", "meters"],
   }),
-  Fencing: Schema.Union(
+  Fencing: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Fence",
         "Not fenced",
         "Partially fenced",
@@ -796,20 +771,19 @@ export const PropertyListingSchema = Schema.Struct({
         "Unknown",
         "Other",
         "Fully Fenced",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Fencing. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Fencing.",
     description: "A list of types of fencing at the property.",
     title: "Fencing",
     identifier: "Fencing",
     examples: [["Barbed Wire", "Fenced yard", "Partially fenced"]],
   }),
-  Appliances: Schema.Union(
+  Appliances: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "All",
         "Washer",
         "Dryer - Electric",
@@ -903,21 +877,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Water Heater",
         "Two Refrigerators",
         "Cooktop - Induction",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Appliances. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Appliances.",
     description:
       "A list of the appliances that will be included in the sale/lease of the property.",
     title: "Appliances",
     identifier: "Appliances",
     examples: [["2 Refrigerators & 2 Stoves", "Bar dry", "Blinds"]],
   }),
-  OtherEquipment: Schema.Union(
+  OtherEquipment: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Tractor",
         "Combine",
         "Skid Steer",
@@ -939,21 +912,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Container Lift Crane",
         "Unknown",
         "All",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OtherEquipment. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for OtherEquipment.",
     description:
       "A list of other equipment that will be included in the sale of the property.",
     title: "Other Equipment",
     identifier: "OtherEquipment",
     examples: [["Bale Thrower", "Combine", "Forklift"]],
   }),
-  SecurityFeatures: Schema.Union(
+  SecurityFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Alarm system",
         "Security system",
         "Security guard",
@@ -971,30 +943,28 @@ export const PropertyListingSchema = Schema.Struct({
         "None",
         "Partial Sprinkler System",
         "Smoke Detector Only",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for SecurityFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for SecurityFeatures.",
     description:
       "A list describing the security features included in the sale/lease.",
     title: "Security Features",
     identifier: "SecurityFeatures",
     examples: [["Alarm system", "Controlled entry", "Security guard"]],
   }),
-  TotalActualRent: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for TotalActualRent. Reason: ${_tag}.`,
+  TotalActualRent: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for TotalActualRent.",
     description:
       "Total actual rent currently being collected from tenants of the income property.",
     title: "Total Actual Rent",
     identifier: "TotalActualRent",
     examples: [1800, 7500, 10299],
   }),
-  ExistingLeaseType: Schema.Union(
+  ExistingLeaseType: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Gross",
         "Gross Escalating",
         "Net",
@@ -1005,29 +975,27 @@ export const PropertyListingSchema = Schema.Struct({
         "Net or Percentage",
         "Other, See Remarks",
         "Semi-Gross",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ExistingLeaseType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ExistingLeaseType.",
     description:
       "Information about the status of the existing lease on the property. i.e. Net, Gross, Percentage, etc.",
     title: "Existing Lease Type",
     identifier: "ExistingLeaseType",
     examples: [["Gross", "Gross Escalating", "Net Escalating"]],
   }),
-  AssociationFee: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AssociationFee. Reason: ${_tag}.`,
+  AssociationFee: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for AssociationFee.",
     description:
       "A fee paid by the homeowner to the Home Owners Association which is used for the upkeep of the common area, neighborhood or other association related benefits.",
     title: "Association Fee",
     identifier: "AssociationFee",
     examples: [120, 500, 852],
   }),
-  AssociationFeeFrequency: Schema.Union(
-    Schema.Literal(
+  AssociationFeeFrequency: Schema.Union([
+    Schema.Literals([
       "Bi-monthly",
       "Bi-weekly",
       "Daily",
@@ -1038,28 +1006,26 @@ export const PropertyListingSchema = Schema.Struct({
       "Unknown",
       "Weekly",
       "Yearly",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AssociationFeeFrequency. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AssociationFeeFrequency.",
     description:
       "The frequency the Association fee is paid. For example, Weekly, Monthly, Annually, Bi-Monthly, One Time, etc.",
     title: "Association Fee Frequency",
     identifier: "AssociationFeeFrequency",
     examples: ["Bi-monthly", "Daily", "Monthly"],
   }),
-  AssociationName: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AssociationName. Reason: ${_tag}.`,
+  AssociationName: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for AssociationName.",
     description: "The name of the Home Owners Association.",
     title: "Association Name",
     identifier: "AssociationName",
     examples: ["Carleton Condominium Corporation nnn (CCC nnn)"],
   }),
-  AssociationFeeIncludes: Schema.Union(
+  AssociationFeeIncludes: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Common Area Maintenance",
         "Electrical Repairs",
         "Exterior Maintenance",
@@ -1089,24 +1055,22 @@ export const PropertyListingSchema = Schema.Struct({
         "Parcel of Tied Land",
         "Pad Rental",
         "Hot Water",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AssociationFeeIncludes. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AssociationFeeIncludes.",
     description:
       "Services included with the association fee. For example Landscaping, Trash, Water, etc.",
     title: "Association Fee Includes",
     identifier: "AssociationFeeIncludes",
     examples: [["Cable TV", "Caretaker", "Exterior Maintenance"]],
   }),
-  OriginalEntryTimestamp: Schema.Union(
+  OriginalEntryTimestamp: Schema.Union([
     Schema.Null,
     Schema.DateFromString,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OriginalEntryTimestamp. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for OriginalEntryTimestamp.",
     description:
       "The date and time the record was inserted into the source system (in Zulu time (UTC)).",
     title: "Original Entry Timestamp",
@@ -1117,12 +1081,11 @@ export const PropertyListingSchema = Schema.Struct({
       new Date("2025-10-28T00:34:48.550Z"),
     ],
   }),
-  ModificationTimestamp: Schema.Union(
+  ModificationTimestamp: Schema.Union([
     Schema.Null,
     Schema.DateFromString,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ModificationTimestamp. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ModificationTimestamp.",
     description:
       "The date and time the record was last updated in the source system (in Zulu time (UTC)).",
     title: "Modification Timestamp",
@@ -1133,12 +1096,11 @@ export const PropertyListingSchema = Schema.Struct({
       new Date("2025-10-28T00:34:48.550Z"),
     ],
   }),
-  AvailabilityDate: Schema.Union(
+  AvailabilityDate: Schema.Union([
     Schema.Null,
     Schema.DateFromString,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AvailabilityDate. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AvailabilityDate.",
     description:
       "The date the property will be available for possession/occupation.",
     title: "Availability Date",
@@ -1149,56 +1111,51 @@ export const PropertyListingSchema = Schema.Struct({
       new Date("2025-10-28T00:34:48.550Z"),
     ],
   }),
-  ListingId: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListingId. Reason: ${_tag}.`,
+  ListingId: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListingId.",
     description:
       "The well known identifier for the listing. The value may be identical to that of the Listing Key, but the Listing ID is intended to be the value used by a human to retrieve the information about a specific listing. In a multiple originating system or a merged system, this value may not be unique and may require the use of the provider system to create a synthetic unique value.",
     title: "Listing ID",
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  InternetEntireListingDisplayYN: Schema.Union(
+  InternetEntireListingDisplayYN: Schema.Union([
     Schema.Boolean,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for InternetEntireListingDisplayYN. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for InternetEntireListingDisplayYN.",
     description:
       "A yes/no field that states the seller has allowed the listing to be displayed on Internet sites.",
     title: "Internet Entire Listing Display Yes/No",
     identifier: "InternetEntireListingDisplayYN",
     examples: [true, false],
   }),
-  InternetAddressDisplayYN: Schema.Union(
+  InternetAddressDisplayYN: Schema.Union([
     Schema.Boolean,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for InternetAddressDisplayYN. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for InternetAddressDisplayYN.",
     description:
       "A yes/no field that states the seller has allowed the listing address to be displayed on Internet sites.",
     title: "Internet Address Display Yes/No",
     identifier: "InternetAddressDisplayYN",
     examples: [true, false],
   }),
-  StandardStatus: Schema.Union(
-    Schema.Literal("Active", "Tombstone", "Historical"),
+  StandardStatus: Schema.Union([
+    Schema.Literals(["Active", "Tombstone", "Historical"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StandardStatus. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StandardStatus.",
     description: "The status of the listing. This is a Single Select field.",
     title: "Standard Status",
     identifier: "StandardStatus",
     examples: ["Active", "Historical", "Tombstone"],
   }),
-  StatusChangeTimestamp: Schema.Union(
+  StatusChangeTimestamp: Schema.Union([
     Schema.Null,
     Schema.DateFromString,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StatusChangeTimestamp. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StatusChangeTimestamp.",
     description:
       "The transactional timestamp automatically recorded by the MLS system representing the date/time the listing's status was last changed (in Zulu time (UTC)).",
     title: "Status Change Timestamp",
@@ -1209,107 +1166,95 @@ export const PropertyListingSchema = Schema.Struct({
       new Date("2025-10-28T00:34:48.550Z"),
     ],
   }),
-  PublicRemarks: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PublicRemarks. Reason: ${_tag}.`,
+  PublicRemarks: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for PublicRemarks.",
     description: "Text remarks that may be displayed to the public.",
     title: "Public Remarks",
     identifier: "PublicRemarks",
     examples: ["This is a sample public remark"],
   }),
-  ListPrice: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListPrice. Reason: ${_tag}.`,
+  ListPrice: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for ListPrice.",
     description:
       "The current price of the property as determined by the seller and the seller's broker. For auctions this is the minimum or reserve price.",
     title: "List Price",
     identifier: "ListPrice",
     examples: [540000, 657986, 1000234],
   }),
-  Inclusions: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Inclusions. Reason: ${_tag}.`,
+  Inclusions: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for Inclusions.",
     description:
       "Portable elements of the property that will be included in the sale.",
     title: "Inclusions",
     identifier: "Inclusions",
     examples: ["TV", "Audio System", "Pool Table"],
   }),
-  ListOfficeKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListOfficeKey. Reason: ${_tag}.`,
+  ListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
     title: "List Office Key",
     identifier: "ListOfficeKey",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListOfficeKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListOfficeKey. Reason: ${_tag}.`,
+  CoListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
     title: "Co List Office Key",
     identifier: "CoListOfficeKey",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListOfficeKey2: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListOfficeKey2. Reason: ${_tag}.`,
+  CoListOfficeKey2: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListOfficeKey2.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
     title: "Co List Office Key 2",
     identifier: "CoListOfficeKey2",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListOfficeKey3: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListOfficeKey3. Reason: ${_tag}.`,
+  CoListOfficeKey3: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListOfficeKey3.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
     title: "Co List Office Key 3",
     identifier: "CoListOfficeKey3",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListAgentKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListAgentKey. Reason: ${_tag}.`,
+  CoListAgentKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListAgentKey.",
     description:
       "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
     title: "Co List Agent Key",
     identifier: "CoListAgentKey",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListAgentKey2: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListAgentKey2. Reason: ${_tag}.`,
+  CoListAgentKey2: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListAgentKey2.",
     description:
       "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
     title: "Co List Agent Key 2",
     identifier: "CoListAgentKey2",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListAgentKey3: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CoListAgentKey3. Reason: ${_tag}.`,
+  CoListAgentKey3: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CoListAgentKey3.",
     description:
       "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
     title: "Co List Agent Key 3",
     identifier: "CoListAgentKey3",
     examples: ["279633", "279341", "279545"],
   }),
-  ListAgentKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListAgentKey. Reason: ${_tag}.`,
+  ListAgentKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListAgentKey.",
     description:
       "A system unique identifier. This is the MemberKey that the property belongs to.",
     title: "List Agent Key",
     identifier: "ListAgentKey",
     examples: ["1475699", "1574399", "1479865"],
   }),
-  ListingURL: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListingURL. Reason: ${_tag}.`,
+  ListingURL: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListingURL.",
     description:
       "Provides a link to the specific listing on realtor.ca. The UTM codes should be removed when performing any ODATA operation with this field.",
     title: "Listing URL",
@@ -1320,9 +1265,8 @@ export const PropertyListingSchema = Schema.Struct({
       "www.realtor.ca/real-estate/29169806/799-element-private-ottawa-9010-kanata-emerald-meadowstrailwest",
     ],
   }),
-  OriginatingSystemName: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for OriginatingSystemName. Reason: ${_tag}.`,
+  OriginatingSystemName: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for OriginatingSystemName.",
     description:
       "The name of the Originating record provider. Most commonly the name of the MLS. The place where the listing is originally input by the member. The legal name of the company.",
     title: "Originating System Name",
@@ -1333,21 +1277,19 @@ export const PropertyListingSchema = Schema.Struct({
       "Vancouver Real Estate Board",
     ],
   }),
-  PhotosCount: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PhotosCount. Reason: ${_tag}.`,
+  PhotosCount: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for PhotosCount.",
     description:
       "The total number of pictures or photos included with the listing.",
     title: "Photos Count",
     identifier: "PhotosCount",
     examples: [14, 5, 1],
   }),
-  PhotosChangeTimestamp: Schema.Union(
+  PhotosChangeTimestamp: Schema.Union([
     Schema.Null,
     Schema.DateFromString,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PhotosChangeTimestamp. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PhotosChangeTimestamp.",
     description:
       "System generated timestamp of when the last update or change to the photos for this listing was made (in Zulu time (UTC)).",
     title: "Photos Change Timestamp",
@@ -1358,25 +1300,24 @@ export const PropertyListingSchema = Schema.Struct({
       new Date("2025-10-28T00:34:48.550Z"),
     ],
   }),
-  CommonInterest: Schema.Union(
-    Schema.Literal(
+  CommonInterest: Schema.Union([
+    Schema.Literals([
       "Freehold",
       "Condo/Strata",
       "Timeshare/Fractional",
       "Leasehold",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CommonInterest. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for CommonInterest.",
     description:
       "Common Interest is a type of ownership in a property that is composed of an individual lot or unit and a share of the ownership or use of common areas.",
     title: "Common Interest",
     identifier: "CommonInterest",
     examples: ["Condo/Strata", "Freehold", "Leasehold", "Timeshare/Fractional"],
   }),
-  ListAOR: Schema.Union(
-    Schema.Literal(
+  ListAOR: Schema.Union([
+    Schema.Literals([
       "Alberta West",
       "AREA",
       "Barrie",
@@ -1438,53 +1379,48 @@ export const PropertyListingSchema = Schema.Struct({
       "Woodstock-Ingersoll-Tillsonburg",
       "Yellowknife",
       "Yukon",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListAOR. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ListAOR.",
     description:
       "The responsible board or association of REALTORS® for this listing.",
     title: "List AOR",
     identifier: "ListAOR",
     examples: ["Ottawa", "Toronto", "Vancouver Island"],
   }),
-  ListAORKey: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ListAORKey. Reason: ${_tag}.`,
+  ListAORKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ListAORKey.",
     description:
       "A system unique identifier. Specifically, in aggregation systems, the ListAOR Key is the unique identifier of the primary board or association of REALTORS providing the property data, from the system where the record was retrieved.",
     title: "List AOR Key",
     identifier: "ListAORKey",
     examples: ["76", "87", "55"],
   }),
-  UnparsedAddress: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for UnparsedAddress. Reason: ${_tag}.`,
+  UnparsedAddress: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for UnparsedAddress.",
     description:
       "The UnparsedAddress is a text representation of the address with the full civic location as a single entity. It may optionally include any of City, StateOrProvince, PostalCode and Country.",
     title: "Unparsed Address",
     identifier: "UnparsedAddress",
     examples: ["123 Main St"],
   }),
-  PostalCode: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PostalCode. Reason: ${_tag}.`,
+  PostalCode: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for PostalCode.",
     description: "The postal code portion of a street or mailing address.",
     title: "Postal Code",
     identifier: "PostalCode",
     examples: ["K1V6S1", "K0A1W0", "K1G5L1"],
   }),
-  SubdivisionName: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for SubdivisionName. Reason: ${_tag}.`,
+  SubdivisionName: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for SubdivisionName.",
     description: "A neighborhood, community, complex or builder tract.",
     title: "Subdivision Name",
     identifier: "SubdivisionName",
     examples: [null], // TODO: provide examples
   }),
-  StateOrProvince: Schema.Union(
-    Schema.Literal(
+  StateOrProvince: Schema.Union([
+    Schema.Literals([
       "Alberta",
       "British Columbia",
       "Manitoba",
@@ -1498,19 +1434,18 @@ export const PropertyListingSchema = Schema.Struct({
       "Quebec",
       "Saskatchewan",
       "Yukon",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StateOrProvince. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StateOrProvince.",
     description:
       "Text field containing the accepted postal abbreviation for the state or province.",
     title: "State Or Province",
     identifier: "StateOrProvince",
     examples: ["Ontario", "Quebec", "Alberta"],
   }),
-  StreetDirPrefix: Schema.Union(
-    Schema.Literal(
+  StreetDirPrefix: Schema.Union([
+    Schema.Literals([
       "East",
       "North",
       "Northeast",
@@ -1519,19 +1454,18 @@ export const PropertyListingSchema = Schema.Struct({
       "Southeast",
       "Southwest",
       "West",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StreetDirPrefix. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StreetDirPrefix.",
     description:
       "The direction indicator that precedes the listed property's street name.",
     title: "Street Dir Prefix",
     identifier: "StreetDirPrefix",
     examples: ["East", "Northwest", "Southeast"],
   }),
-  StreetDirSuffix: Schema.Union(
-    Schema.Literal(
+  StreetDirSuffix: Schema.Union([
+    Schema.Literals([
       "East",
       "North",
       "Northeast",
@@ -1540,37 +1474,34 @@ export const PropertyListingSchema = Schema.Struct({
       "Southeast",
       "Southwest",
       "West",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StreetDirSuffix. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StreetDirSuffix.",
     description:
       "The direction indicator that follows a listed property's street address.",
     title: "Street Dir Suffix",
     identifier: "StreetDirSuffix",
     examples: ["East", "Northwest", "Southeast"],
   }),
-  StreetName: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StreetName. Reason: ${_tag}.`,
+  StreetName: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for StreetName.",
     description:
       "The street name portion of a listed property's street address.",
     title: "Street Name",
     identifier: "StreetName",
     examples: ["MONTBLANC", "Main", "Woodroffe"],
   }),
-  StreetNumber: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StreetNumber. Reason: ${_tag}.`,
+  StreetNumber: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for StreetNumber.",
     description:
       "The street number portion of a listed property's street address. In some areas the street number may contain non-numeric characters. This field can also contain extensions and modifiers to the street number, such as '1/2' or '-B'. This street number field should not include Prefixes, Direction or Suffixes.",
     title: "Street Number",
     identifier: "StreetNumber",
     examples: ["1434", "123", "874"],
   }),
-  StreetSuffix: Schema.Union(
-    Schema.Literal(
+  StreetSuffix: Schema.Union([
+    Schema.Literals([
       "Avenue",
       "Street",
       "Crescent",
@@ -1803,27 +1734,25 @@ export const PropertyListingSchema = Schema.Struct({
       "Walkway",
       "Wells",
       "Woods",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StreetSuffix. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StreetSuffix.",
     description: "The suffix portion of a listed property's street address.",
     title: "Street Suffix",
     identifier: "StreetSuffix",
     examples: ["Abbey", "Street", "Drive", "Avenue"],
   }),
-  UnitNumber: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for UnitNumber. Reason: ${_tag}.`,
+  UnitNumber: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for UnitNumber.",
     description:
       "Text field containing the number or portion of a larger building or complex. Unit Number should appear following the street suffix or, if it exists, the street suffix direction, in the street address. Examples are: APT G, 55, etc.",
     title: "Unit Number",
     identifier: "UnitNumber",
     examples: ["G", "Suite 300", "101"],
   }),
-  Country: Schema.Union(
-    Schema.Literal(
+  Country: Schema.Union([
+    Schema.Literals([
       "Canada",
       "United States of America (the)",
       "Algeria",
@@ -2072,11 +2001,10 @@ export const PropertyListingSchema = Schema.Struct({
       "Kosovo",
       "Saint Barthélemy",
       "South Sudan",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Country. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Country.",
     description: "The country in a postal address.",
     title: "Country",
     identifier: "Country",
@@ -2086,17 +2014,15 @@ export const PropertyListingSchema = Schema.Struct({
       "United Kingdom of Great Britain and Northern Ireland (the)",
     ],
   }),
-  City: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for City. Reason: ${_tag}.`,
+  City: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for City.",
     description: "The city in listing address.",
     title: "City",
     identifier: "City",
     examples: ["Ottawa", "Toronto", "Montreal"],
   }),
-  Directions: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Directions. Reason: ${_tag}.`,
+  Directions: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for Directions.",
     description: "Driving directions to the property.",
     title: "Directions",
     identifier: "Directions",
@@ -2104,120 +2030,108 @@ export const PropertyListingSchema = Schema.Struct({
       "Hwy/ON-417 E, Take exit 88 for Embrun/Vars, Turn right onto St Guillaume Rd, At the roundabout, take the 3rd exit onto St Pierre Rd, Continue onto SteMarie St, Turn left onto Ste Thrse Blvd, Turn right onto Montblanc Cres.",
     ],
   }),
-  CityRegion: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for CityRegion. Reason: ${_tag}.`,
+  CityRegion: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for CityRegion.",
     description:
       "A sub-section or area of a defined city. Examples would be Yorkville in Toronto, ON, Fairview in Vancouver, BC",
     title: "City Region",
     identifier: "CityRegion",
     examples: ["602 - Embrun"],
   }),
-  Latitude: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Latitude. Reason: ${_tag}.`,
+  Latitude: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for Latitude.",
     description:
       "The geographic latitude of some reference point on the property, specified in degrees and decimal parts. Positive numbers must not include the plus symbol.",
     title: "Latitude",
     identifier: "Latitude",
     examples: [45.1780128],
   }),
-  Longitude: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Longitude. Reason: ${_tag}.`,
+  Longitude: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for Longitude.",
     description:
       "The geographic Longitude of some reference point on the property, specified in degrees and decimal parts. Positive numbers must not include the plus symbol.",
     title: "Longitude",
     identifier: "Longitude",
     examples: [-75.2853851],
   }),
-  MapCoordinateVerifiedYN: Schema.Union(
+  MapCoordinateVerifiedYN: Schema.Union([
     Schema.Boolean,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for MapCoordinateVerifiedYN. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for MapCoordinateVerifiedYN.",
     description:
       "This flag is deprecated and should not be used by clients. Instead, use the GeoCodeManualYN flag to determine whether geocoordinates were manually provided by Boards or Members.",
     title: "MapCoordinate Verified Yes/No",
     identifier: "MapCoordinateVerifiedYN",
     examples: [false, true],
   }),
-  GeocodeManualYN: Schema.Union(Schema.Boolean, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for GeocodeManualYN. Reason: ${_tag}.`,
+  GeocodeManualYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+    message: "Value is invalid for GeocodeManualYN.",
     description:
       "This flag indicates whether the geocoordinates in the response were manually provided, such as by Boards or Members. If the flag is set to false, users can decide whether to geocode those listings themselves or review them.",
     title: "Geocode Manual Yes/No",
     identifier: "GeocodeManualYN",
     examples: [false, true],
   }),
-  ParkingTotal: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ParkingTotal. Reason: ${_tag}.`,
+  ParkingTotal: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for ParkingTotal.",
     description: "The total number of parking spaces included in the sale.",
     title: "Parking Total",
     identifier: "ParkingTotal",
     examples: [0, 4, 1],
   }),
-  YearBuilt: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for YearBuilt. Reason: ${_tag}.`,
+  YearBuilt: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for YearBuilt.",
     description:
       "The year that an occupancy permit is first granted for the house or other local measure of initial habitability of the build.",
     title: "Year Built",
     identifier: "YearBuilt",
     examples: [1965, 2023, 2018],
   }),
-  BathroomsPartial: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BathroomsPartial. Reason: ${_tag}.`,
+  BathroomsPartial: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for BathroomsPartial.",
     description:
       "The number of partial bathrooms in the property being sold/leased.",
     title: "Bathrooms Partial",
     identifier: "BathroomsPartial",
     examples: [1, 2, 3],
   }),
-  BathroomsTotalInteger: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BathroomsTotalInteger. Reason: ${_tag}.`,
+  BathroomsTotalInteger: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for BathroomsTotalInteger.",
     description: "The simple sum of the number of bathrooms.",
     title: "Bathrooms Total Integer",
     identifier: "BathroomsTotalInteger",
     examples: [3, 4, 1],
   }),
-  BedroomsTotal: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BedroomsTotal. Reason: ${_tag}.`,
+  BedroomsTotal: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for BedroomsTotal.",
     description: "The total number of bedrooms in the dwelling.",
     title: "Bedrooms Total",
     identifier: "BedroomsTotal",
     examples: [1, 4, 5],
   }),
-  BuildingAreaTotal: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BuildingAreaTotal. Reason: ${_tag}.`,
+  BuildingAreaTotal: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for BuildingAreaTotal.",
     description:
       "Total area of the structure. Includes both finished and unfinished areas.",
     title: "Building Area Total",
     identifier: "BuildingAreaTotal",
     examples: [3000, 1200, 890],
   }),
-  BuildingAreaUnits: Schema.Union(
-    Schema.Literal("square feet", "square meters"),
+  BuildingAreaUnits: Schema.Union([
+    Schema.Literals(["square feet", "square meters"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BuildingAreaUnits. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BuildingAreaUnits.",
     description:
       "A pick list of the unit of measurement for the area (e.g., Square Feet, Square Meters).",
     title: "Building Area Units",
     identifier: "BuildingAreaUnits",
     examples: ["square feet", "square meters"],
   }),
-  BuildingFeatures: Schema.Union(
+  BuildingFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Shopping Area",
         "Storage - Locker",
         "Laundry Facility",
@@ -2285,40 +2199,37 @@ export const PropertyListingSchema = Schema.Struct({
         "See Remarks",
         "Visitor Parking",
         "Barbecue",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BuildingFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BuildingFeatures.",
     description: "Features or amenities of the building or business park.",
     title: "Building Features",
     identifier: "BuildingFeatures",
     examples: [["Air Conditioning", "Barbecue", "Cable TV"]],
   }),
-  AboveGradeFinishedArea: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AboveGradeFinishedArea. Reason: ${_tag}.`,
+  AboveGradeFinishedArea: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for AboveGradeFinishedArea.",
     description:
       "Finished area within the structure that is at or above the surface of the ground.",
     title: "Above Grade Finished Area",
     identifier: "AboveGradeFinishedArea",
     examples: [900, 1200, 678],
   }),
-  AboveGradeFinishedAreaUnits: Schema.Union(
-    Schema.Literal("square feet", "square meters"),
+  AboveGradeFinishedAreaUnits: Schema.Union([
+    Schema.Literals(["square feet", "square meters"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AboveGradeFinishedAreaUnits. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AboveGradeFinishedAreaUnits.",
     description:
       "A pick list of the unit of measurement for the area (e.g., Square Feet, Square Meters).",
     title: "Above Grade Finished Area Units",
     identifier: "AboveGradeFinishedAreaUnits",
     examples: ["square feet", "square meters"],
   }),
-  AboveGradeFinishedAreaSource: Schema.Union(
-    Schema.Literal(
+  AboveGradeFinishedAreaSource: Schema.Union([
+    Schema.Literals([
       "Appraiser",
       "Assessor",
       "Builder",
@@ -2327,64 +2238,59 @@ export const PropertyListingSchema = Schema.Struct({
       "Plans",
       "Measurement follows RMS",
       "Other",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AboveGradeFinishedAreaSource. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AboveGradeFinishedAreaSource.",
     description:
       "The source of the measurements. This is a pick list of options showing the source of the measurement (e.g., Agent, Assessor, Estimate).",
     title: "Above Grade Finished Area Source",
     identifier: "AboveGradeFinishedAreaSource",
     examples: ["Appraiser", "Listing Brokerage", "Owner"],
   }),
-  AboveGradeFinishedAreaMinimum: Schema.Union(
+  AboveGradeFinishedAreaMinimum: Schema.Union([
     Schema.Number,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AboveGradeFinishedAreaMinimum. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AboveGradeFinishedAreaMinimum.",
     description:
       "The minimum finished area within the structure that is at or above the surface of the ground.",
     title: "Above Grade Finished Area Minimum",
     identifier: "AboveGradeFinishedAreaMinimum",
     examples: [500, 1250, 890],
   }),
-  AboveGradeFinishedAreaMaximum: Schema.Union(
+  AboveGradeFinishedAreaMaximum: Schema.Union([
     Schema.Number,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AboveGradeFinishedAreaMaximum. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AboveGradeFinishedAreaMaximum.",
     description:
       "The maximum finished area within the structure that is at or above the surface of the ground.",
     title: "Above Grade Finished Area Maximum",
     identifier: "AboveGradeFinishedAreaMaximum",
     examples: [1550, 800, 750],
   }),
-  BelowGradeFinishedArea: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BelowGradeFinishedArea. Reason: ${_tag}.`,
+  BelowGradeFinishedArea: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for BelowGradeFinishedArea.",
     description:
       "The total livable area within the structure. that is below the surface of the ground.",
     title: "Below Grade Finished Area",
     identifier: "BelowGradeFinishedArea",
     examples: [850, 2200, 1643],
   }),
-  BelowGradeFinishedAreaUnits: Schema.Union(
-    Schema.Literal("square feet", "square meters"),
+  BelowGradeFinishedAreaUnits: Schema.Union([
+    Schema.Literals(["square feet", "square meters"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BelowGradeFinishedAreaUnits. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BelowGradeFinishedAreaUnits.",
     description:
       "A pick list of the unit of measurement for the area (e.g., Square Feet, Square Meters).",
     title: "Below Grade Finished Area Units",
     identifier: "BelowGradeFinishedAreaUnits",
     examples: ["square feet", "square meters"],
   }),
-  BelowGradeFinishedAreaSource: Schema.Union(
-    Schema.Literal(
+  BelowGradeFinishedAreaSource: Schema.Union([
+    Schema.Literals([
       "Appraiser",
       "Assessor",
       "Builder",
@@ -2393,63 +2299,58 @@ export const PropertyListingSchema = Schema.Struct({
       "Plans",
       "Measurement follows RMS",
       "Other",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BelowGradeFinishedAreaSource. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BelowGradeFinishedAreaSource.",
     description:
       "The source of the measurements. This is a pick list of options showing the source of the measurement (e.g., Agent, Assessor, Estimate).",
     title: "Below Grade Finished Area Source",
     identifier: "BelowGradeFinishedAreaSource",
     examples: ["Appraiser", "Listing Brokerage", "Owner"],
   }),
-  BelowGradeFinishedAreaMinimum: Schema.Union(
+  BelowGradeFinishedAreaMinimum: Schema.Union([
     Schema.Number,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BelowGradeFinishedAreaMinimum. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BelowGradeFinishedAreaMinimum.",
     description:
       "The minimum finished area within the structure that is below the surface of the ground.",
     title: "Below Grade Finished Area Minimum",
     identifier: "BelowGradeFinishedAreaMinimum",
     examples: [500, 1250, 890],
   }),
-  BelowGradeFinishedAreaMaximum: Schema.Union(
+  BelowGradeFinishedAreaMaximum: Schema.Union([
     Schema.Number,
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BelowGradeFinishedAreaMaximum. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for BelowGradeFinishedAreaMaximum.",
     description:
       "The maximum finished area within the structure that is below the surface of the ground.",
     title: "Below Grade Finished Area Maximum",
     identifier: "BelowGradeFinishedAreaMaximum",
     examples: [1550, 800, 750],
   }),
-  LivingArea: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivingArea. Reason: ${_tag}.`,
+  LivingArea: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for LivingArea.",
     description: "The total livable area within the structure.",
     title: "Living Area",
     identifier: "LivingArea",
     examples: [4500, 5150, 980],
   }),
-  LivingAreaUnits: Schema.Union(
-    Schema.Literal("square feet", "square meters"),
+  LivingAreaUnits: Schema.Union([
+    Schema.Literals(["square feet", "square meters"]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivingAreaUnits. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for LivingAreaUnits.",
     description:
       "A pick list of the unit of measurement for the area (e.g., Square Feet, Square Meters).",
     title: "Living Area Units",
     identifier: "LivingAreaUnits",
     examples: ["square feet", "square meters"],
   }),
-  LivingAreaSource: Schema.Union(
-    Schema.Literal(
+  LivingAreaSource: Schema.Union([
+    Schema.Literals([
       "Appraiser",
       "Assessor",
       "Builder",
@@ -2458,52 +2359,47 @@ export const PropertyListingSchema = Schema.Struct({
       "Plans",
       "Measurement follows RMS",
       "Other",
-    ),
+    ]),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivingAreaSource. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for LivingAreaSource.",
     description:
       "The source of the measurements. This is a pick list of options showing the source of the measurement (e.g., Agent, Assessor, Estimate).",
     title: "Living Area Source",
     identifier: "LivingAreaSource",
     examples: ["Appraiser", "Listing Brokerage", "Owner"],
   }),
-  LivingAreaMinimum: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivingAreaMinimum. Reason: ${_tag}.`,
+  LivingAreaMinimum: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for LivingAreaMinimum.",
     description: "The minimum livable area within the structure.",
     title: "Living Area Minimum",
     identifier: "LivingAreaMinimum",
     examples: [2200, 1500, 1700],
   }),
-  LivingAreaMaximum: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for LivingAreaMaximum. Reason: ${_tag}.`,
+  LivingAreaMaximum: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for LivingAreaMaximum.",
     description: "The maximum livable area within the structure.",
     title: "Living Area Maximum",
     identifier: "LivingAreaMaximum",
     examples: [4500, 1200, 3000],
   }),
-  FireplacesTotal: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FireplacesTotal. Reason: ${_tag}.`,
+  FireplacesTotal: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for FireplacesTotal.",
     description: "The total number of fireplaces included in the property.",
     title: "Fireplaces Total",
     identifier: "FireplacesTotal",
     examples: [1, 4, 7],
   }),
-  FireplaceYN: Schema.Union(Schema.Boolean, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FireplaceYN. Reason: ${_tag}.`,
+  FireplaceYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+    message: "Value is invalid for FireplaceYN.",
     description: "Does the property include a fireplace.",
     title: "Fireplace Yes/No",
     identifier: "FireplaceYN",
     examples: [true, false],
   }),
-  FireplaceFeatures: Schema.Union(
+  FireplaceFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Wood",
         "Gas",
         "Electric",
@@ -2533,21 +2429,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Tile Facing",
         "Direct vent",
         "Glass Door",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FireplaceFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for FireplaceFeatures.",
     description:
       "A list of features or description of the fireplace(s) included in the sale/lease.",
     title: "Fireplace Features",
     identifier: "FireplaceFeatures",
     examples: [["Free Standing Metal", "Marble face", "Glass Door"]],
   }),
-  ArchitecturalStyle: Schema.Union(
+  ArchitecturalStyle: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Hillside Bungalow",
         "Split entry bungalow",
         "A-Frame",
@@ -2596,21 +2491,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Lower Level",
         "Off 2nd Floor",
         "Raised Ranch w/ Bonus Room",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ArchitecturalStyle. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ArchitecturalStyle.",
     description:
       "A list describing the style of the structure. For example, Victorian, Ranch, Craftsman, etc.",
     title: "Architectural Style",
     identifier: "ArchitecturalStyle",
     examples: [["5 Level", "Bungalow", "Chalet"]],
   }),
-  Heating: Schema.Union(
+  Heating: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Heat Pump",
         "Air circulation heat",
         "Hot water radiator heat",
@@ -2667,20 +2561,19 @@ export const PropertyListingSchema = Schema.Struct({
         "Geo Thermal",
         "See Remarks",
         "Wind Power",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Heating. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Heating.",
     description: "A list describing the heating features of the property.",
     title: "Heating",
     identifier: "Heating",
     examples: [["Combination", "Coil Fan", "Hot water radiator heat"]],
   }),
-  FoundationDetails: Schema.Union(
+  FoundationDetails: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Wood",
         "Stone",
         "Block",
@@ -2700,21 +2593,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Concrete Block",
         "Preserved Wood",
         "Insulated Concrete Forms",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for FoundationDetails. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for FoundationDetails.",
     description:
       "A list of the type(s) of foundation on which the property sits.",
     title: "Foundation Details",
     identifier: "FoundationDetails",
     examples: [["Concrete Block", "Poured Concrete", "See Remarks"]],
   }),
-  Basement: Schema.Union(
+  Basement: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Finished",
         "Partially finished",
         "Unfinished",
@@ -2744,12 +2636,11 @@ export const PropertyListingSchema = Schema.Struct({
         "Slab",
         "Walk-up",
         "Suite",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Basement. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Basement.",
     description:
       "A list of information and features about the basement. i.e. None/Slab, Finished, Partially Finished, Crawl Space, Dirt, Outside Entrance, Radon Mitigation.",
     title: "Basement",
@@ -2758,9 +2649,9 @@ export const PropertyListingSchema = Schema.Struct({
       ["Crawl space", "Basement Suite - Regulation", "Less than six feet."],
     ],
   }),
-  ExteriorFeatures: Schema.Union(
+  ExteriorFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Steel",
         "Aggregate",
         "Asbestos",
@@ -2807,21 +2698,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Shingles",
         "Engineered Wood Siding",
         "Brick Veneer",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ExteriorFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ExteriorFeatures.",
     description:
       "A list of features or description of the exterior of the property included in the sale/lease.",
     title: "Exterior Features",
     identifier: "ExteriorFeatures",
     examples: [["Aluminum siding", "Brick imitation", "Concrete Block"]],
   }),
-  Flooring: Schema.Union(
+  Flooring: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Concrete",
         "Tile",
         "Hardwood",
@@ -2855,20 +2745,19 @@ export const PropertyListingSchema = Schema.Struct({
         "Marble/Granite/Quartz",
         "Softwood",
         "Vinyl Plank",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Flooring. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Flooring.",
     description: "A list of the type(s) of flooring found within the property.",
     title: "Flooring",
     identifier: "Flooring",
     examples: [["Concrete", "Wall-to-wall carpet", "Carpet over Hardwood"]],
   }),
-  ParkingFeatures: Schema.Union(
+  ParkingFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Attached Garage",
         "Integrated Garage",
         "Detached Garage",
@@ -2908,21 +2797,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Heated Garage",
         "Electric Vehicle Charging Station(s)",
         "Additional Parking",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ParkingFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ParkingFeatures.",
     description:
       "A list of features or description of the parking included in the sale/lease.",
     title: "Parking Features",
     identifier: "ParkingFeatures",
     examples: [["Additional Parking", "Detached Garage", "Garage"]],
   }),
-  Cooling: Schema.Union(
+  Cooling: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Central air conditioning",
         "Fully air conditioned",
         "Partially air conditioned",
@@ -2936,21 +2824,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Air Conditioned",
         "Ductless",
         "See Remarks",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Cooling. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Cooling.",
     description:
       "A list describing the cooling or air conditioning features of the property.",
     title: "Cooling",
     identifier: "Cooling",
     examples: [["Air Conditioned", "Ventilation system", "Heat Pump"]],
   }),
-  PropertyCondition: Schema.Union(
+  PropertyCondition: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "New",
         "Complete",
         "Renovated",
@@ -2959,21 +2846,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Unknown",
         "Shell",
         "Insulation upgraded",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PropertyCondition. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for PropertyCondition.",
     description:
       "A list describing the condition of the property and any structures included in the sale.",
     title: "PropertyCondition",
     identifier: "PropertyCondition",
     examples: [["Complete", "New", "Shell"]],
   }),
-  Roof: Schema.Union(
+  Roof: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Asphalt shingle",
         "Steel",
         "Tar & gravel",
@@ -3003,21 +2889,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Flat",
         "Cottage",
         "Mansard",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Roof. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Roof.",
     description:
       "A list describing the type or style of roof. For example Spanish Tile, Composite, Shake, etc.",
     title: "Roof",
     identifier: "Roof",
     examples: [["Asphalt", "Tile", "Steel"]],
   }),
-  ConstructionMaterials: Schema.Union(
+  ConstructionMaterials: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Insulbrick",
         "Poured concrete",
         "Straw bales",
@@ -3029,38 +2914,35 @@ export const PropertyListingSchema = Schema.Struct({
         "Unknown",
         "ICF Block",
         "Concrete Walls",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ConstructionMaterials. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for ConstructionMaterials.",
     description:
       "A list of the materials that were used in the construction of the property.",
     title: "Construction Materials",
     identifier: "ConstructionMaterials",
     examples: [["Concrete Walls", "ICF Block", "Steel frame"]],
   }),
-  Stories: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Stories. Reason: ${_tag}.`,
+  Stories: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for Stories.",
     description: "The number of floors in the property being sold.",
     title: "Stories",
     identifier: "Stories",
     examples: [6, 1.5, 2],
   }),
-  PropertyAttachedYN: Schema.Union(Schema.Boolean, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for PropertyAttachedYN. Reason: ${_tag}.`,
+  PropertyAttachedYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate({
+    message: "Value is invalid for PropertyAttachedYN.",
     description:
       "A flag indicating that the primary structure is attached to another structure that is not included in the sale. i.e. one unit of a duplex. As with all flags, the field may be null.",
     title: "Property Attached Yes/No",
     identifier: "PropertyAttachedYN",
     examples: [true, false],
   }),
-  AccessibilityFeatures: Schema.Union(
+  AccessibilityFeatures: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Accessible Approach with Ramp",
         "Accessible Bedroom",
         "Accessible Central Living Area",
@@ -3108,12 +2990,11 @@ export const PropertyListingSchema = Schema.Struct({
         "Toilet safety bars",
         "Shower safety bars",
         "Elevator",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for AccessibilityFeatures. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for AccessibilityFeatures.",
     description:
       "A list or description of the accessibility features included in the sale/lease.",
     title: "Accessibility Features",
@@ -3122,81 +3003,73 @@ export const PropertyListingSchema = Schema.Struct({
       ["32in min Doorways", "Accessible Bedroom", "Accessible Common Area"],
     ],
   }),
-  BedroomsAboveGrade: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BedroomsAboveGrade. Reason: ${_tag}.`,
+  BedroomsAboveGrade: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for BedroomsAboveGrade.",
     description:
       "The total number of bedrooms within the structure that is above ground.",
     title: "Bedrooms Above Grade",
     identifier: "BedroomsAboveGrade",
     examples: [1, 2, 3],
   }),
-  BedroomsBelowGrade: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for BedroomsBelowGrade. Reason: ${_tag}.`,
+  BedroomsBelowGrade: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for BedroomsBelowGrade.",
     description:
       "The total number of bedrooms within the structure that is below ground.",
     title: "Bedrooms Below Grade",
     identifier: "BedroomsBelowGrade",
     examples: [1, 2, 3],
   }),
-  Zoning: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Zoning. Reason: ${_tag}.`,
+  Zoning: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for Zoning.",
     description:
       "A division of the city into areas of different permissible land uses. This Zone field should be used for the short code that is commonly used. For full textual descriptions please use the ZoningDescription field.",
     title: "Zoning",
     identifier: "Zoning",
     examples: ["R1", "R2", "R3"],
   }),
-  ZoningDescription: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ZoningDescription. Reason: ${_tag}.`,
+  ZoningDescription: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ZoningDescription.",
     description:
       "A list of descriptions of the zoning of the property. The zoning codes are often non-descriptive and variant. Zoning Description is a more descriptive form of the zoning for the property, i.e. Agricultural, Residential, Rezone Possible, etc. Specific zone codes must be added to the Zoning field.",
     title: "Zoning Description",
     identifier: "ZoningDescription",
     examples: ["Residential", "Commercial", "Industrial"],
   }),
-  TaxAnnualAmount: Schema.Union(Schema.Number, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for TaxAnnualAmount. Reason: ${_tag}.`,
+  TaxAnnualAmount: Schema.Union([Schema.Number, Schema.Null]).annotate({
+    message: "Value is invalid for TaxAnnualAmount.",
     description:
       "The annual property tax amount as of the last assessment made by the taxing authority.",
     title: "Tax Annual Amount",
     identifier: "TaxAnnualAmount",
     examples: [2430, 8904, 595],
   }),
-  TaxBlock: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for TaxBlock. Reason: ${_tag}.`,
+  TaxBlock: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for TaxBlock.",
     description:
       "A type of legal description for land in developed areas where streets or other rights-of-ways delineate large parcels of land referred to as divided into lots on which homes or other types of developments are built.",
     title: "Tax Block",
     identifier: "TaxBlock",
     examples: [null], // TODO: provide examples
   }),
-  TaxLot: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for TaxLot. Reason: ${_tag}.`,
+  TaxLot: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for TaxLot.",
     description:
       "A type of legal description for land in developed areas where streets or other rights-of-ways delineate large parcels of land referred to as divided into lots on which homes or other types of developments are built.",
     title: "Tax Lot",
     identifier: "TaxLot",
     examples: [null], // TODO: provide examples
   }),
-  TaxYear: Schema.Union(Schema.Int, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for TaxYear. Reason: ${_tag}.`,
+  TaxYear: Schema.Union([Schema.Int, Schema.Null]).annotate({
+    message: "Value is invalid for TaxYear.",
     description:
       "The year in with the last assessment of the property value/tax was made.",
     title: "Tax Year",
     identifier: "TaxYear",
     examples: [2024, 2023, 2025],
   }),
-  StructureType: Schema.Union(
+  StructureType: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "House",
         "Row / Townhouse",
         "Apartment",
@@ -3227,30 +3100,28 @@ export const PropertyListingSchema = Schema.Struct({
         "Manufactured Home",
         "Park Model Mobile Home",
         "Floathome",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for StructureType. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for StructureType.",
     description:
       "The type of structure that the property completely or partially encompasses. For example, House or Cabin are the overall structure and typically sold or leased as a whole.",
     title: "Structure Type",
     identifier: "StructureType",
     examples: [["Apartment", "Duplex", "Fourplex"]],
   }),
-  ParcelNumber: Schema.Union(Schema.String, Schema.Null).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for ParcelNumber. Reason: ${_tag}.`,
+  ParcelNumber: Schema.Union([Schema.String, Schema.Null]).annotate({
+    message: "Value is invalid for ParcelNumber.",
     description:
       "A number used to uniquely identify a parcel or lot. This number is typically issued by the county or county assessor. The AP number format varies from county to county. It is recommended that all Parcel Numbers be transmitted without dashes or hyphens.",
     title: "Parcel Number",
     identifier: "ParcelNumber",
     examples: [null], // TODO: provide examples
   }),
-  Utilities: Schema.Union(
+  Utilities: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Water",
         "Sewer",
         "Natural Gas",
@@ -3276,12 +3147,11 @@ export const PropertyListingSchema = Schema.Struct({
         "Cable Available",
         "Cable Connected",
         "Cable Not Available",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Utilities. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Utilities.",
     description: "A list of the utilities for the property being sold/leased.",
     title: "Utilities",
     identifier: "Utilities",
@@ -3294,9 +3164,9 @@ export const PropertyListingSchema = Schema.Struct({
       ],
     ],
   }),
-  IrrigationSource: Schema.Union(
+  IrrigationSource: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Flood",
         "Guide pivot",
         "Hand Move",
@@ -3304,21 +3174,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Power sources",
         "Wheel move",
         "Unknown",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for IrrigationSource. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for IrrigationSource.",
     description:
       "The source which the property receives its water for irrigation.",
     title: "Irrigation Source",
     identifier: "IrrigationSource",
     examples: [["Flood", "Hand Move", "Power sources"]],
   }),
-  WaterSource: Schema.Union(
+  WaterSource: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "Municipal water",
         "Ground-level well",
         "City water",
@@ -3345,12 +3214,11 @@ export const PropertyListingSchema = Schema.Struct({
         "None",
         "See Remarks",
         "Artesian Well",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for WaterSource. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for WaterSource.",
     description: "A list of the source(s) of water for the property.",
     title: "Water Source",
     identifier: "WaterSource",
@@ -3358,9 +3226,9 @@ export const PropertyListingSchema = Schema.Struct({
       ["Artesian Well", "City water", "Community Water User's Utility"],
     ],
   }),
-  Sewer: Schema.Union(
+  Sewer: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "No sewage system",
         "Municipal sewage system",
         "Sanitary sewer",
@@ -3380,21 +3248,20 @@ export const PropertyListingSchema = Schema.Struct({
         "Pump",
         "Facultative Lagoon",
         "Septic Field",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Sewer. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Sewer.",
     description:
       "A list describing the sewer or septic features of the property.",
     title: "Sewer",
     identifier: "Sewer",
     examples: [["Ejector System", "Gravity", "Holding Tank"]],
   }),
-  Electric: Schema.Union(
+  Electric: Schema.Union([
     Schema.Array(
-      Schema.Literal(
+      Schema.Literals([
         "220v Entry",
         "100 Amp Service",
         "200 Amp Service",
@@ -3411,50 +3278,47 @@ export const PropertyListingSchema = Schema.Struct({
         "Generator",
         "None",
         "240/400V",
-      ),
+      ]),
     ),
     Schema.Null,
-  ).annotations({
-    message: ({ _tag, actual }) =>
-      `Value '${actual}' is invalid for Electric. Reason: ${_tag}.`,
+  ]).annotate({
+    message: "Value is invalid for Electric.",
     description:
       "A list of electric-service related features of the property (e.g. 110 Volt, 3 Phase, 220 Volt, RV Hookup).",
     title: "Electric",
     identifier: "Electric",
     examples: [["100 Amp Service", "347/600 V", "Generator"]],
   }),
-  Rooms: RoomsSchema.annotations({
+  Rooms: RoomsSchema.annotate({
     identifier: "Rooms",
     title: "Property Rooms",
     description:
       "A collection of types of rooms and details/features about the given room.",
-    message: ({ _tag, actual }) =>
-      `Expected an array of Room objects, but received '${actual}'. Reason: ${_tag}.`,
+    message: "Expected an array of Room objects.",
   }),
-  Media: MediaSchema.annotations({
+  Media: MediaSchema.annotate({
     identifier: "Media",
     title: "Media Collection",
     description:
       "A collection of media resources (photos, videos, documents, etc.) associated with a Property, Member, or Office.",
-    message: ({ _tag, actual }) =>
-      `Expected an array of Media objects, but received '${actual}'. Reason: ${_tag}.`,
+    message: "Expected an array of Media objects.",
   }),
 })
 
-export const PropertyListingValidationSchema = standardSchemaV1(
+export const PropertyListingValidationSchema = toStandardSchemaV1(
   PropertyListingSchema,
 )
 
 export const PropertyListing = PropertyListingSchema.Type
 
 export const MultiplePropertyListingResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union(Schema.String, Schema.Null),
-  "@odata.nextLink": Schema.Union(Schema.String, Schema.Null),
+  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
+  "@odata.nextLink": Schema.Union([Schema.String, Schema.Null]),
   value: Schema.Array(PropertyListingSchema),
 })
 
 export const SinglePropertyListingResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union(Schema.String, Schema.Null),
+  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
   ...PropertyListingSchema.fields
   // value: Schema.Array(PropertyListingSchema),
 })
