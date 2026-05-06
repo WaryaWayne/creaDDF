@@ -352,8 +352,8 @@ describe("selected resource decoding", () => {
       DestinationId: 123,
       DestinationName: "Website Feed",
       DestinationUrl: "https://example.test",
-      DestinationType: "Website",
-      DestinationStatus: "Active",
+      DestinationType: 9,
+      DestinationStatus: 1,
       MemberFirstName: "Ada",
       MemberLastName: "Lovelace",
       MemberKey: "member-1",
@@ -385,10 +385,45 @@ describe("selected resource decoding", () => {
 
     assert.equal(result.destinations.value[0]?.DestinationName, "Website Feed");
     assert.equal(result.destination.MemberKey, "member-1");
+    assert.equal(result.destination.DestinationType, 9);
+    assert.equal(result.destination.DestinationStatus, 1);
     assert.equal(
       result.destination.ModificationTimestamp instanceof Date,
       true,
     );
+  });
+
+  it("decodes OData string enum values for Destination responses", async () => {
+    const destinationRecord = {
+      DestinationId: 456,
+      DestinationName: "Website Feed",
+      DestinationUrl: "https://example.test",
+      DestinationType: "Website",
+      DestinationStatus: "Active",
+      MemberFirstName: "Ada",
+      MemberLastName: "Lovelace",
+      MemberKey: "member-1",
+      OriginalEntryTimestamp: "2024-01-01T00:00:00.000Z",
+      ModificationTimestamp: "2024-01-02T00:00:00.000Z",
+      FullNSP: false,
+    };
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "https://identity.test/connect/token")
+        return tokenResponse.clone();
+      if (url === "https://ddf.test/odata/v1/Destination(456)")
+        return Response.json(destinationRecord);
+      throw new Error(`Unexpected request: ${url}`);
+    }) as typeof fetch;
+
+    const destination = await Effect.runPromise(
+      getDestination(456).pipe(
+        Effect.provide(makeDdfLayer(configFor(fetchMock))),
+      ),
+    );
+
+    assert.equal(destination.DestinationType, "Website");
+    assert.equal(destination.DestinationStatus, "Active");
   });
 
   it("decodes selected Property national association id fields", async () => {
