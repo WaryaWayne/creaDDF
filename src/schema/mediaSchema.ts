@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect"
 
 export const MediaSchema = Schema.Array(
   Schema.Struct({
@@ -30,7 +30,7 @@ export const MediaSchema = Schema.Array(
     }),
     ModificationTimestamp: Schema.Union([
       Schema.Null,
-      Schema.DateFromString,
+      Schema.DateTimeUtcFromString,
     ]).annotate({
       message: "Value is invalid for ModificationTimestamp.",
       description:
@@ -38,9 +38,9 @@ export const MediaSchema = Schema.Array(
       title: "Modification Timestamp",
       identifier: "ModificationTimestamp",
       examples: [
-        new Date("2023-11-08T19:12:55.580Z"),
-        new Date("2024-11-27T02:33:48.250Z"),
-        new Date("2025-12-05T19:24:51.550Z"),
+        DateTime.makeUnsafe("2023-11-08T19:12:55.580Z"),
+        DateTime.makeUnsafe("2024-11-27T02:33:48.250Z"),
+        DateTime.makeUnsafe("2025-12-05T19:24:51.550Z"),
       ],
     }),
     Order: Schema.Union([Schema.Int, Schema.Null]).annotate({

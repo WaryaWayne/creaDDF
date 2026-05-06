@@ -16,8 +16,30 @@
     "skipLibCheck": true,
     "noEmitOnError": true,
     "forceConsistentCasingInFileNames": true,
-    "paths": {"@/*": ["./src/*"]}
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "ignoreEffectWarningsInTscExitCode": true,
+        "diagnosticSeverity": {
+          "instanceOfSchema": "warning",
+          "globalFetch": "warning",
+          "globalFetchInEffect": "warning",
+          "preferSchemaOverJson": "warning",
+          "extendsNativeError": "warning",
+          "nodeBuiltinImport": "warning",
+          "globalDate": "warning",
+          "globalDateInEffect": "warning",
+          "globalConsole": "warning",
+          "globalConsoleInEffect": "warning",
+          "globalRandom": "warning",
+          "globalRandomInEffect": "warning",
+          "globalTimers": "warning",
+          "globalTimersInEffect": "warning",
+        },
+      },
+    ],
+    "paths": { "@/*": ["./src/*"] },
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules"],
 }
