@@ -230,13 +230,6 @@ export class DdfApiTransportFetchFailure extends Data.TaggedError(
   }
 }
 
-/**
- * @deprecated Use {@link DdfApiTransportFetchFailure}. This value export is
- * retained so existing consumers can continue constructing or checking
- * `instanceof DdfApiFetchError` at runtime.
- */
-export const DdfApiFetchError = DdfApiTransportFetchFailure;
-
 export class DdfApiHttpError extends Data.TaggedError("DdfApiHttpError")<{
   readonly url: string;
   readonly status: number;
@@ -375,7 +368,6 @@ export class DdfApiResponseSchemaDecodeError extends Data.TaggedError(
   }
 }
 
-export type DdfApiFetchError = DdfApiTransportFetchFailure;
 export type DdfApiMappedHttpError =
   | DdfApiHttpError
   | DdfApiBadRequestQueryError
@@ -429,7 +421,7 @@ export type DdfAuthError =
 
 export type DdfHttpError =
   | DdfAuthError
-  | DdfApiFetchError
+  | DdfApiTransportFetchFailure
   | DdfApiMappedHttpError
   | DdfApiJsonParseError
   | DdfApiResponseSchemaDecodeError

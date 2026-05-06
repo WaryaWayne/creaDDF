@@ -163,7 +163,7 @@ OpenHouse has list/get endpoints but no replication endpoint in the published Op
 Destination exists:
 
 - `listDestinations(query?: ODataListQuery<DestinationField>)`
-- `getDestination(destinationId: number | string, query?: ODataGetQuery<DestinationField>)`
+- `getDestination(destinationId: number, query?: ODataGetQuery<DestinationField>)`
 
 Use this for technology-provider accounts and destination-specific replication.
 

@@ -319,7 +319,7 @@ export const listDestinations = Effect.fn("DdfDestination.listDestinations")(
   },
 );
 export const getDestination = Effect.fn("DdfDestination.getDestination")(
-  function* (destinationId: number | string, query?: ODataGetQuery) {
+  function* (destinationId: number, query?: ODataGetQuery) {
     const http = yield* DdfHttp;
     return yield* http.getOData(
       "/odata/v1/Destination",

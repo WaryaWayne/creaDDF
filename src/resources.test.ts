@@ -104,6 +104,10 @@ const leadInput: LeadInput = {
 const leadBody =
   '{"Culture":"en-CA","MemberKey":"member-1","ListingKey":"listing-1","SenderName":"Jane Buyer","SenderEmailAddress":"jane@example.com","SenderPhoneNumber":4165551234,"PreferredMethodContact":"email","SenderPhoneExtension":null,"Message":"I would like to know more about this listing."}';
 
+// @ts-expect-error DestinationId is numeric; callers should coerce route/env strings before calling.
+const getDestinationRejectsStringIds = () => getDestination("123");
+void getDestinationRejectsStringIds;
+
 const officeRecord = {
   "@odata.context": "https://ddf.test/$metadata#Office/$entity",
   OfficeKey: "office-1",
@@ -348,8 +352,8 @@ describe("selected resource decoding", () => {
       DestinationId: 123,
       DestinationName: "Website Feed",
       DestinationUrl: "https://example.test",
-      DestinationType: 1,
-      DestinationStatus: 1,
+      DestinationType: "Website",
+      DestinationStatus: "Active",
       MemberFirstName: "Ada",
       MemberLastName: "Lovelace",
       MemberKey: "member-1",
