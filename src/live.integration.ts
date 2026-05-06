@@ -102,46 +102,41 @@ maybeLive("live CREA/DDF integration", () => {
 
           const destination =
             typeof firstDestinationId === "number"
-              ? yield* Effect.option(
-                  getDestination(firstDestinationId, {
-                    select: ["DestinationId"],
-                  }),
-                )
+              ? yield* getDestination(firstDestinationId, {
+                  select: ["DestinationId"],
+                })
               : undefined;
           const property =
             typeof firstListingKey === "string"
-              ? yield* Effect.option(
-                  getProperty(firstListingKey, { select: ["ListingKey"] }),
-                )
+              ? yield* getProperty(firstListingKey, { select: ["ListingKey"] })
               : undefined;
           const member =
             typeof firstMemberKey === "string"
-              ? yield* Effect.option(
-                  getMember(firstMemberKey, { select: ["MemberKey"] }),
-                )
+              ? yield* getMember(firstMemberKey, { select: ["MemberKey"] })
               : undefined;
           const office =
             typeof firstOfficeKey === "string"
-              ? yield* Effect.option(
-                  getOffice(firstOfficeKey, { select: ["OfficeKey"] }),
-                )
+              ? yield* getOffice(firstOfficeKey, { select: ["OfficeKey"] })
               : undefined;
           const openHouse =
             typeof firstOpenHouseKey === "string"
-              ? yield* Effect.option(
-                  getOpenHouse(firstOpenHouseKey, { select: ["OpenHouseKey"] }),
-                )
+              ? yield* getOpenHouse(firstOpenHouseKey, {
+                  select: ["OpenHouseKey"],
+                })
               : undefined;
 
-          const propertyReplication = yield* Effect.option(
-            replicateProperties({ select: ["ListingKey"], count: true }),
-          );
-          const memberReplication = yield* Effect.option(
-            replicateMembers({ select: ["MemberKey"], count: true }),
-          );
-          const officeReplication = yield* Effect.option(
-            replicateOffices({ select: ["OfficeKey"], count: true }),
-          );
+          const propertyReplication = yield* replicateProperties({
+            select: ["ListingKey"],
+            count: true,
+          });
+          const memberReplication = yield* replicateMembers({
+            select: ["MemberKey"],
+            count: true,
+          });
+          const officeReplication = yield* replicateOffices({
+            select: ["OfficeKey"],
+            count: true,
+          });
 
           return {
             destinations,
@@ -167,6 +162,9 @@ maybeLive("live CREA/DDF integration", () => {
     assert.equal(Array.isArray(result.members.value), true);
     assert.equal(Array.isArray(result.offices.value), true);
     assert.equal(Array.isArray(result.openHouses.value), true);
+    assert.equal(Array.isArray(result.propertyReplication.value), true);
+    assert.equal(Array.isArray(result.memberReplication.value), true);
+    assert.equal(Array.isArray(result.officeReplication.value), true);
   });
 });
 
