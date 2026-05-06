@@ -56,3 +56,40 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 - Expose sync results and persistence hooks/sinks so the caller can save data with the Drizzle/Effect SQL adapter, or ignore persistence and manage storage itself.
 - Use a complete OData encoder plus raw `filter` strings and lightweight helpers. Do not replace the generic filter surface with hundreds of brittle one-off search methods.
 - Local reference repos may exist for Codex to inspect, but do not copy or commit reference repos into this package.
+
+## Effect-native usage example
+
+This SDK is intentionally service/layer based. Create an Effect program that yields SDK effects and provide `makeDdfLayer` at the edge of your application; do not construct a standalone imperative client inside business logic.
+
+```ts
+import { Effect } from "effect";
+import {
+  filters,
+  listDestinations,
+  listProperties,
+  makeDdfLayer,
+} from "crea-ddf-effect-sdk";
+
+const ddfLayer = makeDdfLayer({
+  clientId: process.env.DDF_CLIENT_ID!,
+  clientSecret: process.env.DDF_CLIENT_SECRET!,
+  fetch,
+});
+
+const program = Effect.gen(function* () {
+  const destinations = yield* listDestinations({ top: 1 });
+  const properties = yield* listProperties({
+    top: 1,
+    filter: filters.modifiedAfter(
+      "ModificationTimestamp",
+      "2024-01-01T00:00:00.000Z",
+    ),
+  });
+
+  return { destinations, properties };
+});
+
+await Effect.runPromise(program.pipe(Effect.provide(ddfLayer)));
+```
+
+Persistence remains an application boundary: replication/sync helpers expose records, errors, watermarks, and optional sink hooks, but the SDK does not own a database.

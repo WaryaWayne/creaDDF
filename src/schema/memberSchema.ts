@@ -1,6 +1,6 @@
-import { Schema } from "effect"
-import { MediaSchema } from "./mediaSchema"
-import { ODataListEnvelopeSchema } from "./odata"
+import { Schema } from "effect";
+import { MediaSchema } from "./mediaSchema";
+import { ODataListEnvelopeSchema } from "./odata";
 
 export const MemberSchema = Schema.Struct({
   MemberKey: Schema.Union([Schema.Null, Schema.String]),
@@ -585,7 +585,10 @@ export const MemberSchema = Schema.Struct({
           ]),
           Schema.Null,
         ]),
-        ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
+        ModificationTimestamp: Schema.Union([
+          Schema.Null,
+          Schema.DateFromString,
+        ]),
         ResourceName: Schema.Union([
           Schema.Literals(["Office", "Member", "Property"]),
           Schema.Null,
@@ -595,7 +598,7 @@ export const MemberSchema = Schema.Struct({
     ),
     Schema.Null,
   ]),
-  Media: MediaSchema,
+  Media: Schema.NullOr(MediaSchema),
   MemberStateOrProvince: Schema.Union([
     Schema.Literals([
       "Alberta",
@@ -614,7 +617,10 @@ export const MemberSchema = Schema.Struct({
     ]),
     Schema.Null,
   ]),
-  MemberStatus: Schema.Union([Schema.Literals(["active", "Inactive"]), Schema.Null]),
+  MemberStatus: Schema.Union([
+    Schema.Literals(["active", "Inactive"]),
+    Schema.Null,
+  ]),
   MemberType: Schema.Union([
     Schema.Literals([
       "Broker",
@@ -639,9 +645,9 @@ export const MemberSchema = Schema.Struct({
     Schema.Null,
   ]),
   MemberEmailYN: Schema.Union([Schema.Boolean, Schema.Null]),
-})
+});
 
-export const MemberResponseSchema = ODataListEnvelopeSchema(MemberSchema)
+export const MemberResponseSchema = ODataListEnvelopeSchema(MemberSchema);
 
 export const MemberLanguageSubtagSchema = Schema.Struct({
   Afrikaans: Schema.Literal("af"),
@@ -752,4 +758,4 @@ export const MemberLanguageSubtagSchema = Schema.Struct({
   Yue: Schema.Literal("yue"),
   Chaldean: Schema.Literal("cld"),
   Assyrian: Schema.Literal("aii"),
-})
+});

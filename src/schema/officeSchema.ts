@@ -1,15 +1,18 @@
-import { Schema } from "effect"
-import { MediaSchema } from "./mediaSchema"
-import { ODataListEnvelopeSchema } from "./odata"
+import { Schema } from "effect";
+import { MediaSchema } from "./mediaSchema";
+import { ODataListEnvelopeSchema } from "./odata";
 
 export const SocialMediaSchema = Schema.Struct({
   SocialMediaKey: Schema.Union([Schema.String, Schema.Null]),
   ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]),
   SocialMediaType: Schema.Union([Schema.String, Schema.Null]),
   ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
-  ResourceName: Schema.Union([Schema.Literals(["Office", "Member", "Property"]), Schema.Null]),
+  ResourceName: Schema.Union([
+    Schema.Literals(["Office", "Member", "Property"]),
+    Schema.Null,
+  ]),
   SocialMediaUrlOrId: Schema.Union([Schema.String, Schema.Null]),
-})
+});
 
 export const OfficeSchema = Schema.Struct({
   "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
@@ -27,8 +30,11 @@ export const OfficeSchema = Schema.Struct({
   OfficePhone: Schema.Union([Schema.String, Schema.Null]),
   OfficePhoneExt: Schema.Union([Schema.String, Schema.Null]),
   OfficePostalCode: Schema.Union([Schema.String, Schema.Null]),
-  Media: MediaSchema,
-  OfficeSocialMedia: Schema.Union([Schema.Array(SocialMediaSchema), Schema.Null]),
+  Media: Schema.NullOr(MediaSchema),
+  OfficeSocialMedia: Schema.Union([
+    Schema.Array(SocialMediaSchema),
+    Schema.Null,
+  ]),
   ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
   OriginalEntryTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
   OfficeType: Schema.Union([Schema.String, Schema.Null]),
@@ -36,9 +42,9 @@ export const OfficeSchema = Schema.Struct({
   OfficeAOR: Schema.Union([Schema.String, Schema.Null]),
   OfficeStatus: Schema.Union([Schema.String, Schema.Null]),
   OfficeCountry: Schema.Union([Schema.String, Schema.Null]),
-})
+});
 
-export const OfficeResponseSchema = ODataListEnvelopeSchema(OfficeSchema)
+export const OfficeResponseSchema = ODataListEnvelopeSchema(OfficeSchema);
 
-export type Office = typeof OfficeSchema.Type
-export type SocialMedia = typeof SocialMediaSchema.Type
+export type Office = typeof OfficeSchema.Type;
+export type SocialMedia = typeof SocialMediaSchema.Type;
