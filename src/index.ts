@@ -2,6 +2,7 @@ export * from "./client";
 export * from "./types";
 export * from "./resources";
 export * from "./normalizers";
+export * from "./analytics";
 export * from "./schema/mediaSchema";
 export * from "./schema/memberSchema";
 export * from "./schema/officeSchema";

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { DateTime, Effect, Exit } from "effect";
 import {
   DdfHttp,
+  type DdfLogEvent,
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
@@ -70,6 +71,54 @@ describe("client", () => {
     assert.throws(
       () => encodeODataQuery({ top: 101 }),
       DdfInvalidODataQueryError,
+    );
+  });
+
+  it("builds ergonomic OData filters for documented operators and functions", () => {
+    const date = DateTime.toDateUtc(
+      DateTime.makeUnsafe("2024-02-03T04:05:06.000Z"),
+    );
+
+    assert.equal(filters.eq("City", "O'Brien"), "City eq 'O''Brien'");
+    assert.equal(filters.ne("City", "Toronto"), "City ne 'Toronto'");
+    assert.equal(filters.gt("ListPrice", 500000), "ListPrice gt 500000");
+    assert.equal(filters.lt("ListPrice", 900000), "ListPrice lt 900000");
+    assert.equal(
+      filters.ge("BathroomsTotalInteger", 2),
+      "BathroomsTotalInteger ge 2",
+    );
+    assert.equal(filters.le("BedroomsTotal", 4), "BedroomsTotal le 4");
+    assert.equal(filters.eq("FullNSP", false), "FullNSP eq false");
+    assert.equal(filters.eq("PostalCode", null), "PostalCode eq null");
+    assert.equal(
+      filters.in("PropertySubType", ["Office", "Retail", "O'Brien"]),
+      "PropertySubType in ('Office','Retail','O''Brien')",
+    );
+    assert.equal(
+      filters.gt("ModificationTimestamp", date),
+      "ModificationTimestamp gt 2024-02-03T04:05:06.000Z",
+    );
+    assert.equal(
+      filters.has("Permissions", "Namespace.Permission'Full'"),
+      "Permissions has Namespace.Permission'Full'",
+    );
+    assert.equal(
+      filters.any("Heating", "a", (a) => filters.eq(a, "Electric")),
+      "Heating/any(a: a eq 'Electric')",
+    );
+    assert.equal(
+      filters.not(filters.eq("CommonInterest", "Condo/Strata")),
+      "not (CommonInterest eq 'Condo/Strata')",
+    );
+    assert.equal(
+      filters.or(
+        filters.and(
+          filters.ge("ListPrice", 100000),
+          filters.le("ListPrice", 200000),
+        ),
+        filters.eq("ListPrice", null),
+      ),
+      "((ListPrice ge 100000) and (ListPrice le 200000)) or (ListPrice eq null)",
     );
   });
 
@@ -277,6 +326,88 @@ describe("client", () => {
         assert.match(cause, /body text|Nope|DDF API/);
       }
     }
+  });
+
+  it("honors custom retry policy and emits retry logger calls without waiting", async () => {
+    const events: Array<DdfLogEvent> = [];
+    let apiCalls = 0;
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      if (String(input) === "https://identity.test/connect/token")
+        return tokenResponse("token-123");
+
+      apiCalls += 1;
+      if (apiCalls === 1) return new Response(null, { status: 500 });
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const http = yield* DdfHttp;
+        return yield* http.requestJson("/odata/v1/Property");
+      }).pipe(
+        Effect.provide(
+          makeDdfLayer({
+            ...configFor(fetchMock),
+            retryPolicy: {
+              maxRetries: 1,
+              baseDelayMillis: 0,
+              retryableStatuses: [500],
+            },
+            logger: {
+              debug: (event) => events.push(event),
+              warn: (event) => events.push(event),
+            },
+          }),
+        ),
+      ),
+    );
+
+    assert.deepEqual(result, { ok: true });
+    assert.equal(apiCalls, 2);
+    assert.deepEqual(
+      events.filter((event) => event.type === "api_retry"),
+      [
+        {
+          type: "api_retry",
+          url: "https://ddf.test/odata/v1/Property",
+          status: 500,
+          attempt: 1,
+          delayMillis: 0,
+        },
+      ],
+    );
+  });
+
+  it("does not retry statuses omitted from a custom retry policy", async () => {
+    let apiCalls = 0;
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      if (String(input) === "https://identity.test/connect/token")
+        return tokenResponse("token-123");
+
+      apiCalls += 1;
+      return new Response("no retry", { status: 503 });
+    }) as typeof fetch;
+
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const http = yield* DdfHttp;
+        return yield* http.requestJson("/odata/v1/Property");
+      }).pipe(
+        Effect.provide(
+          makeDdfLayer({
+            ...configFor(fetchMock),
+            retryPolicy: {
+              maxRetries: 3,
+              baseDelayMillis: 0,
+              retryableStatuses: [408],
+            },
+          }),
+        ),
+      ),
+    );
+
+    assert.equal(Exit.isFailure(exit), true);
+    assert.equal(apiCalls, 1);
   });
 
   it("retries bounded 408 and 503 responses", async () => {
