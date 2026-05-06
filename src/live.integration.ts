@@ -14,8 +14,11 @@ import {
   listOpenHouses,
   listProperties,
   replicateMembers,
+  replicateMembersForDestination,
   replicateOffices,
+  replicateOfficesForDestination,
   replicateProperties,
+  replicatePropertiesForDestination,
 } from "./resources";
 
 const liveEnvNames = [
@@ -125,18 +128,28 @@ maybeLive("live CREA/DDF integration", () => {
                 })
               : undefined;
 
-          const propertyReplication = yield* replicateProperties({
-            select: ["ListingKey"],
-            count: true,
-          });
-          const memberReplication = yield* replicateMembers({
-            select: ["MemberKey"],
-            count: true,
-          });
-          const officeReplication = yield* replicateOffices({
-            select: ["OfficeKey"],
-            count: true,
-          });
+          const replicationQuery = { count: true } as const;
+          const propertyReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicatePropertiesForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateProperties(replicationQuery);
+          const memberReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicateMembersForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateMembers(replicationQuery);
+          const officeReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicateOfficesForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateOffices(replicationQuery);
 
           return {
             destinations,
