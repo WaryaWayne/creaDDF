@@ -5,7 +5,11 @@ import { DdfApiHttpError, DdfApiResponseSchemaDecodeError, DdfHttp } from "./cli
 import type { DdfHttpApi, DdfResponseSchema } from "./client";
 import {
   diffLocalKeysAgainstMasterList,
+  getMemberMasterList,
+  getOfficeMasterList,
   getPropertyMasterList,
+  pruneMissingMembers,
+  pruneMissingOffices,
   pruneMissingProperties,
   syncMembers,
   syncOffices,
@@ -95,7 +99,7 @@ describe("syncProperties", () => {
     assert.deepEqual(result.counts, {
       identifiers: 3,
       hydrated: 3,
-      persisted: 3,
+      persisted: 0,
       failed: 0,
     });
   });
@@ -281,7 +285,43 @@ describe("syncProperties", () => {
     assert.equal(result.records.length, 3);
     assert.equal(result.errors.length, 1);
     assert.equal(result.nextWatermark, "2024-06-01T00:00:00.000Z");
+    assert.equal(result.counts.persisted, 2);
     assert.deepEqual(savedWatermarks, ["2024-06-01T00:00:00.000Z"]);
+  });
+
+  it("counts record persistence independently from watermark persistence", async () => {
+    const http = emptyHttp({
+      requestJson: <T = unknown>(path: string) => {
+        if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+          return response<T>({
+            value: [{ ListingKey: "listing-1", ModificationTimestamp: "2024-10-01T00:00:00.000Z" }],
+          });
+        }
+        return response<T>({ value: [] });
+      },
+      getOData: <T = unknown>(_path: string, key: string | number) =>
+        response<T>(propertyFor(String(key))),
+    });
+
+    const result = await runWithHttp(
+      syncProperties({
+        sink: {
+          upsertProperty: () => Effect.void,
+          saveWatermark: () => Effect.fail(new TestSinkError({ reason: "watermark failed" })),
+        },
+      }),
+      http,
+    );
+
+    assert.equal(result.records.length, 1);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0]?.key, "watermark");
+    assert.deepEqual(result.counts, {
+      identifiers: 1,
+      hydrated: 1,
+      persisted: 1,
+      failed: 1,
+    });
   });
 });
 
@@ -436,6 +476,12 @@ describe("syncOpenHouses", () => {
       "https://ddf.test/openhouse-page-2",
     ]);
     assert.equal(result.records.length, 2);
+    assert.deepEqual(result.counts, {
+      identifiers: 0,
+      hydrated: 2,
+      persisted: 2,
+      failed: 0,
+    });
     assert.equal(result.nextWatermark, "2024-04-03T00:00:00.000Z");
     assert.deepEqual(calls, ["open:open-1", "open:open-2", "watermark:2024-04-03T00:00:00.000Z"]);
   });
@@ -468,6 +514,66 @@ describe("syncOpenHouses", () => {
 
     assert.equal(result.nextWatermark, "2024-09-01T00:00:00.000Z");
     assert.deepEqual(calls, ["watermark:2024-09-01T00:00:00.000Z"]);
+  });
+
+  it("collects OpenHouse page schema failures as structured sync errors", async () => {
+    const http = emptyHttp({
+      listOData: <T = unknown>(
+        _path: string,
+        _query?: unknown,
+        schema?: DdfResponseSchema<T>,
+      ) => {
+        const payload = {
+          value: [{ OpenHouseKey: 123, OpenHouseDate: "not-a-date" }],
+        };
+        return schema
+          ? Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<T, never>
+          : response<T>(payload);
+      },
+    });
+
+    const result = await runWithHttp(syncOpenHouses(), http);
+
+    assert.equal(result.records.length, 0);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0]?.resource, "OpenHouse");
+    assert.equal(result.errors[0]?.key, "page:first");
+    assert.equal(result.errors[0]?.stage, "hydrate");
+    assert.match(result.errors[0]?.message ?? "", /OpenHouseKey|OpenHouseDate/);
+    assert.deepEqual(result.counts, {
+      identifiers: 0,
+      hydrated: 0,
+      persisted: 0,
+      failed: 1,
+    });
+  });
+
+  it("collects OpenHouse nextLink failures without dropping previous page records", async () => {
+    const http = emptyHttp({
+      listOData: <T = unknown>() =>
+        response<T>({
+          "@odata.nextLink": "https://ddf.test/openhouse-bad-page",
+          value: [{ OpenHouseKey: "open-1", OpenHouseDate: "2024-11-01T00:00:00.000Z" }],
+        }),
+      requestJson: <T = unknown>(
+        _path: string,
+        _init?: RequestInit,
+        schema?: DdfResponseSchema<T>,
+      ) => {
+        const payload = { value: [{ OpenHouseKey: 456 }] };
+        return schema
+          ? Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<T, never>
+          : response<T>(payload);
+      },
+    });
+
+    const result = await runWithHttp(syncOpenHouses(), http);
+
+    assert.deepEqual(result.records.map((record) => record.OpenHouseKey), ["open-1"]);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.errors[0]?.key, "page:https://ddf.test/openhouse-bad-page");
+    assert.equal(result.counts.hydrated, 1);
+    assert.equal(result.counts.failed, 1);
   });
 
   it("decodes selected OpenHouse nextLink pages with the selected schema", async () => {
@@ -505,7 +611,7 @@ describe("syncOpenHouses", () => {
   });
 });
 
-describe("property prune helpers", () => {
+describe("master list prune helpers", () => {
   it("diffs local keys against master replication lists", () => {
     assert.deepEqual(diffLocalKeysAgainstMasterList(["a", "b"], ["b", "c"]), {
       localKeys: ["a", "b"],
@@ -539,5 +645,47 @@ describe("property prune helpers", () => {
     assert.deepEqual(master.map((identifier) => identifier.ListingKey), ["master-1", "master-2"]);
     assert.deepEqual(diff.missingLocalKeys, ["stale-1"]);
     assert.deepEqual(marked, [["stale-1"]]);
+  });
+
+  it("gets member and office master lists and calls prune sinks", async () => {
+    const markedMembers: Array<ReadonlyArray<string>> = [];
+    const markedOffices: Array<ReadonlyArray<string>> = [];
+    const http = emptyHttp({
+      requestJson: <T = unknown>(path: string) => {
+        if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+          return response<T>({ value: [{ MemberKey: "member-1" }, { MemberKey: "member-2" }] });
+        }
+        if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+          return response<T>({ value: [{ OfficeKey: "office-1" }, { OfficeKey: "office-2" }] });
+        }
+        return response<T>({ value: [] });
+      },
+    });
+
+    const members = await runWithHttp(getMemberMasterList(), http);
+    const offices = await runWithHttp(getOfficeMasterList(), http);
+    const memberDiff = await runWithHttp(
+      pruneMissingMembers(["member-1", "stale-member"], {
+        sink: {
+          markMissingMembersInactive: (keys) => Effect.sync(() => markedMembers.push(keys)),
+        },
+      }),
+      http,
+    );
+    const officeDiff = await runWithHttp(
+      pruneMissingOffices(["office-1", "stale-office"], {
+        sink: {
+          markMissingOfficesInactive: (keys) => Effect.sync(() => markedOffices.push(keys)),
+        },
+      }),
+      http,
+    );
+
+    assert.deepEqual(members.map((identifier) => identifier.MemberKey), ["member-1", "member-2"]);
+    assert.deepEqual(offices.map((identifier) => identifier.OfficeKey), ["office-1", "office-2"]);
+    assert.deepEqual(memberDiff.missingLocalKeys, ["stale-member"]);
+    assert.deepEqual(officeDiff.missingLocalKeys, ["stale-office"]);
+    assert.deepEqual(markedMembers, [["stale-member"]]);
+    assert.deepEqual(markedOffices, [["stale-office"]]);
   });
 });

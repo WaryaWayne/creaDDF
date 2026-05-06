@@ -160,6 +160,9 @@ export interface MemberSyncSink {
     resource: "Member",
     watermark: string,
   ) => Effect.Effect<void, unknown>;
+  readonly markMissingMembersInactive?: (
+    keys: ReadonlyArray<string>,
+  ) => Effect.Effect<void, unknown>;
 }
 
 export interface OfficeSyncSink {
@@ -171,6 +174,9 @@ export interface OfficeSyncSink {
   readonly saveWatermark?: (
     resource: "Office",
     watermark: string,
+  ) => Effect.Effect<void, unknown>;
+  readonly markMissingOfficesInactive?: (
+    keys: ReadonlyArray<string>,
   ) => Effect.Effect<void, unknown>;
 }
 
@@ -319,21 +325,48 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
 const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
   function* (query?: ODataListQuery) {
     const http = yield* DdfHttp;
-    const first = yield* listOpenHouses(query);
-    const out: Array<OpenHouseRecord> = [...first.value];
-    let next = first["@odata.nextLink"] ?? null;
+    const records: Array<OpenHouseRecord> = [];
+    const errors: Array<SyncRecordError> = [];
+    const firstExit = yield* Effect.exit(listOpenHouses(query));
 
-    while (next) {
-      const page = yield* http.requestJson<typeof first>(
-        next,
-        undefined,
-        openHousePageSchema(query) as Schema.Decoder<typeof first, never>,
-      );
-      out.push(...page.value);
-      next = page["@odata.nextLink"] ?? null;
+    if (Exit.isFailure(firstExit)) {
+      errors.push(makeRecordError(
+        "OpenHouse",
+        "page:first",
+        "hydrate",
+        firstExit.cause,
+      ));
+      return { records, errors };
     }
 
-    return out;
+    records.push(...firstExit.value.value);
+    let next = firstExit.value["@odata.nextLink"] ?? null;
+
+    while (next) {
+      const pageKey = `page:${next}`;
+      const pageExit = yield* Effect.exit(
+        http.requestJson<typeof firstExit.value>(
+          next,
+          undefined,
+          openHousePageSchema(query) as Schema.Decoder<typeof firstExit.value, never>,
+        ),
+      );
+
+      if (Exit.isFailure(pageExit)) {
+        errors.push(makeRecordError(
+          "OpenHouse",
+          pageKey,
+          "hydrate",
+          pageExit.cause,
+        ));
+        break;
+      }
+
+      records.push(...pageExit.value.value);
+      next = pageExit.value["@odata.nextLink"] ?? null;
+    }
+
+    return { records, errors };
   },
 );
 
@@ -363,11 +396,12 @@ const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
 const syncCounts = (
   identifiers: number,
   records: number,
+  persisted: number,
   errors: ReadonlyArray<SyncRecordError>,
 ): SyncCounts => ({
   identifiers,
   hydrated: records,
-  persisted: records - errors.filter((error) => error.stage === "persist").length,
+  persisted,
   failed: errors.length,
 });
 
@@ -401,6 +435,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const errors: Array<SyncRecordError> = [];
     const successfulWatermarks: Array<unknown> = [];
     const failedWatermarks: Array<unknown> = [];
+    let persistedRecords = 0;
+    const hasRecordSink = options?.sink?.upsertProperty !== undefined ||
+      options?.sink?.upsertRoom !== undefined ||
+      options?.sink?.upsertMedia !== undefined;
 
     for (const { identifier, result } of hydrated) {
       if (result.error) {
@@ -410,7 +448,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       }
       if (!result.record) continue;
 
-      const graph = normalizePropertyGraph(result.record as Record<string, unknown>) as unknown as PropertyGraph;
+      const graph: PropertyGraph = normalizePropertyGraph(result.record);
       records.push(graph);
 
       const propertyKey = String(graph.property.ListingKey ?? "");
@@ -442,6 +480,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
+        if (hasRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
     }
@@ -464,7 +503,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       identifiers,
       records,
       errors,
-      counts: syncCounts(identifiers.length, records.length, errors),
+      counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
       nextWatermark,
     };
   },
@@ -496,6 +535,9 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   const errors: Array<SyncRecordError> = [];
   const successfulWatermarks: Array<unknown> = [];
   const failedWatermarks: Array<unknown> = [];
+  let persistedRecords = 0;
+  const hasRecordSink = options?.sink?.upsertMember !== undefined ||
+    options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
     if (result.error) {
@@ -528,6 +570,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
       errors.push(persistError);
       failedWatermarks.push(identifier.ModificationTimestamp);
     } else {
+      if (hasRecordSink) persistedRecords += 1;
       successfulWatermarks.push(identifier.ModificationTimestamp);
     }
   }
@@ -550,7 +593,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     identifiers,
     records,
     errors,
-    counts: syncCounts(identifiers.length, records.length, errors),
+    counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
     nextWatermark,
   };
 });
@@ -581,6 +624,9 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   const errors: Array<SyncRecordError> = [];
   const successfulWatermarks: Array<unknown> = [];
   const failedWatermarks: Array<unknown> = [];
+  let persistedRecords = 0;
+  const hasRecordSink = options?.sink?.upsertOffice !== undefined ||
+    options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
     if (result.error) {
@@ -613,6 +659,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
       errors.push(persistError);
       failedWatermarks.push(identifier.ModificationTimestamp);
     } else {
+      if (hasRecordSink) persistedRecords += 1;
       successfulWatermarks.push(identifier.ModificationTimestamp);
     }
   }
@@ -635,7 +682,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     identifiers,
     records,
     errors,
-    counts: syncCounts(identifiers.length, records.length, errors),
+    counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
     nextWatermark,
   };
 });
@@ -644,11 +691,13 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   function* (
     options?: OpenHouseSyncOptions,
   ) {
-    const records = yield* collectOpenHousePages(options?.query);
-    const errors: Array<SyncRecordError> = [];
+    const collected = yield* collectOpenHousePages(options?.query);
+    const records = collected.records;
+    const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
     const failedWatermarks: Array<unknown> = [];
     const watermarkField = options?.watermarkField ?? "OpenHouseDate";
+    let persistedRecords = 0;
 
     yield* Effect.forEach(
       records,
@@ -669,6 +718,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             errors.push(persistError);
             failedWatermarks.push(timestamp);
           } else {
+            persistedRecords += 1;
             successfulWatermarks.push(timestamp);
           }
         }),
@@ -693,7 +743,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       identifiers: [],
       records,
       errors,
-      counts: syncCounts(records.length, records.length, errors),
+      counts: syncCounts(0, records.length, persistedRecords, errors),
       nextWatermark,
     };
   },
@@ -746,6 +796,80 @@ export const pruneMissingProperties = Effect.fn(
     options?.sink?.markMissingPropertiesInactive
   ) {
     yield* options.sink.markMissingPropertiesInactive(diff.missingLocalKeys);
+  }
+
+  return diff;
+});
+
+export const getMemberMasterList = Effect.fn(
+  "DdfMemberSync.getMemberMasterList",
+)(function* (options?: Pick<MemberSyncOptions, "destinationId" | "query">) {
+  const first = options?.destinationId === undefined
+    ? yield* replicateMembers(options?.query)
+    : yield* replicateMembersForDestination(
+        options.destinationId,
+        options.query,
+      );
+  return yield* collectPagedIdentifiers(
+    first,
+    MemberReplicationIdentifierResponseSchema,
+  );
+});
+
+export const getOfficeMasterList = Effect.fn(
+  "DdfOfficeSync.getOfficeMasterList",
+)(function* (options?: Pick<OfficeSyncOptions, "destinationId" | "query">) {
+  const first = options?.destinationId === undefined
+    ? yield* replicateOffices(options?.query)
+    : yield* replicateOfficesForDestination(
+        options.destinationId,
+        options.query,
+      );
+  return yield* collectPagedIdentifiers(
+    first,
+    OfficeReplicationIdentifierResponseSchema,
+  );
+});
+
+export const pruneMissingMembers = Effect.fn(
+  "DdfMemberSync.pruneMissingMembers",
+)(function* (
+  localKeys: ReadonlyArray<string>,
+  options?: Pick<MemberSyncOptions, "destinationId" | "query" | "sink">,
+) {
+  const masterList = yield* getMemberMasterList(options);
+  const diff = diffLocalKeysAgainstMasterList(
+    localKeys,
+    masterList.map((identifier) => identifier.MemberKey),
+  );
+
+  if (
+    diff.missingLocalKeys.length > 0 &&
+    options?.sink?.markMissingMembersInactive
+  ) {
+    yield* options.sink.markMissingMembersInactive(diff.missingLocalKeys);
+  }
+
+  return diff;
+});
+
+export const pruneMissingOffices = Effect.fn(
+  "DdfOfficeSync.pruneMissingOffices",
+)(function* (
+  localKeys: ReadonlyArray<string>,
+  options?: Pick<OfficeSyncOptions, "destinationId" | "query" | "sink">,
+) {
+  const masterList = yield* getOfficeMasterList(options);
+  const diff = diffLocalKeysAgainstMasterList(
+    localKeys,
+    masterList.map((identifier) => identifier.OfficeKey),
+  );
+
+  if (
+    diff.missingLocalKeys.length > 0 &&
+    options?.sink?.markMissingOfficesInactive
+  ) {
+    yield* options.sink.markMissingOfficesInactive(diff.missingLocalKeys);
   }
 
   return diff;
