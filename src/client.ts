@@ -2,11 +2,50 @@ import { Clock, Context, Data, Effect, Layer, Ref, Schema } from "effect";
 import type { ODataGetQuery, ODataListQuery, ReplicationQuery } from "./types";
 import { ODataUnknownListEnvelopeSchema } from "./schema/odata";
 
+export interface DdfRetryPolicy {
+  readonly maxRetries?: number;
+  readonly baseDelayMillis?: number;
+  readonly retryableStatuses?: ReadonlyArray<number>;
+}
+
+export interface DdfLogger {
+  readonly debug?: (event: DdfLogEvent) => void;
+  readonly warn?: (event: DdfLogEvent) => void;
+}
+
+export type DdfLogEvent =
+  | {
+      readonly type: "token_request";
+      readonly url: string;
+      readonly forceRefresh: boolean;
+    }
+  | { readonly type: "api_request"; readonly url: string }
+  | {
+      readonly type: "api_retry";
+      readonly url: string;
+      readonly status: number;
+      readonly attempt: number;
+      readonly delayMillis: number;
+    }
+  | {
+      readonly type: "api_unauthorized_refresh";
+      readonly url: string;
+      readonly status: number;
+    };
+
+export interface DdfClock {
+  readonly currentTimeMillis: () => number | Promise<number>;
+}
+
 export interface DdfClientConfig {
   clientId: string;
   clientSecret: string;
   baseUrl?: string;
   identityUrl?: string;
+  analyticsUrl?: string;
+  retryPolicy?: DdfRetryPolicy;
+  clock?: DdfClock;
+  logger?: DdfLogger;
   /**
    * Explicit fetch boundary for now. TODO: migrate this to Effect Platform's
    * Fetch/Http client service layer when that dependency is adopted, without
@@ -98,7 +137,9 @@ const odataStringLiteral = (value: string) =>
   `'${value.replaceAll("'", "''")}'`;
 const odataDateLiteral = (value: string | Date) =>
   value instanceof Date ? value.toISOString() : value;
-const odataValueLiteral = (value: string | number | boolean | Date | null) => {
+export type ODataPrimitive = string | number | boolean | Date | null;
+
+const odataValueLiteral = (value: ODataPrimitive) => {
   if (value === null) return "null";
   if (typeof value === "string") return odataStringLiteral(value);
   if (value instanceof Date) return value.toISOString();
@@ -106,8 +147,29 @@ const odataValueLiteral = (value: string | number | boolean | Date | null) => {
 };
 
 export const filters = {
-  eq: (field: string, value: string | number | boolean | Date | null) =>
+  eq: (field: string, value: ODataPrimitive) =>
     `${field} eq ${odataValueLiteral(value)}`,
+  ne: (field: string, value: ODataPrimitive) =>
+    `${field} ne ${odataValueLiteral(value)}`,
+  gt: (field: string, value: Exclude<ODataPrimitive, null>) =>
+    `${field} gt ${odataValueLiteral(value)}`,
+  lt: (field: string, value: Exclude<ODataPrimitive, null>) =>
+    `${field} lt ${odataValueLiteral(value)}`,
+  ge: (field: string, value: Exclude<ODataPrimitive, null>) =>
+    `${field} ge ${odataValueLiteral(value)}`,
+  le: (field: string, value: Exclude<ODataPrimitive, null>) =>
+    `${field} le ${odataValueLiteral(value)}`,
+  in: (field: string, values: ReadonlyArray<ODataPrimitive>) =>
+    `${field} in (${values.map(odataValueLiteral).join(",")})`,
+  has: (field: string, value: string) =>
+    `${field} has ${value}`,
+  not: (clause: string) => `not (${clause})`,
+  any: (
+    collection: string,
+    variable: string,
+    clause: string | ((variable: string) => string),
+  ) =>
+    `${collection}/any(${variable}: ${typeof clause === "function" ? clause(variable) : clause})`,
   modifiedAfter: (field: string, dateOrString: Date | string) =>
     `${field} gt ${odataDateLiteral(dateOrString)}`,
   and: (...clauses: ReadonlyArray<string>) =>
@@ -152,7 +214,25 @@ export const encodeODataQuery = (
 
 const keyLiteral = (key: string | number) =>
   typeof key === "number" ? String(key) : `'${key.replaceAll("'", "''")}'`;
-const isRetryableStatus = (status: number) => status === 408 || status === 503;
+const DEFAULT_RETRY_POLICY = {
+  maxRetries: 2,
+  baseDelayMillis: 100,
+  retryableStatuses: [408, 503] as const,
+} as const;
+
+const retryPolicyFor = (config: DdfClientConfig) => ({
+  maxRetries: config.retryPolicy?.maxRetries ?? DEFAULT_RETRY_POLICY.maxRetries,
+  baseDelayMillis:
+    config.retryPolicy?.baseDelayMillis ?? DEFAULT_RETRY_POLICY.baseDelayMillis,
+  retryableStatuses:
+    config.retryPolicy?.retryableStatuses ??
+    DEFAULT_RETRY_POLICY.retryableStatuses,
+});
+
+const isRetryableStatus = (
+  status: number,
+  retryableStatuses: ReadonlyArray<number>,
+) => retryableStatuses.includes(status);
 
 const hasValidTokenFields = (value: unknown): value is TokenResponse => {
   if (!value || typeof value !== "object") return false;
@@ -453,7 +533,11 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
       const getAccessToken = Effect.fn("DdfAuth.getAccessToken")(
         function* (options?: { readonly forceRefresh?: boolean }) {
           const cached = yield* Ref.get(ref);
-          const now = yield* Clock.currentTimeMillis;
+          const now = cfg.clock
+            ? yield* Effect.promise(() =>
+                Promise.resolve(cfg.clock!.currentTimeMillis()),
+              )
+            : yield* Clock.currentTimeMillis;
 
           if (
             !options?.forceRefresh &&
@@ -465,6 +549,12 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
 
           const identityUrl =
             cfg.identityUrl ?? "https://identity.crea.ca/connect/token";
+
+          cfg.logger?.debug?.({
+            type: "token_request",
+            url: identityUrl,
+            forceRefresh: options?.forceRefresh ?? false,
+          });
 
           const res = yield* Effect.tryPromise({
             try: () =>
@@ -520,6 +610,7 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
     Effect.gen(function* () {
       const cfg = yield* DdfConfig;
       const auth = yield* DdfAuth;
+      const retryPolicy = retryPolicyFor(cfg);
 
       const requestJson = Effect.fn("DdfHttp.requestJson")(function* <
         T = unknown,
@@ -538,18 +629,37 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
             const headers = headersWithJsonAccept(init?.headers);
             headers.set("Authorization", `Bearer ${token}`);
 
+            cfg.logger?.debug?.({ type: "api_request", url });
+
             const res: Response = yield* Effect.tryPromise({
               try: () => cfg.fetch(url, { ...init, headers }),
               catch: (cause) => new DdfApiTransportFetchFailure({ url, cause }),
             });
 
             if (res.status === 401 && !refreshed) {
+              cfg.logger?.warn?.({
+                type: "api_unauthorized_refresh",
+                url,
+                status: res.status,
+              });
               return yield* request(remainingRetries, true, true);
             }
 
-            if (isRetryableStatus(res.status) && remainingRetries > 0) {
-              const attempt = 3 - remainingRetries;
-              yield* Effect.sleep(100 * 2 ** attempt);
+            if (
+              isRetryableStatus(res.status, retryPolicy.retryableStatuses) &&
+              remainingRetries > 0
+            ) {
+              const attempt = retryPolicy.maxRetries - remainingRetries + 1;
+              const delayMillis =
+                retryPolicy.baseDelayMillis * 2 ** (attempt - 1);
+              cfg.logger?.warn?.({
+                type: "api_retry",
+                url,
+                status: res.status,
+                attempt,
+                delayMillis,
+              });
+              if (delayMillis > 0) yield* Effect.sleep(delayMillis);
               return yield* request(remainingRetries - 1, refreshed, false);
             }
 
@@ -569,7 +679,7 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
             });
           });
 
-        const json = yield* request(2, false, false);
+        const json = yield* request(retryPolicy.maxRetries, false, false);
         return yield* decodeJson(json, url, schema);
       });
 
@@ -658,7 +768,9 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
     }),
   );
 
-  return httpLayer.pipe(
+  const closedHttpLayer = httpLayer.pipe(
     Layer.provide(Layer.mergeAll(configLayer, closedAuthLayer)),
   );
+
+  return Layer.mergeAll(configLayer, closedAuthLayer, closedHttpLayer);
 };

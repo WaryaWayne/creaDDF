@@ -2,7 +2,21 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Config, Effect, Redacted } from "effect";
 import { makeDdfLayer } from "./client";
-import { listDestinations, listProperties } from "./resources";
+import {
+  getDestination,
+  getMember,
+  getOffice,
+  getOpenHouse,
+  getProperty,
+  listDestinations,
+  listMembers,
+  listOffices,
+  listOpenHouses,
+  listProperties,
+  replicateMembers,
+  replicateOffices,
+  replicateProperties,
+} from "./resources";
 
 const liveEnvNames = [
   "CREA_DDF_CLIENT_ID",
@@ -36,12 +50,15 @@ const LiveDdfConfig = Config.all({
   identityUrl: Config.string("CREA_DDF_AUTH_URL").pipe(
     Config.withDefault(undefined),
   ),
+  analyticsUrl: Config.string("CREA_ANALYTICS_URL").pipe(
+    Config.withDefault(undefined),
+  ),
 });
 
 const maybeLive = hasLiveCredentials ? describe : describe.skip;
 
 maybeLive("live CREA/DDF integration", () => {
-  it("fetches a token, destinations, and one property without running by default", async () => {
+  it("proves read-only resource wrappers with small selected queries", async () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const config = yield* LiveDdfConfig;
@@ -50,19 +67,106 @@ maybeLive("live CREA/DDF integration", () => {
           clientSecret: Redacted.value(config.clientSecret),
           baseUrl: config.baseUrl,
           identityUrl: config.identityUrl,
+          analyticsUrl: config.analyticsUrl,
           fetch,
         });
 
         return yield* Effect.gen(function* () {
-          const destinations = yield* listDestinations({ top: 1 });
-          const properties = yield* listProperties({ top: 1 });
-          return { destinations, properties };
+          const destinations = yield* listDestinations({
+            select: ["DestinationId"],
+            top: 1,
+          });
+          const properties = yield* listProperties({
+            select: ["ListingKey", "ModificationTimestamp"],
+            top: 1,
+          });
+          const members = yield* listMembers({ select: ["MemberKey"], top: 1 });
+          const offices = yield* listOffices({ select: ["OfficeKey"], top: 1 });
+          const openHouses = yield* listOpenHouses({
+            select: ["OpenHouseKey"],
+            top: 1,
+          });
+
+          const configuredDestinationId =
+            process.env.CREA_DESTINATION_ID &&
+            process.env.CREA_DESTINATION_ID !== ""
+              ? Number(process.env.CREA_DESTINATION_ID)
+              : undefined;
+          const firstDestinationId = Number.isInteger(configuredDestinationId)
+            ? configuredDestinationId
+            : destinations.value[0]?.DestinationId;
+          const firstListingKey = properties.value[0]?.ListingKey;
+          const firstMemberKey = members.value[0]?.MemberKey;
+          const firstOfficeKey = offices.value[0]?.OfficeKey;
+          const firstOpenHouseKey = openHouses.value[0]?.OpenHouseKey;
+
+          const destination =
+            typeof firstDestinationId === "number"
+              ? yield* Effect.option(
+                  getDestination(firstDestinationId, {
+                    select: ["DestinationId"],
+                  }),
+                )
+              : undefined;
+          const property =
+            typeof firstListingKey === "string"
+              ? yield* Effect.option(
+                  getProperty(firstListingKey, { select: ["ListingKey"] }),
+                )
+              : undefined;
+          const member =
+            typeof firstMemberKey === "string"
+              ? yield* Effect.option(
+                  getMember(firstMemberKey, { select: ["MemberKey"] }),
+                )
+              : undefined;
+          const office =
+            typeof firstOfficeKey === "string"
+              ? yield* Effect.option(
+                  getOffice(firstOfficeKey, { select: ["OfficeKey"] }),
+                )
+              : undefined;
+          const openHouse =
+            typeof firstOpenHouseKey === "string"
+              ? yield* Effect.option(
+                  getOpenHouse(firstOpenHouseKey, { select: ["OpenHouseKey"] }),
+                )
+              : undefined;
+
+          const propertyReplication = yield* Effect.option(
+            replicateProperties({ select: ["ListingKey"], count: true }),
+          );
+          const memberReplication = yield* Effect.option(
+            replicateMembers({ select: ["MemberKey"], count: true }),
+          );
+          const officeReplication = yield* Effect.option(
+            replicateOffices({ select: ["OfficeKey"], count: true }),
+          );
+
+          return {
+            destinations,
+            properties,
+            members,
+            offices,
+            openHouses,
+            destination,
+            property,
+            member,
+            office,
+            openHouse,
+            propertyReplication,
+            memberReplication,
+            officeReplication,
+          };
         }).pipe(Effect.provide(layer));
       }),
     );
 
     assert.equal(Array.isArray(result.destinations.value), true);
     assert.equal(Array.isArray(result.properties.value), true);
+    assert.equal(Array.isArray(result.members.value), true);
+    assert.equal(Array.isArray(result.offices.value), true);
+    assert.equal(Array.isArray(result.openHouses.value), true);
   });
 });
 
@@ -70,6 +174,6 @@ if (!hasLiveCredentials) {
   const visible =
     visibleLiveEnvNames.length > 0 ? visibleLiveEnvNames.join(", ") : "none";
   process.stdout.write(
-    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional URLs: CREA_DDF_BASE_URL and CREA_DDF_AUTH_URL.\n`,
+    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional host-only URLs: CREA_DDF_BASE_URL, CREA_DDF_AUTH_URL, CREA_DDF_PROPERTY_REPLICATION_URL, CREA_ANALYTICS_URL, CREA_DESTINATION_ID. CREA_DDF_BASE_URL must be the API host only, not /odata/v1.\n`,
   );
 }

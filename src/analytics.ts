@@ -1,0 +1,71 @@
+import { Data, Effect } from "effect";
+import { DdfConfig } from "./client";
+
+export const DEFAULT_CREA_ANALYTICS_URL =
+  "https://analytics.crea.ca/LogEvents.svc/LogEvents";
+
+export type AnalyticsEventType = "View" | "Click" | "email_realtor";
+export type AnalyticsLanguageID = 1 | 2;
+
+export interface AnalyticsLogEventInput {
+  readonly ListingID: string | number;
+  readonly DestinationID: string | number;
+  readonly EventType: AnalyticsEventType;
+  readonly UUID: string;
+  readonly IP?: string;
+  readonly ReferralURL?: string;
+  readonly LanguageID?: AnalyticsLanguageID;
+}
+
+export class DdfAnalyticsFetchError extends Data.TaggedError(
+  "DdfAnalyticsFetchError",
+)<{
+  readonly url: string;
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `CREA analytics event failed before receiving a response from ${this.url}`;
+  }
+}
+
+const analyticsParamEntries = (input: AnalyticsLogEventInput) => {
+  const entries: Array<readonly [string, string]> = [
+    ["ListingID", String(input.ListingID)],
+    ["DestinationID", String(input.DestinationID)],
+    ["EventType", input.EventType],
+    ["UUID", input.UUID],
+  ];
+
+  if (input.IP !== undefined) entries.push(["IP", input.IP]);
+  if (input.ReferralURL !== undefined)
+    entries.push(["ReferralURL", input.ReferralURL]);
+  if (input.LanguageID !== undefined)
+    entries.push(["LanguageID", String(input.LanguageID)]);
+
+  return entries;
+};
+
+export const buildAnalyticsLogEventUrl = (
+  input: AnalyticsLogEventInput,
+  analyticsUrl = process.env.CREA_ANALYTICS_URL || DEFAULT_CREA_ANALYTICS_URL,
+) => {
+  const url = new URL(analyticsUrl);
+  for (const [key, value] of analyticsParamEntries(input)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+};
+
+export const logAnalyticsEvent = Effect.fn("DdfAnalytics.logAnalyticsEvent")(
+  function* (input: AnalyticsLogEventInput) {
+    const cfg = yield* DdfConfig;
+    const url = buildAnalyticsLogEventUrl(input, cfg.analyticsUrl);
+
+    cfg.logger?.debug?.({ type: "api_request", url });
+
+    yield* Effect.tryPromise({
+      try: () => cfg.fetch(url, { method: "GET" }),
+      catch: (cause) => new DdfAnalyticsFetchError({ url, cause }),
+    });
+  },
+);

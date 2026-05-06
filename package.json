@@ -17,7 +17,7 @@
     "build": "tsc",
     "test": "pnpm run typecheck && node --import tsx --test src/*.test.ts",
     "prepare": "effect-language-service patch",
-    "test:live": "node --import tsx --test src/live.integration.ts"
+    "test:live": "node --env-file-if-exists=.env --import tsx --test src/live.integration.ts"
   },
   "keywords": [],
   "author": "",
