@@ -1,7 +1,7 @@
-import { Schema } from "effect"
-import { toStandardSchemaV1 } from "effect/Schema"
+import { DateTime, Schema } from "effect"
 import { RoomsSchema } from "./roomsSchema"
 import { MediaSchema } from "./mediaSchema"
+import { ODataListEnvelopeSchema } from "./odata"
 
 export const PropertyListingSchema = Schema.Struct({
   ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -1068,7 +1068,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
   OriginalEntryTimestamp: Schema.Union([
     Schema.Null,
-    Schema.DateFromString,
+    Schema.DateTimeUtcFromString,
   ]).annotate({
     message: "Value is invalid for OriginalEntryTimestamp.",
     description:
@@ -1076,14 +1076,14 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Original Entry Timestamp",
     identifier: "OriginalEntryTimestamp",
     examples: [
-      new Date("2025-10-28T00:34:46.690Z"),
-      new Date("2025-12-01T16:55:25.400Z"),
-      new Date("2025-10-28T00:34:48.550Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
     ],
   }),
   ModificationTimestamp: Schema.Union([
     Schema.Null,
-    Schema.DateFromString,
+    Schema.DateTimeUtcFromString,
   ]).annotate({
     message: "Value is invalid for ModificationTimestamp.",
     description:
@@ -1091,14 +1091,14 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Modification Timestamp",
     identifier: "ModificationTimestamp",
     examples: [
-      new Date("2025-10-28T00:34:46.690Z"),
-      new Date("2025-12-01T16:55:25.400Z"),
-      new Date("2025-10-28T00:34:48.550Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
     ],
   }),
   AvailabilityDate: Schema.Union([
     Schema.Null,
-    Schema.DateFromString,
+    Schema.DateTimeUtcFromString,
   ]).annotate({
     message: "Value is invalid for AvailabilityDate.",
     description:
@@ -1106,9 +1106,9 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Availability Date",
     identifier: "AvailabilityDate",
     examples: [
-      new Date("2025-10-28T00:34:46.690Z"),
-      new Date("2025-12-01T16:55:25.400Z"),
-      new Date("2025-10-28T00:34:48.550Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
     ],
   }),
   ListingId: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -1153,7 +1153,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
   StatusChangeTimestamp: Schema.Union([
     Schema.Null,
-    Schema.DateFromString,
+    Schema.DateTimeUtcFromString,
   ]).annotate({
     message: "Value is invalid for StatusChangeTimestamp.",
     description:
@@ -1161,9 +1161,9 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Status Change Timestamp",
     identifier: "StatusChangeTimestamp",
     examples: [
-      new Date("2025-10-28T00:34:46.690Z"),
-      new Date("2025-12-01T16:55:25.400Z"),
-      new Date("2025-10-28T00:34:48.550Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
     ],
   }),
   PublicRemarks: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -1287,7 +1287,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
   PhotosChangeTimestamp: Schema.Union([
     Schema.Null,
-    Schema.DateFromString,
+    Schema.DateTimeUtcFromString,
   ]).annotate({
     message: "Value is invalid for PhotosChangeTimestamp.",
     description:
@@ -1295,9 +1295,9 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Photos Change Timestamp",
     identifier: "PhotosChangeTimestamp",
     examples: [
-      new Date("2025-10-28T00:34:46.690Z"),
-      new Date("2025-12-01T16:55:25.400Z"),
-      new Date("2025-10-28T00:34:48.550Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
     ],
   }),
   CommonInterest: Schema.Union([
@@ -3305,17 +3305,13 @@ export const PropertyListingSchema = Schema.Struct({
   }),
 })
 
-export const PropertyListingValidationSchema = toStandardSchemaV1(
-  PropertyListingSchema,
-)
+export const PropertyListingValidationSchema: ReturnType<
+  typeof Schema.toStandardSchemaV1<typeof PropertyListingSchema>
+> = Schema.toStandardSchemaV1(PropertyListingSchema)
 
 export const PropertyListing = PropertyListingSchema.Type
 
-export const MultiplePropertyListingResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
-  "@odata.nextLink": Schema.Union([Schema.String, Schema.Null]),
-  value: Schema.Array(PropertyListingSchema),
-})
+export const MultiplePropertyListingResponseSchema = ODataListEnvelopeSchema(PropertyListingSchema)
 
 export const SinglePropertyListingResponseSchema = Schema.Struct({
   "@odata.context": Schema.Union([Schema.String, Schema.Null]),

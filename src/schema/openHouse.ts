@@ -1,4 +1,5 @@
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect";
+import { ODataListEnvelopeSchema } from "./odata";
 
 export const OpenHouseSchema = Schema.Struct({
   OpenHouseKey: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -25,15 +26,18 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.Union([Schema.DateFromString, Schema.Null]).annotate({
+  OpenHouseDate: Schema.Union([
+    Schema.DateTimeUtcFromString,
+    Schema.Null,
+  ]).annotate({
     message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",
     identifier: "OpenHouseDate",
     examples: [
-      new Date("2025-07-15"),
-      new Date("2025-12-12"),
-      new Date("2026-09-12"),
+      DateTime.makeUnsafe("2025-07-15"),
+      DateTime.makeUnsafe("2025-12-12"),
+      DateTime.makeUnsafe("2026-09-12"),
     ],
   }),
   OpenHouseStartTime: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -96,12 +100,8 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "LivestreamOpenHouseURL",
     examples: [null], // TODO: Add examples
   }),
-})
+});
 
-export const OpenHouseType = OpenHouseSchema.Type
+export const OpenHouseType = OpenHouseSchema.Type;
 
-export const OpenHouseResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
-  "@odata.nextLink": Schema.Union([Schema.String, Schema.Null]),
-  value: Schema.Array(OpenHouseSchema),
-})
+export const OpenHouseResponseSchema = ODataListEnvelopeSchema(OpenHouseSchema);

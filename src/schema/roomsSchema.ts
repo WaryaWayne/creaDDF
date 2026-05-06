@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { DateTime, Schema } from "effect";
 
 export const RoomsSchema = Schema.Array(
   Schema.Struct({
@@ -27,7 +27,7 @@ export const RoomsSchema = Schema.Array(
     }),
     ModificationTimestamp: Schema.Union([
       Schema.Null,
-      Schema.DateFromString,
+      Schema.DateTimeUtcFromString,
     ]).annotate({
       message: "Value is invalid for ModificationTimestamp.",
       description:
@@ -35,9 +35,9 @@ export const RoomsSchema = Schema.Array(
       title: "Modification Timestamp",
       identifier: "ModificationTimestamp",
       examples: [
-        new Date("2025-10-28T00:34:46.690Z"),
-        new Date("2025-12-01T16:55:25.400Z"),
-        new Date("2025-10-28T00:34:48.550Z"),
+        DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
+        DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
+        DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
       ],
     }),
     RoomDescription: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -238,6 +238,6 @@ export const RoomsSchema = Schema.Array(
       identifier: "RoomType",
     }),
   }),
-)
+);
 
-export type RoomsType = typeof RoomsSchema.Type
+export type RoomsType = typeof RoomsSchema.Type;

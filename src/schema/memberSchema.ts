@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { MediaSchema } from "./mediaSchema"
+import { ODataListEnvelopeSchema } from "./odata"
 
 export const MemberSchema = Schema.Struct({
   MemberKey: Schema.Union([Schema.Null, Schema.String]),
@@ -639,6 +640,8 @@ export const MemberSchema = Schema.Struct({
   ]),
   MemberEmailYN: Schema.Union([Schema.Boolean, Schema.Null]),
 })
+
+export const MemberResponseSchema = ODataListEnvelopeSchema(MemberSchema)
 
 export const MemberLanguageSubtagSchema = Schema.Struct({
   Afrikaans: Schema.Literal("af"),
