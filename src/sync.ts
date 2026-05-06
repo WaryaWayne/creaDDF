@@ -20,7 +20,7 @@ import {
   normalizePropertyGraph,
   normalizePropertyRooms,
 } from "./normalizers";
-import { OpenHouseResponseSchema } from "./schema/openHouse";
+import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
 import type { MediaType } from "./schema/mediaSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 import type {
@@ -35,6 +35,40 @@ import {
   PropertyReplicationIdentifierResponseSchema,
 } from "./schema/odata";
 import type { ODataListQuery, ReplicationQuery } from "./types";
+
+
+type SelectQuery = { readonly select?: ReadonlyArray<string> };
+
+const hasSelect = (query?: SelectQuery) =>
+  query?.select !== undefined && query.select.length > 0;
+
+const partialStruct = <Fields extends Schema.Struct.Fields>(
+  schema: Schema.Struct<Fields>,
+) =>
+  schema.mapFields(
+    (fields) =>
+      Object.fromEntries(
+        Object.entries(fields).map(([key, field]) => [
+          key,
+          Schema.optionalKey(field as Schema.Top),
+        ]),
+      ) as { readonly [Key in keyof Fields]: Schema.optionalKey<Fields[Key]> },
+  );
+
+const selectedOpenHouseResponseSchema = Schema.Struct({
+  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
+  "@odata.count": Schema.optionalKey(Schema.Number),
+  "@odata.nextLink": Schema.optionalKey(Schema.NullOr(Schema.String)),
+  value: Schema.Array(
+    Schema.Struct({
+      "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
+      ...partialStruct(OpenHouseSchema).fields,
+    }),
+  ),
+});
+
+const openHousePageSchema = (query?: SelectQuery) =>
+  hasSelect(query) ? selectedOpenHouseResponseSchema : OpenHouseResponseSchema;
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([
@@ -205,6 +239,33 @@ const highestWatermark = (timestamps: ReadonlyArray<unknown>) => {
   return highest;
 };
 
+const safeHighestWatermark = (
+  successfulTimestamps: ReadonlyArray<unknown>,
+  failedTimestamps: ReadonlyArray<unknown>,
+) => {
+  if (failedTimestamps.length === 0) return highestWatermark(successfulTimestamps);
+
+  let earliestFailedMillis = Number.POSITIVE_INFINITY;
+  for (const timestamp of failedTimestamps) {
+    const watermark = timestampToWatermark(timestamp);
+    if (!watermark) return null;
+
+    const millis = Date.parse(watermark);
+    if (!Number.isFinite(millis)) return null;
+    earliestFailedMillis = Math.min(earliestFailedMillis, millis);
+  }
+
+  return highestWatermark(
+    successfulTimestamps.filter((timestamp) => {
+      const watermark = timestampToWatermark(timestamp);
+      if (!watermark) return false;
+
+      const millis = Date.parse(watermark);
+      return Number.isFinite(millis) && millis < earliestFailedMillis;
+    }),
+  );
+};
+
 const incrementalQuery = (options: BaseSyncOptions | undefined) => {
   const query = options?.query ?? {};
   if (options?.mode !== "incremental" || !options.since) return query;
@@ -266,7 +327,7 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
       const page = yield* http.requestJson<typeof first>(
         next,
         undefined,
-        OpenHouseResponseSchema,
+        openHousePageSchema(query) as Schema.Decoder<typeof first, never>,
       );
       out.push(...page.value);
       next = page["@odata.nextLink"] ?? null;
@@ -327,16 +388,24 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const hydrated = yield* Effect.forEach(
       identifiers,
       (identifier) =>
-        hydrateOne("Property", identifier.ListingKey, (key) => getProperty(key)),
+        Effect.gen(function* () {
+          const result = yield* hydrateOne("Property", identifier.ListingKey, (key) =>
+            getProperty(key),
+          );
+          return { identifier, result };
+        }),
       { concurrency: boundedConcurrency(options?.concurrency) },
     );
 
     const records: Array<PropertyGraph> = [];
     const errors: Array<SyncRecordError> = [];
+    const successfulWatermarks: Array<unknown> = [];
+    const failedWatermarks: Array<unknown> = [];
 
-    for (const result of hydrated) {
+    for (const { identifier, result } of hydrated) {
       if (result.error) {
         errors.push(result.error);
+        failedWatermarks.push(identifier.ModificationTimestamp);
         continue;
       }
       if (!result.record) continue;
@@ -369,11 +438,17 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         }
       });
       const persistError = yield* runPersist("Property", propertyKey, persist);
-      if (persistError) errors.push(persistError);
+      if (persistError) {
+        errors.push(persistError);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+      } else {
+        successfulWatermarks.push(identifier.ModificationTimestamp);
+      }
     }
 
-    const nextWatermark = highestWatermark(
-      identifiers.map((identifier) => identifier.ModificationTimestamp),
+    const nextWatermark = safeHighestWatermark(
+      successfulWatermarks,
+      failedWatermarks,
     );
     if (nextWatermark && options?.sink?.saveWatermark) {
       const persistError = yield* runPersist(
@@ -410,15 +485,22 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   );
   const hydrated = yield* Effect.forEach(
     identifiers,
-    (identifier) => hydrateOne("Member", identifier.MemberKey, getMember),
+    (identifier) =>
+      Effect.gen(function* () {
+        const result = yield* hydrateOne("Member", identifier.MemberKey, getMember);
+        return { identifier, result };
+      }),
     { concurrency: boundedConcurrency(options?.concurrency) },
   );
   const records: Array<MemberRecord> = [];
   const errors: Array<SyncRecordError> = [];
+  const successfulWatermarks: Array<unknown> = [];
+  const failedWatermarks: Array<unknown> = [];
 
-  for (const result of hydrated) {
+  for (const { identifier, result } of hydrated) {
     if (result.error) {
       errors.push(result.error);
+      failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
     }
     if (!result.record) continue;
@@ -442,11 +524,17 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
       }
     });
     const persistError = yield* runPersist("Member", memberKey, persist);
-    if (persistError) errors.push(persistError);
+    if (persistError) {
+      errors.push(persistError);
+      failedWatermarks.push(identifier.ModificationTimestamp);
+    } else {
+      successfulWatermarks.push(identifier.ModificationTimestamp);
+    }
   }
 
-  const nextWatermark = highestWatermark(
-    identifiers.map((identifier) => identifier.ModificationTimestamp),
+  const nextWatermark = safeHighestWatermark(
+    successfulWatermarks,
+    failedWatermarks,
   );
   if (nextWatermark && options?.sink?.saveWatermark) {
     const persistError = yield* runPersist(
@@ -482,15 +570,22 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   );
   const hydrated = yield* Effect.forEach(
     identifiers,
-    (identifier) => hydrateOne("Office", identifier.OfficeKey, getOffice),
+    (identifier) =>
+      Effect.gen(function* () {
+        const result = yield* hydrateOne("Office", identifier.OfficeKey, getOffice);
+        return { identifier, result };
+      }),
     { concurrency: boundedConcurrency(options?.concurrency) },
   );
   const records: Array<OfficeRecord> = [];
   const errors: Array<SyncRecordError> = [];
+  const successfulWatermarks: Array<unknown> = [];
+  const failedWatermarks: Array<unknown> = [];
 
-  for (const result of hydrated) {
+  for (const { identifier, result } of hydrated) {
     if (result.error) {
       errors.push(result.error);
+      failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
     }
     if (!result.record) continue;
@@ -514,11 +609,17 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
       }
     });
     const persistError = yield* runPersist("Office", officeKey, persist);
-    if (persistError) errors.push(persistError);
+    if (persistError) {
+      errors.push(persistError);
+      failedWatermarks.push(identifier.ModificationTimestamp);
+    } else {
+      successfulWatermarks.push(identifier.ModificationTimestamp);
+    }
   }
 
-  const nextWatermark = highestWatermark(
-    identifiers.map((identifier) => identifier.ModificationTimestamp),
+  const nextWatermark = safeHighestWatermark(
+    successfulWatermarks,
+    failedWatermarks,
   );
   if (nextWatermark && options?.sink?.saveWatermark) {
     const persistError = yield* runPersist(
@@ -545,26 +646,38 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   ) {
     const records = yield* collectOpenHousePages(options?.query);
     const errors: Array<SyncRecordError> = [];
+    const successfulWatermarks: Array<unknown> = [];
+    const failedWatermarks: Array<unknown> = [];
+    const watermarkField = options?.watermarkField ?? "OpenHouseDate";
 
     yield* Effect.forEach(
       records,
       (openHouse) =>
         Effect.gen(function* () {
           const key = String(openHouse.OpenHouseKey ?? "");
-          if (!options?.sink?.upsertOpenHouse) return;
+          const timestamp = (openHouse as Record<string, unknown>)[watermarkField];
+          if (!options?.sink?.upsertOpenHouse) {
+            successfulWatermarks.push(timestamp);
+            return;
+          }
           const persistError = yield* runPersist(
             "OpenHouse",
             key,
             options.sink.upsertOpenHouse(openHouse),
           );
-          if (persistError) errors.push(persistError);
+          if (persistError) {
+            errors.push(persistError);
+            failedWatermarks.push(timestamp);
+          } else {
+            successfulWatermarks.push(timestamp);
+          }
         }),
       { concurrency: boundedConcurrency(options?.concurrency), discard: true },
     );
 
-    const watermarkField = options?.watermarkField ?? "OpenHouseDate";
-    const nextWatermark = highestWatermark(
-      records.map((record) => (record as Record<string, unknown>)[watermarkField]),
+    const nextWatermark = safeHighestWatermark(
+      successfulWatermarks,
+      failedWatermarks,
     );
     if (nextWatermark && options?.sink?.saveWatermark) {
       const persistError = yield* runPersist(

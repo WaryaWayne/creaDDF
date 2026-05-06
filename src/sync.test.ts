@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { Data, Effect, Layer } from "effect";
+import { Data, Effect, Layer, Schema } from "effect";
 import { DdfApiHttpError, DdfApiResponseSchemaDecodeError, DdfHttp } from "./client";
-import type { DdfHttpApi } from "./client";
+import type { DdfHttpApi, DdfResponseSchema } from "./client";
 import {
   diffLocalKeysAgainstMasterList,
   getPropertyMasterList,
@@ -199,7 +199,89 @@ describe("syncProperties", () => {
     assert.equal(result.errors.length, 3);
     assert.deepEqual(result.errors.map((error) => error.stage).sort(), ["hydrate", "hydrate", "persist"]);
     assert.match(result.errors.map((error) => error.message).join("\n"), /schema decoding|invalid ListingKey/i);
-    assert.equal(result.nextWatermark, "2024-01-04T00:00:00.000Z");
+    assert.equal(result.nextWatermark, null);
+  });
+
+  it("does not save a property watermark past a hydration failure", async () => {
+    const savedWatermarks: Array<string> = [];
+    const http = emptyHttp({
+      requestJson: <T = unknown>(path: string) => {
+        if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+          return response<T>({
+            value: [
+              { ListingKey: "before-fail", ModificationTimestamp: "2024-05-01T00:00:00.000Z" },
+              { ListingKey: "hydrate-fail", ModificationTimestamp: "2024-05-02T00:00:00.000Z" },
+              { ListingKey: "after-fail", ModificationTimestamp: "2024-05-03T00:00:00.000Z" },
+            ],
+          });
+        }
+        return response<T>({ value: [] });
+      },
+      getOData: <T = unknown>(_path: string, key: string | number) => {
+        if (key === "hydrate-fail") {
+          return Effect.fail(new DdfApiHttpError({
+            url: "https://ddf.test/property/hydrate-fail",
+            status: 503,
+            statusText: "Service Unavailable",
+          }));
+        }
+        return response<T>(propertyFor(String(key)));
+      },
+    });
+
+    const result = await runWithHttp(
+      syncProperties({
+        sink: {
+          saveWatermark: (_resource, watermark) =>
+            Effect.sync(() => savedWatermarks.push(watermark)),
+        },
+      }),
+      http,
+    );
+
+    assert.equal(result.records.length, 2);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.nextWatermark, "2024-05-01T00:00:00.000Z");
+    assert.deepEqual(savedWatermarks, ["2024-05-01T00:00:00.000Z"]);
+  });
+
+  it("does not save a property watermark past a persistence failure", async () => {
+    const savedWatermarks: Array<string> = [];
+    const http = emptyHttp({
+      requestJson: <T = unknown>(path: string) => {
+        if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+          return response<T>({
+            value: [
+              { ListingKey: "persist-ok-before", ModificationTimestamp: "2024-06-01T00:00:00.000Z" },
+              { ListingKey: "persist-fail", ModificationTimestamp: "2024-06-02T00:00:00.000Z" },
+              { ListingKey: "persist-ok-after", ModificationTimestamp: "2024-06-03T00:00:00.000Z" },
+            ],
+          });
+        }
+        return response<T>({ value: [] });
+      },
+      getOData: <T = unknown>(_path: string, key: string | number) =>
+        response<T>(propertyFor(String(key))),
+    });
+
+    const result = await runWithHttp(
+      syncProperties({
+        sink: {
+          upsertProperty: (property) =>
+            property.ListingKey === "persist-fail"
+              ? Effect.fail(new TestSinkError({ reason: "property sink failed" }))
+              : Effect.void,
+          saveWatermark: (_resource, watermark) =>
+            Effect.sync(() => savedWatermarks.push(watermark)),
+        },
+      }),
+      http,
+    );
+
+    assert.equal(result.records.length, 3);
+    assert.equal(result.errors.length, 1);
+    assert.equal(result.nextWatermark, "2024-06-01T00:00:00.000Z");
+    assert.deepEqual(savedWatermarks, ["2024-06-01T00:00:00.000Z"]);
   });
 });
 
@@ -223,17 +305,98 @@ describe("syncMembers and syncOffices", () => {
     });
 
     const members = await runWithHttp(
-      syncMembers({ sink: { upsertMember: (member) => Effect.sync(() => calls.push(`member:${member.MemberKey}`)) } }),
+      syncMembers({
+        sink: {
+          upsertMember: (member) => Effect.sync(() => calls.push(`member:${member.MemberKey}`)),
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
+        },
+      }),
       http,
     );
     const offices = await runWithHttp(
-      syncOffices({ sink: { upsertOffice: (office) => Effect.sync(() => calls.push(`office:${(office as { OfficeKey: string }).OfficeKey}`)) } }),
+      syncOffices({
+        sink: {
+          upsertOffice: (office) => Effect.sync(() => calls.push(`office:${(office as { OfficeKey: string }).OfficeKey}`)),
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
+        },
+      }),
       http,
     );
 
     assert.equal(members.nextWatermark, "2024-02-01T00:00:00.000Z");
     assert.equal(offices.nextWatermark, "2024-03-01T00:00:00.000Z");
-    assert.deepEqual(calls, ["member:member-1", "office:office-1"]);
+    assert.deepEqual(calls, [
+      "member:member-1",
+      "member-watermark:2024-02-01T00:00:00.000Z",
+      "office:office-1",
+      "office-watermark:2024-03-01T00:00:00.000Z",
+    ]);
+  });
+
+  it("keeps member and office watermarks before failed records", async () => {
+    const calls: Array<string> = [];
+    const http = emptyHttp({
+      requestJson: <T = unknown>(path: string) => {
+        if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+          return response<T>({
+            value: [
+              { MemberKey: "member-before", ModificationTimestamp: "2024-07-01T00:00:00.000Z" },
+              { MemberKey: "member-fail", ModificationTimestamp: "2024-07-02T00:00:00.000Z" },
+              { MemberKey: "member-after", ModificationTimestamp: "2024-07-03T00:00:00.000Z" },
+            ],
+          });
+        }
+        if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+          return response<T>({
+            value: [
+              { OfficeKey: "office-before", ModificationTimestamp: "2024-08-01T00:00:00.000Z" },
+              { OfficeKey: "office-fail", ModificationTimestamp: "2024-08-02T00:00:00.000Z" },
+              { OfficeKey: "office-after", ModificationTimestamp: "2024-08-03T00:00:00.000Z" },
+            ],
+          });
+        }
+        return response<T>({ value: [] });
+      },
+      getOData: <T = unknown>(path: string, key: string | number) => {
+        if (key === "member-fail") {
+          return Effect.fail(new DdfApiHttpError({
+            url: "https://ddf.test/member/member-fail",
+            status: 503,
+            statusText: "Service Unavailable",
+          }));
+        }
+        if (path === "/odata/v1/Member") return response<T>({ MemberKey: key, Media: [] });
+        return response<T>({ OfficeKey: key, Media: [] });
+      },
+    });
+
+    const members = await runWithHttp(
+      syncMembers({
+        sink: {
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
+        },
+      }),
+      http,
+    );
+    const offices = await runWithHttp(
+      syncOffices({
+        sink: {
+          upsertOffice: (office) =>
+            (office as { OfficeKey: string }).OfficeKey === "office-fail"
+              ? Effect.fail(new TestSinkError({ reason: "office sink failed" }))
+              : Effect.void,
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
+        },
+      }),
+      http,
+    );
+
+    assert.equal(members.nextWatermark, "2024-07-01T00:00:00.000Z");
+    assert.equal(offices.nextWatermark, "2024-08-01T00:00:00.000Z");
+    assert.deepEqual(calls, [
+      "member-watermark:2024-07-01T00:00:00.000Z",
+      "office-watermark:2024-08-01T00:00:00.000Z",
+    ]);
   });
 });
 
@@ -275,6 +438,70 @@ describe("syncOpenHouses", () => {
     assert.equal(result.records.length, 2);
     assert.equal(result.nextWatermark, "2024-04-03T00:00:00.000Z");
     assert.deepEqual(calls, ["open:open-1", "open:open-2", "watermark:2024-04-03T00:00:00.000Z"]);
+  });
+
+  it("does not save an OpenHouse watermark past a persistence failure", async () => {
+    const calls: Array<string> = [];
+    const http = emptyHttp({
+      listOData: <T = unknown>() =>
+        response<T>({
+          value: [
+            { OpenHouseKey: "open-before", OpenHouseDate: "2024-09-01T00:00:00.000Z" },
+            { OpenHouseKey: "open-fail", OpenHouseDate: "2024-09-02T00:00:00.000Z" },
+            { OpenHouseKey: "open-after", OpenHouseDate: "2024-09-03T00:00:00.000Z" },
+          ],
+        }),
+    });
+
+    const result = await runWithHttp(
+      syncOpenHouses({
+        sink: {
+          upsertOpenHouse: (openHouse) =>
+            openHouse.OpenHouseKey === "open-fail"
+              ? Effect.fail(new TestSinkError({ reason: "open house sink failed" }))
+              : Effect.void,
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`watermark:${watermark}`)),
+        },
+      }),
+      http,
+    );
+
+    assert.equal(result.nextWatermark, "2024-09-01T00:00:00.000Z");
+    assert.deepEqual(calls, ["watermark:2024-09-01T00:00:00.000Z"]);
+  });
+
+  it("decodes selected OpenHouse nextLink pages with the selected schema", async () => {
+    const paths: Array<string> = [];
+    const http = emptyHttp({
+      listOData: <T = unknown>(path: string) => {
+        paths.push(path);
+        return response<T>({
+          "@odata.nextLink": "https://ddf.test/openhouse-selected-page-2",
+          value: [{ OpenHouseKey: "open-selected-1" }],
+        });
+      },
+      requestJson: <T = unknown>(path: string, _init?: RequestInit, schema?: DdfResponseSchema<T>) => {
+        paths.push(path);
+        const payload = { value: [{ OpenHouseKey: "open-selected-2" }] };
+        return schema
+          ? Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<T, never>
+          : response<T>(payload);
+      },
+    });
+
+    const result = await runWithHttp(
+      syncOpenHouses({ query: { select: ["OpenHouseKey"] } }),
+      http,
+    );
+
+    assert.deepEqual(paths, [
+      "/odata/v1/OpenHouse",
+      "https://ddf.test/openhouse-selected-page-2",
+    ]);
+    assert.deepEqual(
+      result.records.map((record) => record.OpenHouseKey),
+      ["open-selected-1", "open-selected-2"],
+    );
   });
 });
 
