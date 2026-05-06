@@ -92,7 +92,7 @@ const LeadInputSchema = Schema.Struct({
   SenderName: Schema.String,
   SenderEmailAddress: Schema.String,
   SenderPhoneNumber: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  PreferredMethodContact: Schema.Literals(["Email", "Phone", "Text"]),
+  PreferredMethodContact: Schema.Literals(["email", "phone", "text"]),
   SenderPhoneExtension: Schema.optionalKey(Schema.NullOr(Schema.Number)),
   Message: Schema.String.check(Schema.isMaxLength(500)),
 });

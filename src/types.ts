@@ -22,7 +22,7 @@ export type LeadInput = {
   SenderName: string;
   SenderEmailAddress: string;
   SenderPhoneNumber?: number | null;
-  PreferredMethodContact: "Email" | "Phone" | "Text";
+  PreferredMethodContact: "email" | "phone" | "text";
   SenderPhoneExtension?: number | null;
   Message: string;
 };

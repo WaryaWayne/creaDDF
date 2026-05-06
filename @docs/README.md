@@ -62,7 +62,7 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 This SDK is intentionally service/layer based. Create an Effect program that yields SDK effects and provide `makeDdfLayer` at the edge of your application; do not construct a standalone imperative client inside business logic.
 
 ```ts
-import { Effect } from "effect";
+import { Config, Effect, Redacted } from "effect";
 import {
   filters,
   listDestinations,
@@ -70,26 +70,34 @@ import {
   makeDdfLayer,
 } from "crea-ddf-effect-sdk";
 
-const ddfLayer = makeDdfLayer({
-  clientId: process.env.DDF_CLIENT_ID!,
-  clientSecret: process.env.DDF_CLIENT_SECRET!,
-  fetch,
+const appConfig = Config.all({
+  clientId: Config.redacted("CREA_DDF_CLIENT_ID"),
+  clientSecret: Config.redacted("CREA_DDF_CLIENT_SECRET"),
 });
 
 const program = Effect.gen(function* () {
-  const destinations = yield* listDestinations({ top: 1 });
-  const properties = yield* listProperties({
-    top: 1,
-    filter: filters.modifiedAfter(
-      "ModificationTimestamp",
-      "2024-01-01T00:00:00.000Z",
-    ),
+  const config = yield* appConfig;
+  const ddfLayer = makeDdfLayer({
+    clientId: Redacted.value(config.clientId),
+    clientSecret: Redacted.value(config.clientSecret),
+    fetch,
   });
 
-  return { destinations, properties };
+  return yield* Effect.gen(function* () {
+    const destinations = yield* listDestinations({ top: 1 });
+    const properties = yield* listProperties({
+      top: 1,
+      filter: filters.modifiedAfter(
+        "ModificationTimestamp",
+        "2024-01-01T00:00:00.000Z",
+      ),
+    });
+
+    return { destinations, properties };
+  }).pipe(Effect.provide(ddfLayer));
 });
 
-await Effect.runPromise(program.pipe(Effect.provide(ddfLayer)));
+await Effect.runPromise(program);
 ```
 
 Persistence remains an application boundary: replication/sync helpers expose records, errors, watermarks, and optional sink hooks, but the SDK does not own a database.
