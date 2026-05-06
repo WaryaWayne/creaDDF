@@ -548,7 +548,8 @@ describe("syncOpenHouses", () => {
     });
   });
 
-  it("collects OpenHouse nextLink failures without dropping previous page records", async () => {
+  it("collects OpenHouse nextLink failures without dropping previous page records or advancing watermarks", async () => {
+    const calls: Array<string> = [];
     const http = emptyHttp({
       listOData: <T = unknown>() =>
         response<T>({
@@ -567,13 +568,22 @@ describe("syncOpenHouses", () => {
       },
     });
 
-    const result = await runWithHttp(syncOpenHouses(), http);
+    const result = await runWithHttp(
+      syncOpenHouses({
+        sink: {
+          saveWatermark: (_resource, watermark) => Effect.sync(() => calls.push(`watermark:${watermark}`)),
+        },
+      }),
+      http,
+    );
 
     assert.deepEqual(result.records.map((record) => record.OpenHouseKey), ["open-1"]);
     assert.equal(result.errors.length, 1);
     assert.equal(result.errors[0]?.key, "page:https://ddf.test/openhouse-bad-page");
     assert.equal(result.counts.hydrated, 1);
     assert.equal(result.counts.failed, 1);
+    assert.equal(result.nextWatermark, null);
+    assert.deepEqual(calls, []);
   });
 
   it("decodes selected OpenHouse nextLink pages with the selected schema", async () => {

@@ -695,7 +695,9 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
     const records = collected.records;
     const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
-    const failedWatermarks: Array<unknown> = [];
+    const failedWatermarks: Array<unknown> = collected.errors.some(
+      (error) => error.stage === "hydrate" && error.key.startsWith("page:"),
+    ) ? [null] : [];
     const watermarkField = options?.watermarkField ?? "OpenHouseDate";
     let persistedRecords = 0;
 
