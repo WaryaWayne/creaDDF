@@ -1,7 +1,7 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { DateTime, Schema } from "effect"
-import { normalizeMedia, normalizePropertyRooms } from "./normalizers"
+import { normalizeMedia, normalizePropertyGraph, normalizePropertyRooms } from "./normalizers"
 import { MediaSchema } from "./schema/mediaSchema"
 
 describe("normalizers", () => {
@@ -15,6 +15,26 @@ describe("normalizers", () => {
     })
 
     assert.deepEqual(rows.map((row) => row.ListingKey), ["parent-listing", "room-listing"])
+  })
+
+
+  it("normalizes property graphs into property, room, and media groups", () => {
+    const graph = normalizePropertyGraph({
+      ListingKey: "listing-graph",
+      Rooms: [{ RoomKey: "room-1", ListingKey: null }],
+      Media: [
+        {
+          MediaKey: "media-1",
+          ResourceName: null,
+          ResourceRecordKey: null,
+        },
+      ],
+    })
+
+    assert.equal(graph.property.ListingKey, "listing-graph")
+    assert.equal(graph.rooms[0].ListingKey, "listing-graph")
+    assert.equal(graph.media[0].ResourceName, "Property")
+    assert.equal(graph.media[0].ResourceRecordKey, "listing-graph")
   })
 
   it("normalizes media parent values without overwriting existing values", () => {

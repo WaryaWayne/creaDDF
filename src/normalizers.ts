@@ -13,3 +13,15 @@ export const normalizeMedia = (resourceName: "Property" | "Member" | "Office", p
   ResourceName: media.ResourceName ?? resourceName,
   ResourceRecordKey: media.ResourceRecordKey ?? parentKey,
 })
+
+
+export const normalizePropertyGraph = (property: Record<string, unknown>) => {
+  const listingKey = typeof property.ListingKey === "string" ? property.ListingKey : ""
+  return {
+    property,
+    rooms: normalizePropertyRooms(property),
+    media: (getPropertyMedia(property) as MediaType).map((media) =>
+      normalizeMedia("Property", listingKey, media),
+    ),
+  }
+}

@@ -2,6 +2,7 @@ import { Data, Effect, Schema } from "effect";
 import { DdfHttp, encodeODataQuery } from "./client";
 import type { DdfResponseSchema } from "./client";
 import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema";
+import { OfficeResponseSchema, OfficeSchema } from "./schema/officeSchema";
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
 import {
   MultiplePropertyListingResponseSchema,
@@ -102,6 +103,8 @@ const SelectedPropertyListingResponseSchema = ODataListEnvelopeSchema(
 const SelectedMemberSchema = selectedEntitySchema(MemberSchema);
 const SelectedMemberResponseSchema =
   ODataListEnvelopeSchema(SelectedMemberSchema);
+const SelectedOfficeSchema = selectedEntitySchema(OfficeSchema);
+const SelectedOfficeResponseSchema = ODataListEnvelopeSchema(SelectedOfficeSchema);
 const SelectedOpenHouseSchema = selectedEntitySchema(OpenHouseSchema);
 const SelectedOpenHouseResponseSchema = ODataListEnvelopeSchema(
   SelectedOpenHouseSchema,
@@ -206,7 +209,7 @@ export const listOffices = Effect.fn("DdfOffice.listOffices")(function* (
   return yield* http.listOData(
     "/odata/v1/Office",
     query,
-    ODataUnknownListEnvelopeSchema,
+    schemaForSelect(query, SelectedOfficeResponseSchema, OfficeResponseSchema),
   );
 });
 export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
@@ -214,7 +217,12 @@ export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
-  return yield* http.getOData("/odata/v1/Office", officeKey, query);
+  return yield* http.getOData(
+    "/odata/v1/Office",
+    officeKey,
+    query,
+    schemaForSelect(query, SelectedOfficeSchema, OfficeSchema),
+  );
 });
 export const replicateOffices = Effect.fn("DdfOffice.replicateOffices")(
   function* (query?: ReplicationQuery) {

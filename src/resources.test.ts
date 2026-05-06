@@ -80,6 +80,42 @@ const leadInput: LeadInput = {
 
 const leadBody = '{"Culture":"en-CA","MemberKey":"member-1","ListingKey":"listing-1","SenderName":"Jane Buyer","SenderEmailAddress":"jane@example.com","SenderPhoneNumber":4165551234,"PreferredMethodContact":"Email","SenderPhoneExtension":null,"Message":"I would like to know more about this listing."}'
 
+const officeRecord = {
+  "@odata.context": "https://ddf.test/$metadata#Office/$entity",
+  OfficeKey: "office-1",
+  OfficeMlsId: "OFF-1",
+  OfficeAORKey: "AOR-1",
+  OfficeNationalAssociationId: "ORG-1",
+  FranchiseNationalAssociationId: null,
+  OfficeBrokerNationalAssociationId: null,
+  OfficeAddress1: "123 Main St",
+  OfficeAddress2: null,
+  OfficeCity: "Toronto",
+  OfficeFax: null,
+  OfficeName: "Example Brokerage",
+  OfficePhone: "416-555-0100",
+  OfficePhoneExt: null,
+  OfficePostalCode: "M5V 1A1",
+  Media: [],
+  OfficeSocialMedia: [
+    {
+      SocialMediaKey: "social-1",
+      ResourceRecordKey: "office-1",
+      SocialMediaType: "Website",
+      ModificationTimestamp: "2024-01-20T00:00:00.000Z",
+      ResourceName: "Office",
+      SocialMediaUrlOrId: "https://example.test",
+    },
+  ],
+  ModificationTimestamp: "2024-01-25T00:00:00.000Z",
+  OriginalEntryTimestamp: "2024-01-01T00:00:00.000Z",
+  OfficeType: "Real Estate",
+  OfficeStateOrProvince: "Ontario",
+  OfficeAOR: "Toronto",
+  OfficeStatus: "Active",
+  OfficeCountry: "Canada",
+}
+
 describe("odata resource paths", () => {
   it("requests list endpoints with encoded query options", async () => {
     assert.equal(
@@ -105,25 +141,34 @@ describe("odata resource paths", () => {
 })
 
 describe("selected resource decoding", () => {
-  it("decodes selected property list rows as partial resources", async () => {
+  it("decodes selected property and office list rows as partial resources", async () => {
     const fetchMock = (async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url === "https://identity.test/connect/token") return tokenResponse.clone()
 
-      assert.equal(url, "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp&%24top=1")
-      return Response.json({
-        value: [{ ListingKey: "listing-1", ModificationTimestamp: "2024-01-25T00:00:00.000Z" }],
-      })
+      if (url === "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp&%24top=1") {
+        return Response.json({
+          value: [{ ListingKey: "listing-1", ModificationTimestamp: "2024-01-25T00:00:00.000Z" }],
+        })
+      }
+      if (url === "https://ddf.test/odata/v1/Office?%24select=OfficeKey&%24top=1") {
+        return Response.json({ value: [{ OfficeKey: "office-1" }] })
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
     }) as typeof fetch
 
     const result = await Effect.runPromise(
-      listProperties({ select: ["ListingKey", "ModificationTimestamp"], top: 1 }).pipe(
-        Effect.provide(makeDdfLayer(configFor(fetchMock))),
-      ),
+      Effect.gen(function* () {
+        const properties = yield* listProperties({ select: ["ListingKey", "ModificationTimestamp"], top: 1 })
+        const offices = yield* listOffices({ select: ["OfficeKey"], top: 1 })
+        return { properties, offices }
+      }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock)))),
     )
 
-    assert.equal(result.value[0]?.ListingKey, "listing-1")
-    const timestamp = result.value[0]?.ModificationTimestamp
+    assert.equal(result.properties.value[0]?.ListingKey, "listing-1")
+    assert.equal(result.offices.value[0]?.OfficeKey, "office-1")
+    const timestamp = result.properties.value[0]?.ModificationTimestamp
     assert.equal(
       DateTime.isDateTime(timestamp) && DateTime.isUtc(timestamp),
       true,
@@ -141,6 +186,9 @@ describe("selected resource decoding", () => {
       if (url === "https://ddf.test/odata/v1/Member('member-1')?%24select=MemberKey") {
         return Response.json({ MemberKey: "member-1" })
       }
+      if (url === "https://ddf.test/odata/v1/Office('office-1')?%24select=OfficeKey") {
+        return Response.json({ OfficeKey: "office-1" })
+      }
       if (url === "https://ddf.test/odata/v1/OpenHouse('open-house-1')?%24select=OpenHouseKey") {
         return Response.json({ OpenHouseKey: "open-house-1" })
       }
@@ -152,14 +200,63 @@ describe("selected resource decoding", () => {
       Effect.gen(function* () {
         const property = yield* getProperty("property-1", { select: ["ListingKey"] })
         const member = yield* getMember("member-1", { select: ["MemberKey"] })
+        const office = yield* getOffice("office-1", { select: ["OfficeKey"] })
         const openHouse = yield* getOpenHouse("open-house-1", { select: ["OpenHouseKey"] })
-        return { property, member, openHouse }
+        return { property, member, office, openHouse }
       }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock)))),
     )
 
     assert.equal(result.property.ListingKey, "property-1")
     assert.equal(result.member.MemberKey, "member-1")
+    assert.equal(result.office.OfficeKey, "office-1")
     assert.equal(result.openHouse.OpenHouseKey, "open-house-1")
+  })
+
+  it("decodes full office list and keyed resources with Office schema", async () => {
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "https://identity.test/connect/token") return tokenResponse.clone()
+
+      if (url === "https://ddf.test/odata/v1/Office?%24top=1") {
+        return Response.json({ value: [officeRecord] })
+      }
+      if (url === "https://ddf.test/odata/v1/Office('office-1')") {
+        return Response.json(officeRecord)
+      }
+
+      throw new Error(`Unexpected request: ${url}`)
+    }) as typeof fetch
+
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const offices = yield* listOffices({ top: 1 })
+        const office = yield* getOffice("office-1")
+        return { offices, office }
+      }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock)))),
+    )
+
+    assert.equal(result.offices.value[0]?.OfficeKey, "office-1")
+    assert.equal(result.office.OfficeName, "Example Brokerage")
+    assert.equal(result.office.ModificationTimestamp instanceof Date, true)
+    assert.equal(result.office.OfficeSocialMedia?.[0]?.ModificationTimestamp instanceof Date, true)
+  })
+
+  it("rejects invalid office payloads at the resource boundary", async () => {
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "https://identity.test/connect/token") return tokenResponse.clone()
+      if (url === "https://ddf.test/odata/v1/Office('office-1')") {
+        return Response.json({ ...officeRecord, Media: [{ MediaKey: "bad", ResourceName: "Listing" }] })
+      }
+      throw new Error(`Unexpected request: ${url}`)
+    }) as typeof fetch
+
+    await assert.rejects(
+      Effect.runPromise(
+        getOffice("office-1").pipe(Effect.provide(makeDdfLayer(configFor(fetchMock)))),
+      ),
+      /schema decoding|ResourceName/,
+    )
   })
 })
 
