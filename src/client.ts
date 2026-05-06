@@ -230,6 +230,13 @@ export class DdfApiTransportFetchFailure extends Data.TaggedError(
   }
 }
 
+/**
+ * @deprecated Use {@link DdfApiTransportFetchFailure}. This value export is
+ * retained so existing consumers can continue constructing or checking
+ * `instanceof DdfApiFetchError` at runtime.
+ */
+export const DdfApiFetchError = DdfApiTransportFetchFailure;
+
 export class DdfApiHttpError extends Data.TaggedError("DdfApiHttpError")<{
   readonly url: string;
   readonly status: number;

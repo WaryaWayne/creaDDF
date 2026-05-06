@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DateTime, Effect, Exit } from "effect";
 import {
+  DdfApiFetchError,
+  DdfApiTransportFetchFailure,
   DdfHttp,
   DdfInvalidODataQueryError,
   encodeODataQuery,
@@ -119,6 +121,31 @@ describe("client", () => {
 
     assert.deepEqual(result, { value: [{ ListingKey: "listing-1" }] });
     assert.equal(calls.length, 2);
+  });
+
+  it("preserves the DdfApiFetchError runtime value export", async () => {
+    const constructed = new DdfApiFetchError({
+      url: "https://ddf.test/odata/v1/Property",
+      cause: "boom",
+    });
+    assert.equal(constructed instanceof DdfApiFetchError, true);
+    assert.equal(constructed instanceof DdfApiTransportFetchFailure, true);
+
+    const fetchMock = (async (input: RequestInfo | URL) => {
+      if (String(input) === "https://identity.test/connect/token") {
+        return tokenResponse("token-123");
+      }
+      throw new Error("network down");
+    }) as typeof fetch;
+
+    await assert.rejects(
+      Effect.runPromise(
+        withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
+      ),
+      (error) =>
+        error instanceof DdfApiFetchError &&
+        error instanceof DdfApiTransportFetchFailure,
+    );
   });
 
   it("caches a valid token across API requests", async () => {
