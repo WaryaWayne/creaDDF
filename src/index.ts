@@ -12,3 +12,6 @@ export * from "./schema/destinationSchema";
 export * from "./schema/propertyListingsSchema";
 export * from "./schema/roomsSchema";
 export * from "./sync";
+export * from "./metrics";
+export * from "./telemetry";
+export * from "./watermark";

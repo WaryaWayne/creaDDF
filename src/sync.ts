@@ -1,4 +1,4 @@
-import { Cause, DateTime, Effect, Exit, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Metric, Option, Schema } from "effect";
 import type { Success as EffectSuccess } from "effect/Effect";
 import { DdfHttp } from "./client";
 import type { DdfHttpApi } from "./client";
@@ -35,6 +35,8 @@ import {
   PropertyReplicationIdentifierResponseSchema,
 } from "./schema/odata";
 import type { ODataListQuery, ReplicationQuery } from "./types";
+import { ddfSyncFailedCount, ddfSyncHydratedCount, ddfSyncPersistedCount } from "./metrics";
+import { DdfWatermarkStore } from "./watermark";
 
 type SelectQuery = { readonly select?: ReadonlyArray<string> };
 
@@ -438,6 +440,21 @@ const syncCounts = (
   failed: errors.length,
 });
 
+const saveWatermarkToService = Effect.fn("DdfSync.saveWatermarkToService")(function* (
+  resource: SyncResource,
+  watermark: string,
+) {
+  const store = yield* Effect.serviceOption(DdfWatermarkStore);
+  if (Option.isSome(store)) yield* store.value.save(resource, watermark);
+});
+
+const trackSyncMetrics = (counts: SyncCounts) =>
+  Effect.all([
+    Metric.update(ddfSyncHydratedCount, counts.hydrated),
+    Metric.update(ddfSyncPersistedCount, counts.persisted),
+    Metric.update(ddfSyncFailedCount, counts.failed),
+  ], { discard: true });
+
 export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
   function* (options?: PropertySyncOptions) {
     const first =
@@ -528,26 +545,32 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       successfulWatermarks,
       failedWatermarks,
     );
-    if (nextWatermark && options?.sink?.saveWatermark) {
-      const persistError = yield* runPersist(
-        "Property",
-        "watermark",
-        options.sink.saveWatermark("Property", nextWatermark),
-      );
-      if (persistError) errors.push(persistError);
+    if (nextWatermark) {
+      yield* saveWatermarkToService("Property", nextWatermark);
+      if (options?.sink?.saveWatermark) {
+        const persistError = yield* runPersist(
+          "Property",
+          "watermark",
+          options.sink.saveWatermark("Property", nextWatermark),
+        );
+        if (persistError) errors.push(persistError);
+      }
     }
+
+    const counts = syncCounts(
+      identifiers.length,
+      records.length,
+      persistedRecords,
+      errors,
+    );
+    yield* trackSyncMetrics(counts);
 
     return {
       resource: "Property",
       identifiers,
       records,
       errors,
-      counts: syncCounts(
-        identifiers.length,
-        records.length,
-        persistedRecords,
-        errors,
-      ),
+      counts,
       nextWatermark,
     };
   },
@@ -633,26 +656,32 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     successfulWatermarks,
     failedWatermarks,
   );
-  if (nextWatermark && options?.sink?.saveWatermark) {
-    const persistError = yield* runPersist(
-      "Member",
-      "watermark",
-      options.sink.saveWatermark("Member", nextWatermark),
-    );
-    if (persistError) errors.push(persistError);
+  if (nextWatermark) {
+    yield* saveWatermarkToService("Member", nextWatermark);
+    if (options?.sink?.saveWatermark) {
+      const persistError = yield* runPersist(
+        "Member",
+        "watermark",
+        options.sink.saveWatermark("Member", nextWatermark),
+      );
+      if (persistError) errors.push(persistError);
+    }
   }
+
+  const counts = syncCounts(
+    identifiers.length,
+    records.length,
+    persistedRecords,
+    errors,
+  );
+  yield* trackSyncMetrics(counts);
 
   return {
     resource: "Member",
     identifiers,
     records,
     errors,
-    counts: syncCounts(
-      identifiers.length,
-      records.length,
-      persistedRecords,
-      errors,
-    ),
+    counts,
     nextWatermark,
   };
 });
@@ -737,26 +766,32 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     successfulWatermarks,
     failedWatermarks,
   );
-  if (nextWatermark && options?.sink?.saveWatermark) {
-    const persistError = yield* runPersist(
-      "Office",
-      "watermark",
-      options.sink.saveWatermark("Office", nextWatermark),
-    );
-    if (persistError) errors.push(persistError);
+  if (nextWatermark) {
+    yield* saveWatermarkToService("Office", nextWatermark);
+    if (options?.sink?.saveWatermark) {
+      const persistError = yield* runPersist(
+        "Office",
+        "watermark",
+        options.sink.saveWatermark("Office", nextWatermark),
+      );
+      if (persistError) errors.push(persistError);
+    }
   }
+
+  const counts = syncCounts(
+    identifiers.length,
+    records.length,
+    persistedRecords,
+    errors,
+  );
+  yield* trackSyncMetrics(counts);
 
   return {
     resource: "Office",
     identifiers,
     records,
     errors,
-    counts: syncCounts(
-      identifiers.length,
-      records.length,
-      persistedRecords,
-      errors,
-    ),
+    counts,
     nextWatermark,
   };
 });
@@ -807,21 +842,27 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       successfulWatermarks,
       failedWatermarks,
     );
-    if (nextWatermark && options?.sink?.saveWatermark) {
-      const persistError = yield* runPersist(
-        "OpenHouse",
-        "watermark",
-        options.sink.saveWatermark("OpenHouse", nextWatermark),
-      );
-      if (persistError) errors.push(persistError);
+    if (nextWatermark) {
+      yield* saveWatermarkToService("OpenHouse", nextWatermark);
+      if (options?.sink?.saveWatermark) {
+        const persistError = yield* runPersist(
+          "OpenHouse",
+          "watermark",
+          options.sink.saveWatermark("OpenHouse", nextWatermark),
+        );
+        if (persistError) errors.push(persistError);
+      }
     }
+
+    const counts = syncCounts(0, records.length, persistedRecords, errors);
+    yield* trackSyncMetrics(counts);
 
     return {
       resource: "OpenHouse",
       identifiers: [],
       records,
       errors,
-      counts: syncCounts(0, records.length, persistedRecords, errors),
+      counts,
       nextWatermark,
     };
   },

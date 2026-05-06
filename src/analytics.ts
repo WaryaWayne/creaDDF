@@ -1,4 +1,5 @@
 import { Data, Effect } from "effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { DdfConfig } from "./client";
 
 export const DEFAULT_CREA_ANALYTICS_URL =
@@ -61,11 +62,18 @@ export const logAnalyticsEvent = Effect.fn("DdfAnalytics.logAnalyticsEvent")(
     const cfg = yield* DdfConfig;
     const url = buildAnalyticsLogEventUrl(input, cfg.analyticsUrl);
 
+    yield* Effect.logDebug("CREA analytics request", { url });
     cfg.logger?.debug?.({ type: "api_request", url });
-
-    yield* Effect.tryPromise({
-      try: () => cfg.fetch(url, { method: "GET" }),
-      catch: (cause) => new DdfAnalyticsFetchError({ url, cause }),
-    });
+    if (cfg.fetch) {
+      yield* Effect.tryPromise({
+        try: () => cfg.fetch!(url, { method: "GET" }),
+        catch: (cause) => new DdfAnalyticsFetchError({ url, cause }),
+      });
+    } else {
+      const client = yield* HttpClient.HttpClient;
+      yield* client.get(url).pipe(
+        Effect.mapError((cause) => new DdfAnalyticsFetchError({ url, cause })),
+      );
+    }
   },
 );

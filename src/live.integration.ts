@@ -14,8 +14,11 @@ import {
   listOpenHouses,
   listProperties,
   replicateMembers,
+  replicateMembersForDestination,
   replicateOffices,
+  replicateOfficesForDestination,
   replicateProperties,
+  replicatePropertiesForDestination,
 } from "./resources";
 
 const liveEnvNames = [
@@ -23,7 +26,6 @@ const liveEnvNames = [
   "CREA_DDF_CLIENT_SECRET",
   "CREA_DDF_BASE_URL",
   "CREA_DDF_AUTH_URL",
-  "CREA_DDF_PROPERTY_REPLICATION_URL",
   "CREA_ANALYTICS_URL",
   "CREA_DESTINATION_ID",
 ] as const;
@@ -125,18 +127,28 @@ maybeLive("live CREA/DDF integration", () => {
                 })
               : undefined;
 
-          const propertyReplication = yield* replicateProperties({
-            select: ["ListingKey"],
-            count: true,
-          });
-          const memberReplication = yield* replicateMembers({
-            select: ["MemberKey"],
-            count: true,
-          });
-          const officeReplication = yield* replicateOffices({
-            select: ["OfficeKey"],
-            count: true,
-          });
+          const replicationQuery = { count: true } as const;
+          const propertyReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicatePropertiesForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateProperties(replicationQuery);
+          const memberReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicateMembersForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateMembers(replicationQuery);
+          const officeReplication =
+            typeof firstDestinationId === "number"
+              ? yield* replicateOfficesForDestination(
+                  firstDestinationId,
+                  replicationQuery,
+                )
+              : yield* replicateOffices(replicationQuery);
 
           return {
             destinations,
@@ -172,6 +184,6 @@ if (!hasLiveCredentials) {
   const visible =
     visibleLiveEnvNames.length > 0 ? visibleLiveEnvNames.join(", ") : "none";
   process.stdout.write(
-    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional host-only URLs: CREA_DDF_BASE_URL, CREA_DDF_AUTH_URL, CREA_DDF_PROPERTY_REPLICATION_URL, CREA_ANALYTICS_URL, CREA_DESTINATION_ID. CREA_DDF_BASE_URL must be the API host only, not /odata/v1.\n`,
+    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional host-only URLs: CREA_DDF_BASE_URL, CREA_DDF_AUTH_URL, CREA_ANALYTICS_URL, CREA_DESTINATION_ID. CREA_DDF_BASE_URL must be the API host only, not /odata/v1.\n`,
   );
 }
