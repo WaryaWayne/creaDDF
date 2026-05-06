@@ -4,9 +4,28 @@ import { Config, Effect, Redacted } from "effect";
 import { makeDdfLayer } from "./client";
 import { listDestinations, listProperties } from "./resources";
 
-const hasLiveCredentials = Boolean(
-  process.env.CREA_DDF_CLIENT_ID && process.env.CREA_DDF_CLIENT_SECRET,
+const liveEnvNames = [
+  "CREA_DDF_CLIENT_ID",
+  "CREA_DDF_CLIENT_SECRET",
+  "CREA_DDF_BASE_URL",
+  "CREA_DDF_AUTH_URL",
+  "CREA_DDF_PROPERTY_REPLICATION_URL",
+  "CREA_ANALYTICS_URL",
+  "CREA_DESTINATION_ID",
+] as const;
+
+const requiredLiveEnvNames = [
+  "CREA_DDF_CLIENT_ID",
+  "CREA_DDF_CLIENT_SECRET",
+] as const;
+
+const visibleLiveEnvNames = liveEnvNames.filter(
+  (name) => process.env[name] !== undefined && process.env[name] !== "",
 );
+const missingRequiredLiveEnvNames = requiredLiveEnvNames.filter(
+  (name) => process.env[name] === undefined || process.env[name] === "",
+);
+const hasLiveCredentials = missingRequiredLiveEnvNames.length === 0;
 
 const LiveDdfConfig = Config.all({
   clientId: Config.redacted("CREA_DDF_CLIENT_ID"),
@@ -48,7 +67,9 @@ maybeLive("live CREA/DDF integration", () => {
 });
 
 if (!hasLiveCredentials) {
+  const visible =
+    visibleLiveEnvNames.length > 0 ? visibleLiveEnvNames.join(", ") : "none";
   process.stdout.write(
-    "Skipping live CREA/DDF tests: set CREA_DDF_CLIENT_ID and CREA_DDF_CLIENT_SECRET to enable. Optional URLs: CREA_DDF_BASE_URL and CREA_DDF_AUTH_URL.\n",
+    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional URLs: CREA_DDF_BASE_URL and CREA_DDF_AUTH_URL.\n`,
   );
 }
