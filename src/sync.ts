@@ -36,7 +36,6 @@ import {
 } from "./schema/odata";
 import type { ODataListQuery, ReplicationQuery } from "./types";
 
-
 type SelectQuery = { readonly select?: ReadonlyArray<string> };
 
 const hasSelect = (query?: SelectQuery) =>
@@ -132,7 +131,9 @@ export interface BaseSyncOptions {
 }
 
 export interface PropertySyncSink {
-  readonly upsertProperty?: (property: PropertyRecord) => Effect.Effect<void, unknown>;
+  readonly upsertProperty?: (
+    property: PropertyRecord,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertRoom?: (
     room: RoomRecord,
     property: PropertyRecord,
@@ -151,7 +152,9 @@ export interface PropertySyncSink {
 }
 
 export interface MemberSyncSink {
-  readonly upsertMember?: (member: MemberRecord) => Effect.Effect<void, unknown>;
+  readonly upsertMember?: (
+    member: MemberRecord,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertMedia?: (
     media: MediaRecord,
     owner: SyncOwner,
@@ -166,7 +169,9 @@ export interface MemberSyncSink {
 }
 
 export interface OfficeSyncSink {
-  readonly upsertOffice?: (office: OfficeRecord) => Effect.Effect<void, unknown>;
+  readonly upsertOffice?: (
+    office: OfficeRecord,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertMedia?: (
     media: MediaRecord,
     owner: SyncOwner,
@@ -249,7 +254,8 @@ const safeHighestWatermark = (
   successfulTimestamps: ReadonlyArray<unknown>,
   failedTimestamps: ReadonlyArray<unknown>,
 ) => {
-  if (failedTimestamps.length === 0) return highestWatermark(successfulTimestamps);
+  if (failedTimestamps.length === 0)
+    return highestWatermark(successfulTimestamps);
 
   let earliestFailedMillis = Number.POSITIVE_INFINITY;
   for (const timestamp of failedTimestamps) {
@@ -322,6 +328,36 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
   },
 );
 
+const collectPagedIdentifiersWithErrors = Effect.fn(
+  "DdfSync.collectPagedIdentifiersWithErrors",
+)(function* <Identifier>(
+  resource: SyncResource,
+  first: ODataListEnvelope<Identifier>,
+  schema: Schema.Decoder<ODataListEnvelope<Identifier>, never>,
+) {
+  const http = yield* DdfHttp;
+  const identifiers: Array<Identifier> = [...first.value];
+  const errors: Array<SyncRecordError> = [];
+  let next = first["@odata.nextLink"] ?? null;
+
+  while (next) {
+    const pageKey = `page:${next}`;
+    const pageExit = yield* Effect.exit(
+      http.requestJson(next, undefined, schema),
+    );
+    if (Exit.isFailure(pageExit)) {
+      errors.push(
+        makeRecordError(resource, pageKey, "hydrate", pageExit.cause),
+      );
+      break;
+    }
+    identifiers.push(...pageExit.value.value);
+    next = pageExit.value["@odata.nextLink"] ?? null;
+  }
+
+  return { identifiers, errors };
+});
+
 const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
   function* (query?: ODataListQuery) {
     const http = yield* DdfHttp;
@@ -330,12 +366,9 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
     const firstExit = yield* Effect.exit(listOpenHouses(query));
 
     if (Exit.isFailure(firstExit)) {
-      errors.push(makeRecordError(
-        "OpenHouse",
-        "page:first",
-        "hydrate",
-        firstExit.cause,
-      ));
+      errors.push(
+        makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
+      );
       return { records, errors };
     }
 
@@ -348,17 +381,17 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
         http.requestJson<typeof firstExit.value>(
           next,
           undefined,
-          openHousePageSchema(query) as Schema.Decoder<typeof firstExit.value, never>,
+          openHousePageSchema(query) as Schema.Decoder<
+            typeof firstExit.value,
+            never
+          >,
         ),
       );
 
       if (Exit.isFailure(pageExit)) {
-        errors.push(makeRecordError(
-          "OpenHouse",
-          pageKey,
-          "hydrate",
-          pageExit.cause,
-        ));
+        errors.push(
+          makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
+        );
         break;
       }
 
@@ -406,25 +439,28 @@ const syncCounts = (
 });
 
 export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
-  function* (
-    options?: PropertySyncOptions,
-  ) {
-    const first = options?.destinationId === undefined
-      ? yield* replicateProperties(incrementalQuery(options))
-      : yield* replicatePropertiesForDestination(
-          options.destinationId,
-          incrementalQuery(options),
-        );
-    const identifiers = yield* collectPagedIdentifiers(
+  function* (options?: PropertySyncOptions) {
+    const first =
+      options?.destinationId === undefined
+        ? yield* replicateProperties(incrementalQuery(options))
+        : yield* replicatePropertiesForDestination(
+            options.destinationId,
+            incrementalQuery(options),
+          );
+    const collected = yield* collectPagedIdentifiersWithErrors(
+      "Property",
       first,
       PropertyReplicationIdentifierResponseSchema,
     );
+    const identifiers = collected.identifiers;
     const hydrated = yield* Effect.forEach(
       identifiers,
       (identifier) =>
         Effect.gen(function* () {
-          const result = yield* hydrateOne("Property", identifier.ListingKey, (key) =>
-            getProperty(key),
+          const result = yield* hydrateOne(
+            "Property",
+            identifier.ListingKey,
+            (key) => getProperty(key),
           );
           return { identifier, result };
         }),
@@ -432,11 +468,13 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     );
 
     const records: Array<PropertyGraph> = [];
-    const errors: Array<SyncRecordError> = [];
+    const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
-    const failedWatermarks: Array<unknown> = [];
+    const failedWatermarks: Array<unknown> =
+      collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
-    const hasRecordSink = options?.sink?.upsertProperty !== undefined ||
+    const hasRecordSink =
+      options?.sink?.upsertProperty !== undefined ||
       options?.sink?.upsertRoom !== undefined ||
       options?.sink?.upsertMedia !== undefined;
 
@@ -459,7 +497,8 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         if (options?.sink?.upsertRoom) {
           yield* Effect.forEach(
             graph.rooms,
-            (room) => options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
+            (room) =>
+              options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
             { discard: true },
           );
         }
@@ -503,7 +542,12 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       identifiers,
       records,
       errors,
-      counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
+      counts: syncCounts(
+        identifiers.length,
+        records.length,
+        persistedRecords,
+        errors,
+      ),
       nextWatermark,
     };
   },
@@ -512,31 +556,40 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
 export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   options?: MemberSyncOptions,
 ) {
-  const first = options?.destinationId === undefined
-    ? yield* replicateMembers(incrementalQuery(options))
-    : yield* replicateMembersForDestination(
-        options.destinationId,
-        incrementalQuery(options),
-      );
-  const identifiers = yield* collectPagedIdentifiers(
+  const first =
+    options?.destinationId === undefined
+      ? yield* replicateMembers(incrementalQuery(options))
+      : yield* replicateMembersForDestination(
+          options.destinationId,
+          incrementalQuery(options),
+        );
+  const collected = yield* collectPagedIdentifiersWithErrors(
+    "Member",
     first,
     MemberReplicationIdentifierResponseSchema,
   );
+  const identifiers = collected.identifiers;
   const hydrated = yield* Effect.forEach(
     identifiers,
     (identifier) =>
       Effect.gen(function* () {
-        const result = yield* hydrateOne("Member", identifier.MemberKey, getMember);
+        const result = yield* hydrateOne(
+          "Member",
+          identifier.MemberKey,
+          getMember,
+        );
         return { identifier, result };
       }),
     { concurrency: boundedConcurrency(options?.concurrency) },
   );
   const records: Array<MemberRecord> = [];
-  const errors: Array<SyncRecordError> = [];
+  const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
-  const failedWatermarks: Array<unknown> = [];
+  const failedWatermarks: Array<unknown> =
+    collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink = options?.sink?.upsertMember !== undefined ||
+  const hasRecordSink =
+    options?.sink?.upsertMember !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
@@ -549,7 +602,8 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     records.push(result.record);
     const memberKey = String(result.record.MemberKey ?? "");
     const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertMember) yield* options.sink.upsertMember(result.record);
+      if (options?.sink?.upsertMember)
+        yield* options.sink.upsertMember(result.record);
       if (options?.sink?.upsertMedia) {
         yield* Effect.forEach(
           (Array.isArray((result.record as Record<string, unknown>).Media)
@@ -593,7 +647,12 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     identifiers,
     records,
     errors,
-    counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
+    counts: syncCounts(
+      identifiers.length,
+      records.length,
+      persistedRecords,
+      errors,
+    ),
     nextWatermark,
   };
 });
@@ -601,31 +660,40 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
 export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   options?: OfficeSyncOptions,
 ) {
-  const first = options?.destinationId === undefined
-    ? yield* replicateOffices(incrementalQuery(options))
-    : yield* replicateOfficesForDestination(
-        options.destinationId,
-        incrementalQuery(options),
-      );
-  const identifiers = yield* collectPagedIdentifiers(
+  const first =
+    options?.destinationId === undefined
+      ? yield* replicateOffices(incrementalQuery(options))
+      : yield* replicateOfficesForDestination(
+          options.destinationId,
+          incrementalQuery(options),
+        );
+  const collected = yield* collectPagedIdentifiersWithErrors(
+    "Office",
     first,
     OfficeReplicationIdentifierResponseSchema,
   );
+  const identifiers = collected.identifiers;
   const hydrated = yield* Effect.forEach(
     identifiers,
     (identifier) =>
       Effect.gen(function* () {
-        const result = yield* hydrateOne("Office", identifier.OfficeKey, getOffice);
+        const result = yield* hydrateOne(
+          "Office",
+          identifier.OfficeKey,
+          getOffice,
+        );
         return { identifier, result };
       }),
     { concurrency: boundedConcurrency(options?.concurrency) },
   );
   const records: Array<OfficeRecord> = [];
-  const errors: Array<SyncRecordError> = [];
+  const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
-  const failedWatermarks: Array<unknown> = [];
+  const failedWatermarks: Array<unknown> =
+    collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink = options?.sink?.upsertOffice !== undefined ||
+  const hasRecordSink =
+    options?.sink?.upsertOffice !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
@@ -639,7 +707,8 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     const office = result.record as Record<string, unknown>;
     const officeKey = String(office.OfficeKey ?? "");
     const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertOffice) yield* options.sink.upsertOffice(result.record);
+      if (options?.sink?.upsertOffice)
+        yield* options.sink.upsertOffice(result.record);
       if (options?.sink?.upsertMedia) {
         yield* Effect.forEach(
           (Array.isArray(office.Media) ? (office.Media as MediaType) : []).map(
@@ -682,22 +751,27 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     identifiers,
     records,
     errors,
-    counts: syncCounts(identifiers.length, records.length, persistedRecords, errors),
+    counts: syncCounts(
+      identifiers.length,
+      records.length,
+      persistedRecords,
+      errors,
+    ),
     nextWatermark,
   };
 });
 
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
-  function* (
-    options?: OpenHouseSyncOptions,
-  ) {
+  function* (options?: OpenHouseSyncOptions) {
     const collected = yield* collectOpenHousePages(options?.query);
     const records = collected.records;
     const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
     const failedWatermarks: Array<unknown> = collected.errors.some(
       (error) => error.stage === "hydrate" && error.key.startsWith("page:"),
-    ) ? [null] : [];
+    )
+      ? [null]
+      : [];
     const watermarkField = options?.watermarkField ?? "OpenHouseDate";
     let persistedRecords = 0;
 
@@ -706,7 +780,9 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       (openHouse) =>
         Effect.gen(function* () {
           const key = String(openHouse.OpenHouseKey ?? "");
-          const timestamp = (openHouse as Record<string, unknown>)[watermarkField];
+          const timestamp = (openHouse as Record<string, unknown>)[
+            watermarkField
+          ];
           if (!options?.sink?.upsertOpenHouse) {
             successfulWatermarks.push(timestamp);
             return;
@@ -754,12 +830,13 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
 export const getPropertyMasterList = Effect.fn(
   "DdfPropertySync.getPropertyMasterList",
 )(function* (options?: Pick<PropertySyncOptions, "destinationId" | "query">) {
-  const first = options?.destinationId === undefined
-    ? yield* replicateProperties(options?.query)
-    : yield* replicatePropertiesForDestination(
-        options.destinationId,
-        options.query,
-      );
+  const first =
+    options?.destinationId === undefined
+      ? yield* replicateProperties(options?.query)
+      : yield* replicatePropertiesForDestination(
+          options.destinationId,
+          options.query,
+        );
   return yield* collectPagedIdentifiers(
     first,
     PropertyReplicationIdentifierResponseSchema,
@@ -806,12 +883,13 @@ export const pruneMissingProperties = Effect.fn(
 export const getMemberMasterList = Effect.fn(
   "DdfMemberSync.getMemberMasterList",
 )(function* (options?: Pick<MemberSyncOptions, "destinationId" | "query">) {
-  const first = options?.destinationId === undefined
-    ? yield* replicateMembers(options?.query)
-    : yield* replicateMembersForDestination(
-        options.destinationId,
-        options.query,
-      );
+  const first =
+    options?.destinationId === undefined
+      ? yield* replicateMembers(options?.query)
+      : yield* replicateMembersForDestination(
+          options.destinationId,
+          options.query,
+        );
   return yield* collectPagedIdentifiers(
     first,
     MemberReplicationIdentifierResponseSchema,
@@ -821,12 +899,13 @@ export const getMemberMasterList = Effect.fn(
 export const getOfficeMasterList = Effect.fn(
   "DdfOfficeSync.getOfficeMasterList",
 )(function* (options?: Pick<OfficeSyncOptions, "destinationId" | "query">) {
-  const first = options?.destinationId === undefined
-    ? yield* replicateOffices(options?.query)
-    : yield* replicateOfficesForDestination(
-        options.destinationId,
-        options.query,
-      );
+  const first =
+    options?.destinationId === undefined
+      ? yield* replicateOffices(options?.query)
+      : yield* replicateOfficesForDestination(
+          options.destinationId,
+          options.query,
+        );
   return yield* collectPagedIdentifiers(
     first,
     OfficeReplicationIdentifierResponseSchema,

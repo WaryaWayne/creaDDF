@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "pnpm run typecheck && node --import tsx --test src/*.test.ts",
-    "prepare": "effect-language-service patch"
+    "prepare": "effect-language-service patch",
+    "test:live": "node --import tsx --test src/live.integration.ts"
   },
   "keywords": [],
   "author": "",

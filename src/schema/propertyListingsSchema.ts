@@ -1,7 +1,7 @@
-import { DateTime, Schema } from "effect"
-import { RoomsSchema } from "./roomsSchema"
-import { MediaSchema } from "./mediaSchema"
-import { ODataListEnvelopeSchema } from "./odata"
+import { DateTime, Schema } from "effect";
+import { RoomsSchema } from "./roomsSchema";
+import { MediaSchema } from "./mediaSchema";
+import { ODataListEnvelopeSchema } from "./odata";
 
 export const PropertyListingSchema = Schema.Struct({
   ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
@@ -1189,6 +1189,46 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "Inclusions",
     examples: ["TV", "Audio System", "Pool Table"],
   }),
+  ListAgentNationalAssociationId: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for ListAgentNationalAssociationId.",
+    description:
+      "A system unique identifier. This is the primary MemberKey that the property belongs to.",
+    title: "List Agent National Association Id",
+    identifier: "ListAgentNationalAssociationId",
+  }),
+  CoListAgentNationalAssociationId: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListAgentNationalAssociationId.",
+    description:
+      "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
+    title: "Co List Agent National Association Id",
+    identifier: "CoListAgentNationalAssociationId",
+  }),
+  CoListAgentNationalAssociationId2: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListAgentNationalAssociationId2.",
+    description:
+      "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
+    title: "Co List Agent National Association Id 2",
+    identifier: "CoListAgentNationalAssociationId2",
+  }),
+  CoListAgentNationalAssociationId3: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListAgentNationalAssociationId3.",
+    description:
+      "A system unique identifier. This is the secondary MemberKey that the property belongs to.",
+    title: "Co List Agent National Association Id 3",
+    identifier: "CoListAgentNationalAssociationId3",
+  }),
   ListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for ListOfficeKey.",
     description:
@@ -1220,6 +1260,46 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Co List Office Key 3",
     identifier: "CoListOfficeKey3",
     examples: ["279633", "279341", "279545"],
+  }),
+  ListOfficeNationalAssociationId: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for ListOfficeNationalAssociationId.",
+    description:
+      "A system unique identifier. This is the primary OfficeKey that the property belongs to.",
+    title: "List Office National Association Id",
+    identifier: "ListOfficeNationalAssociationId",
+  }),
+  CoListOfficeNationalAssociationId: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListOfficeNationalAssociationId.",
+    description:
+      "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
+    title: "Co List Office National Association Id",
+    identifier: "CoListOfficeNationalAssociationId",
+  }),
+  CoListOfficeNationalAssociationId2: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListOfficeNationalAssociationId2.",
+    description:
+      "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
+    title: "Co List Office National Association Id 2",
+    identifier: "CoListOfficeNationalAssociationId2",
+  }),
+  CoListOfficeNationalAssociationId3: Schema.Union([
+    Schema.String,
+    Schema.Null,
+  ]).annotate({
+    message: "Value is invalid for CoListOfficeNationalAssociationId3.",
+    description:
+      "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
+    title: "Co List Office National Association Id 3",
+    identifier: "CoListOfficeNationalAssociationId3",
   }),
   CoListAgentKey: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for CoListAgentKey.",
@@ -2054,17 +2134,16 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "Longitude",
     examples: [-75.2853851],
   }),
-  MapCoordinateVerifiedYN: Schema.Union([
-    Schema.Boolean,
-    Schema.Null,
-  ]).annotate({
-    message: "Value is invalid for MapCoordinateVerifiedYN.",
-    description:
-      "This flag is deprecated and should not be used by clients. Instead, use the GeoCodeManualYN flag to determine whether geocoordinates were manually provided by Boards or Members.",
-    title: "MapCoordinate Verified Yes/No",
-    identifier: "MapCoordinateVerifiedYN",
-    examples: [false, true],
-  }),
+  MapCoordinateVerifiedYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate(
+    {
+      message: "Value is invalid for MapCoordinateVerifiedYN.",
+      description:
+        "This flag is deprecated and should not be used by clients. Instead, use the GeoCodeManualYN flag to determine whether geocoordinates were manually provided by Boards or Members.",
+      title: "MapCoordinate Verified Yes/No",
+      identifier: "MapCoordinateVerifiedYN",
+      examples: [false, true],
+    },
+  ),
   GeocodeManualYN: Schema.Union([Schema.Boolean, Schema.Null]).annotate({
     message: "Value is invalid for GeocodeManualYN.",
     description:
@@ -3289,32 +3368,34 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "Electric",
     examples: [["100 Amp Service", "347/600 V", "Generator"]],
   }),
-  Rooms: RoomsSchema.annotate({
+  Rooms: Schema.NullOr(RoomsSchema).annotate({
     identifier: "Rooms",
     title: "Property Rooms",
     description:
       "A collection of types of rooms and details/features about the given room.",
     message: "Expected an array of Room objects.",
   }),
-  Media: MediaSchema.annotate({
+  Media: Schema.NullOr(MediaSchema).annotate({
     identifier: "Media",
     title: "Media Collection",
     description:
       "A collection of media resources (photos, videos, documents, etc.) associated with a Property, Member, or Office.",
     message: "Expected an array of Media objects.",
   }),
-})
+});
 
 export const PropertyListingValidationSchema: ReturnType<
   typeof Schema.toStandardSchemaV1<typeof PropertyListingSchema>
-> = Schema.toStandardSchemaV1(PropertyListingSchema)
+> = Schema.toStandardSchemaV1(PropertyListingSchema);
 
-export const PropertyListing = PropertyListingSchema.Type
+export const PropertyListing = PropertyListingSchema.Type;
 
-export const MultiplePropertyListingResponseSchema = ODataListEnvelopeSchema(PropertyListingSchema)
+export const MultiplePropertyListingResponseSchema = ODataListEnvelopeSchema(
+  PropertyListingSchema,
+);
 
 export const SinglePropertyListingResponseSchema = Schema.Struct({
   "@odata.context": Schema.Union([Schema.String, Schema.Null]),
-  ...PropertyListingSchema.fields
+  ...PropertyListingSchema.fields,
   // value: Schema.Array(PropertyListingSchema),
-})
+});

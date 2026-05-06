@@ -2,6 +2,10 @@ import { Data, Effect, Schema } from "effect";
 import { DdfHttp, encodeODataQuery } from "./client";
 import type { DdfResponseSchema } from "./client";
 import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema";
+import {
+  DestinationResponseSchema,
+  DestinationSchema,
+} from "./schema/destinationSchema";
 import { OfficeResponseSchema, OfficeSchema } from "./schema/officeSchema";
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
 import {
@@ -12,7 +16,6 @@ import {
 import {
   MemberReplicationIdentifierResponseSchema,
   ODataListEnvelopeSchema,
-  ODataUnknownListEnvelopeSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
 } from "./schema/odata";
@@ -63,16 +66,42 @@ const schemaForSelect = <Full>(
 ) =>
   (hasSelect(query) ? selectedSchema : fullSchema) as DdfResponseSchema<Full>;
 
+const withDefaultOrder = <Query extends ODataListQuery | ReplicationQuery>(
+  query: Query | undefined,
+  orderby: string,
+): Query => ({ ...query, orderby: query?.orderby ?? orderby }) as Query;
+
+const listOrder = {
+  Property: "ModificationTimestamp desc,ListingKey asc",
+  Member: "ModificationTimestamp desc,MemberKey asc",
+  Office: "ModificationTimestamp desc,OfficeKey asc",
+  OpenHouse: "OpenHouseDate desc,OpenHouseKey asc",
+  Destination: "DestinationId asc",
+} as const;
+
+const syncOrder = {
+  Property: "ModificationTimestamp asc,ListingKey asc",
+  Member: "ModificationTimestamp asc,MemberKey asc",
+  Office: "ModificationTimestamp asc,OfficeKey asc",
+} as const;
+
 const LeadInputSchema = Schema.Struct({
-  Culture: Schema.String,
+  Culture: Schema.Literals(["en-CA", "fr-CA"]),
   MemberKey: Schema.String,
   ListingKey: Schema.String,
   SenderName: Schema.String,
   SenderEmailAddress: Schema.String,
   SenderPhoneNumber: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  PreferredMethodContact: Schema.String,
+  PreferredMethodContact: Schema.Literals(["email", "phone", "text"]),
   SenderPhoneExtension: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  Message: Schema.String,
+  Message: Schema.String.check(Schema.isMaxLength(500)),
+});
+
+export const LeadResponseSchema = Schema.Struct({
+  details: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  message: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  code: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  success: Schema.Boolean,
 });
 
 export class DdfLeadInputEncodeError extends Data.TaggedError(
@@ -104,10 +133,15 @@ const SelectedMemberSchema = selectedEntitySchema(MemberSchema);
 const SelectedMemberResponseSchema =
   ODataListEnvelopeSchema(SelectedMemberSchema);
 const SelectedOfficeSchema = selectedEntitySchema(OfficeSchema);
-const SelectedOfficeResponseSchema = ODataListEnvelopeSchema(SelectedOfficeSchema);
+const SelectedOfficeResponseSchema =
+  ODataListEnvelopeSchema(SelectedOfficeSchema);
 const SelectedOpenHouseSchema = selectedEntitySchema(OpenHouseSchema);
 const SelectedOpenHouseResponseSchema = ODataListEnvelopeSchema(
   SelectedOpenHouseSchema,
+);
+const SelectedDestinationSchema = selectedEntitySchema(DestinationSchema);
+const SelectedDestinationResponseSchema = ODataListEnvelopeSchema(
+  SelectedDestinationSchema,
 );
 
 export const listProperties = Effect.fn("DdfProperty.listProperties")(
@@ -115,7 +149,7 @@ export const listProperties = Effect.fn("DdfProperty.listProperties")(
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/Property",
-      query,
+      withDefaultOrder(query, listOrder.Property),
       schemaForSelect(
         query,
         SelectedPropertyListingResponseSchema,
@@ -144,7 +178,7 @@ export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(
   function* (query?: ReplicationQuery) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
-      `${replicationPath("Property", "PropertyReplication")}${encodeODataQuery(query)}`,
+      `${replicationPath("Property", "PropertyReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Property))}`,
       undefined,
       PropertyReplicationIdentifierResponseSchema,
     );
@@ -155,7 +189,7 @@ export const replicatePropertiesForDestination = Effect.fn(
 )(function* (destinationId: number, query?: ReplicationQuery) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
-    `${replicationPath("Property", "PropertyReplication", destinationId)}${encodeODataQuery(query)}`,
+    `${replicationPath("Property", "PropertyReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Property))}`,
     undefined,
     PropertyReplicationIdentifierResponseSchema,
   );
@@ -166,7 +200,7 @@ export const listMembers = Effect.fn("DdfMember.listMembers")(function* (
   const http = yield* DdfHttp;
   return yield* http.listOData(
     "/odata/v1/Member",
-    query,
+    withDefaultOrder(query, listOrder.Member),
     schemaForSelect(query, SelectedMemberResponseSchema, MemberResponseSchema),
   );
 });
@@ -186,7 +220,7 @@ export const replicateMembers = Effect.fn("DdfMember.replicateMembers")(
   function* (query?: ReplicationQuery) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
-      `${replicationPath("Member", "MemberReplication")}${encodeODataQuery(query)}`,
+      `${replicationPath("Member", "MemberReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Member))}`,
       undefined,
       MemberReplicationIdentifierResponseSchema,
     );
@@ -197,7 +231,7 @@ export const replicateMembersForDestination = Effect.fn(
 )(function* (destinationId: number, query?: ReplicationQuery) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
-    `${replicationPath("Member", "MemberReplication", destinationId)}${encodeODataQuery(query)}`,
+    `${replicationPath("Member", "MemberReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Member))}`,
     undefined,
     MemberReplicationIdentifierResponseSchema,
   );
@@ -208,7 +242,7 @@ export const listOffices = Effect.fn("DdfOffice.listOffices")(function* (
   const http = yield* DdfHttp;
   return yield* http.listOData(
     "/odata/v1/Office",
-    query,
+    withDefaultOrder(query, listOrder.Office),
     schemaForSelect(query, SelectedOfficeResponseSchema, OfficeResponseSchema),
   );
 });
@@ -228,7 +262,7 @@ export const replicateOffices = Effect.fn("DdfOffice.replicateOffices")(
   function* (query?: ReplicationQuery) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
-      `${replicationPath("Office", "OfficeReplication")}${encodeODataQuery(query)}`,
+      `${replicationPath("Office", "OfficeReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Office))}`,
       undefined,
       OfficeReplicationIdentifierResponseSchema,
     );
@@ -239,7 +273,7 @@ export const replicateOfficesForDestination = Effect.fn(
 )(function* (destinationId: number, query?: ReplicationQuery) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
-    `${replicationPath("Office", "OfficeReplication", destinationId)}${encodeODataQuery(query)}`,
+    `${replicationPath("Office", "OfficeReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Office))}`,
     undefined,
     OfficeReplicationIdentifierResponseSchema,
   );
@@ -249,7 +283,7 @@ export const listOpenHouses = Effect.fn("DdfOpenHouse.listOpenHouses")(
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/OpenHouse",
-      query,
+      withDefaultOrder(query, listOrder.OpenHouse),
       schemaForSelect(
         query,
         SelectedOpenHouseResponseSchema,
@@ -275,15 +309,24 @@ export const listDestinations = Effect.fn("DdfDestination.listDestinations")(
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/Destination",
-      query,
-      ODataUnknownListEnvelopeSchema,
+      withDefaultOrder(query, listOrder.Destination),
+      schemaForSelect(
+        query,
+        SelectedDestinationResponseSchema,
+        DestinationResponseSchema,
+      ),
     );
   },
 );
 export const getDestination = Effect.fn("DdfDestination.getDestination")(
-  function* (destinationId: number | string, query?: ODataGetQuery) {
+  function* (destinationId: number, query?: ODataGetQuery) {
     const http = yield* DdfHttp;
-    return yield* http.getOData("/odata/v1/Destination", destinationId, query);
+    return yield* http.getOData(
+      "/odata/v1/Destination",
+      destinationId,
+      query,
+      schemaForSelect(query, SelectedDestinationSchema, DestinationSchema),
+    );
   },
 );
 export const createLead = Effect.fn("DdfLead.createLead")(function* (
@@ -296,9 +339,13 @@ export const createLead = Effect.fn("DdfLead.createLead")(function* (
     : "/v1/Lead/CreateLead";
   const body = yield* encodeLeadInputJson(input);
 
-  return yield* http.requestJson(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-  });
+  return yield* http.requestJson(
+    path,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    },
+    LeadResponseSchema,
+  );
 });

@@ -7,6 +7,11 @@ export interface DdfClientConfig {
   clientSecret: string;
   baseUrl?: string;
   identityUrl?: string;
+  /**
+   * Explicit fetch boundary for now. TODO: migrate this to Effect Platform's
+   * Fetch/Http client service layer when that dependency is adopted, without
+   * falling back to global fetch inside SDK workflows.
+   */
   fetch: typeof fetch;
 }
 
@@ -59,9 +64,68 @@ export const DdfConfig = Context.Service<DdfClientConfig>("DdfConfig");
 export const DdfAuth = Context.Service<DdfAuthApi>("DdfAuth");
 export const DdfHttp = Context.Service<DdfHttpApi>("DdfHttp");
 
+const ODATA_TOP_MAX = 100;
+
+export class DdfInvalidODataQueryError extends Data.TaggedError(
+  "DdfInvalidODataQueryError",
+)<{
+  readonly option: string;
+  readonly messageText: string;
+}> {
+  override get message() {
+    return this.messageText;
+  }
+}
+
+const validateODataQuery = (
+  query?: ODataListQuery | ODataGetQuery | ReplicationQuery,
+) => {
+  if (query && "top" in query && query.top !== undefined) {
+    if (
+      !Number.isInteger(query.top) ||
+      query.top < 0 ||
+      query.top > ODATA_TOP_MAX
+    ) {
+      throw new DdfInvalidODataQueryError({
+        option: "$top",
+        messageText: `DDF OData $top must be an integer between 0 and ${ODATA_TOP_MAX}`,
+      });
+    }
+  }
+};
+
+const odataStringLiteral = (value: string) =>
+  `'${value.replaceAll("'", "''")}'`;
+const odataDateLiteral = (value: string | Date) =>
+  value instanceof Date ? value.toISOString() : value;
+const odataValueLiteral = (value: string | number | boolean | Date | null) => {
+  if (value === null) return "null";
+  if (typeof value === "string") return odataStringLiteral(value);
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+};
+
+export const filters = {
+  eq: (field: string, value: string | number | boolean | Date | null) =>
+    `${field} eq ${odataValueLiteral(value)}`,
+  modifiedAfter: (field: string, dateOrString: Date | string) =>
+    `${field} gt ${odataDateLiteral(dateOrString)}`,
+  and: (...clauses: ReadonlyArray<string>) =>
+    clauses
+      .filter(Boolean)
+      .map((clause) => `(${clause})`)
+      .join(" and "),
+  or: (...clauses: ReadonlyArray<string>) =>
+    clauses
+      .filter(Boolean)
+      .map((clause) => `(${clause})`)
+      .join(" or "),
+} as const;
+
 export const encodeODataQuery = (
   query?: ODataListQuery | ODataGetQuery | ReplicationQuery,
 ): string => {
+  validateODataQuery(query);
   if (!query) return "";
 
   const p = new URLSearchParams();
@@ -112,9 +176,7 @@ const headersWithJsonAccept = (headers?: HeadersInit) => {
 const formatHttpStatus = (status: number, statusText: string) =>
   statusText ? `${status} ${statusText}` : String(status);
 
-export class DdfTokenFetchError extends Data.TaggedError(
-  "DdfTokenFetchError",
-)<{
+export class DdfTokenFetchError extends Data.TaggedError("DdfTokenFetchError")<{
   readonly url: string;
   readonly cause: unknown;
 }> {
@@ -157,7 +219,9 @@ export class DdfTokenResponseValidationError extends Data.TaggedError(
   }
 }
 
-export class DdfApiFetchError extends Data.TaggedError("DdfApiFetchError")<{
+export class DdfApiTransportFetchFailure extends Data.TaggedError(
+  "DdfApiTransportFetchFailure",
+)<{
   readonly url: string;
   readonly cause: unknown;
 }> {
@@ -170,12 +234,115 @@ export class DdfApiHttpError extends Data.TaggedError("DdfApiHttpError")<{
   readonly url: string;
   readonly status: number;
   readonly statusText: string;
+  readonly bodyText?: string;
 }> {
   override get message() {
     return `DDF API request failed with HTTP ${formatHttpStatus(
       this.status,
       this.statusText,
     )} from ${this.url}`;
+  }
+}
+
+export class DdfApiBadRequestQueryError extends Data.TaggedError(
+  "DdfApiBadRequestQueryError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API rejected the request/query with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+  }
+}
+
+export class DdfApiUnauthorizedAfterRefreshError extends Data.TaggedError(
+  "DdfApiUnauthorizedAfterRefreshError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API returned unauthorized after refreshing credentials from ${this.url}`;
+  }
+}
+
+export class DdfApiForbiddenError extends Data.TaggedError(
+  "DdfApiForbiddenError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API forbids this request with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+  }
+}
+
+export class DdfApiNotFoundError extends Data.TaggedError(
+  "DdfApiNotFoundError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API resource was not found at ${this.url}`;
+  }
+}
+
+export class DdfApiTimeoutError extends Data.TaggedError("DdfApiTimeoutError")<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API request timed out with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+  }
+}
+
+export class DdfApiUnsupportedMediaTypeError extends Data.TaggedError(
+  "DdfApiUnsupportedMediaTypeError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API rejected the media type with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+  }
+}
+
+export class DdfApiRetryableServiceUnavailableError extends Data.TaggedError(
+  "DdfApiRetryableServiceUnavailableError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API service is unavailable after retries from ${this.url}`;
+  }
+}
+
+export class DdfApiInternalServerError extends Data.TaggedError(
+  "DdfApiInternalServerError",
+)<{
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}> {
+  override get message() {
+    return `DDF API returned an internal server error from ${this.url}`;
   }
 }
 
@@ -201,6 +368,51 @@ export class DdfApiResponseSchemaDecodeError extends Data.TaggedError(
   }
 }
 
+export type DdfApiMappedHttpError =
+  | DdfApiHttpError
+  | DdfApiBadRequestQueryError
+  | DdfApiUnauthorizedAfterRefreshError
+  | DdfApiForbiddenError
+  | DdfApiNotFoundError
+  | DdfApiTimeoutError
+  | DdfApiUnsupportedMediaTypeError
+  | DdfApiRetryableServiceUnavailableError
+  | DdfApiInternalServerError;
+
+const statusError = (args: {
+  readonly url: string;
+  readonly status: number;
+  readonly statusText: string;
+  readonly bodyText?: string;
+}): DdfApiMappedHttpError => {
+  switch (args.status) {
+    case 400:
+      return new DdfApiBadRequestQueryError(args);
+    case 401:
+      return new DdfApiUnauthorizedAfterRefreshError(args);
+    case 403:
+      return new DdfApiForbiddenError(args);
+    case 404:
+      return new DdfApiNotFoundError(args);
+    case 408:
+      return new DdfApiTimeoutError(args);
+    case 415:
+      return new DdfApiUnsupportedMediaTypeError(args);
+    case 500:
+      return new DdfApiInternalServerError(args);
+    case 503:
+      return new DdfApiRetryableServiceUnavailableError(args);
+    default:
+      return new DdfApiHttpError(args);
+  }
+};
+
+const responseText = (res: Response) =>
+  Effect.tryPromise({
+    try: () => res.clone().text(),
+    catch: () => undefined,
+  }).pipe(Effect.orElseSucceed(() => undefined as string | undefined));
+
 export type DdfAuthError =
   | DdfTokenFetchError
   | DdfTokenHttpError
@@ -209,10 +421,11 @@ export type DdfAuthError =
 
 export type DdfHttpError =
   | DdfAuthError
-  | DdfApiFetchError
-  | DdfApiHttpError
+  | DdfApiTransportFetchFailure
+  | DdfApiMappedHttpError
   | DdfApiJsonParseError
-  | DdfApiResponseSchemaDecodeError;
+  | DdfApiResponseSchemaDecodeError
+  | DdfInvalidODataQueryError;
 
 const decodeJson = <T>(
   json: unknown,
@@ -222,8 +435,8 @@ const decodeJson = <T>(
   if (!schema) return Effect.succeed(json as T);
 
   return Schema.decodeUnknownEffect(schema)(json).pipe(
-    Effect.mapError((cause) =>
-      new DdfApiResponseSchemaDecodeError({ url, cause }),
+    Effect.mapError(
+      (cause) => new DdfApiResponseSchemaDecodeError({ url, cause }),
     ),
   );
 };
@@ -264,7 +477,8 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
                   scope: "DDFApi_Read",
                 }),
               }),
-            catch: (cause) => new DdfTokenFetchError({ url: identityUrl, cause }),
+            catch: (cause) =>
+              new DdfTokenFetchError({ url: identityUrl, cause }),
           });
 
           if (!res.ok) {
@@ -326,7 +540,7 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
 
             const res: Response = yield* Effect.tryPromise({
               try: () => cfg.fetch(url, { ...init, headers }),
-              catch: (cause) => new DdfApiFetchError({ url, cause }),
+              catch: (cause) => new DdfApiTransportFetchFailure({ url, cause }),
             });
 
             if (res.status === 401 && !refreshed) {
@@ -334,14 +548,18 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
             }
 
             if (isRetryableStatus(res.status) && remainingRetries > 0) {
+              const attempt = 3 - remainingRetries;
+              yield* Effect.sleep(100 * 2 ** attempt);
               return yield* request(remainingRetries - 1, refreshed, false);
             }
 
             if (!res.ok) {
-              return yield* new DdfApiHttpError({
+              const bodyText = yield* responseText(res);
+              return yield* statusError({
                 url,
                 status: res.status,
                 statusText: res.statusText,
+                bodyText,
               });
             }
 
@@ -362,11 +580,17 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
           query?: ODataListQuery,
           schema?: DdfResponseSchema<T>,
         ) {
-          return yield* requestJson(
-            `${path}${encodeODataQuery(query)}`,
-            undefined,
-            schema,
-          );
+          const encoded = yield* Effect.try({
+            try: () => encodeODataQuery(query),
+            catch: (cause) =>
+              cause instanceof DdfInvalidODataQueryError
+                ? cause
+                : new DdfInvalidODataQueryError({
+                    option: "query",
+                    messageText: String(cause),
+                  }),
+          });
+          return yield* requestJson(`${path}${encoded}`, undefined, schema);
         }),
         getOData: Effect.fn("DdfHttp.getOData")(function* <T = unknown>(
           path: string,
@@ -374,8 +598,18 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
           query?: ODataGetQuery,
           schema?: DdfResponseSchema<T>,
         ) {
+          const encoded = yield* Effect.try({
+            try: () => encodeODataQuery(query),
+            catch: (cause) =>
+              cause instanceof DdfInvalidODataQueryError
+                ? cause
+                : new DdfInvalidODataQueryError({
+                    option: "query",
+                    messageText: String(cause),
+                  }),
+          });
           return yield* requestJson(
-            `${path}(${keyLiteral(key)})${encodeODataQuery(query)}`,
+            `${path}(${keyLiteral(key)})${encoded}`,
             undefined,
             schema,
           );
@@ -386,11 +620,17 @@ export const makeDdfLayer = (config: DdfClientConfig) => {
             query?: ReplicationQuery,
             schema?: DdfResponseSchema<T>,
           ) {
-            return yield* requestJson(
-              `${path}${encodeODataQuery(query)}`,
-              undefined,
-              schema,
-            );
+            const encoded = yield* Effect.try({
+              try: () => encodeODataQuery(query),
+              catch: (cause) =>
+                cause instanceof DdfInvalidODataQueryError
+                  ? cause
+                  : new DdfInvalidODataQueryError({
+                      option: "query",
+                      messageText: String(cause),
+                    }),
+            });
+            return yield* requestJson(`${path}${encoded}`, undefined, schema);
           },
         ),
         paginateOData: Effect.fn("DdfOData.paginate")(function* (
