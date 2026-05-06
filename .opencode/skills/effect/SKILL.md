@@ -5,34 +5,40 @@ description: Work with Effect v4 / effect-smol TypeScript code in this repo
 
 # Effect
 
-This codebase uses Effect for typed, composable TypeScript services, schemas, and workflows.
+This codebase uses Effect for typed, composable TypeScript services, schemas, HTTP client behavior, and SDK workflows.
 
 ## Source Of Truth
 
 Use the current Effect v4 / effect-smol source, not memory or older Effect v2/v3 examples.
 
-1. If `.opencode/references/effect-smol` is missing, clone `https://github.com/Effect-TS/effect-smol` there. Do this in the project, not in the skill folder.
-2. Search `.opencode/references/effect-smol` for exact APIs, examples, tests, and naming patterns before answering or implementing Effect-specific code.
-3. Also inspect existing repo code for local house style before introducing new patterns.
-4. Prefer answers and implementations backed by specific source files or nearby repo examples.
+1. If `references/effect-smol` is missing, clone `https://github.com/Effect-TS/effect-smol` there.
+2. Keep `references/` local and uncommitted. It is already ignored by `.gitignore`.
+3. Search `references/effect-smol` for exact APIs, examples, tests, and naming patterns before answering or implementing Effect-specific code.
+4. Also inspect nearby repo code under `src` and the implementation standards in `@docs/04-implementation-standards.md`.
+5. Prefer implementations backed by current source references and local repo style.
 
-## Guidelines
+## Repo Style
 
-- Prefer current Effect v4 APIs and project-local patterns over old blog posts, examples, or package-memory guesses.
+- Use `Effect.fn("Stable.Name")` for exported SDK operations and important reusable service methods.
 - Use `Effect.gen(function* () { ... })` for multi-step workflows.
-- Use `Effect.fn("Name")` or `Effect.fnUntraced(...)` for named effects when adding reusable service methods or important workflows.
-- Prefer Effect `Schema` for API and domain data shapes. Use branded schemas for IDs and `Schema.TaggedErrorClass` for typed domain errors when modeling new error surfaces.
-- Keep HTTP handlers thin: decode input, read request context, call services, and map transport errors. Put business rules in services.
-- In Effect service code, prefer Effect-aware platform abstractions and dependencies over ad hoc promises where the surrounding code already does so.
-- Keep layer composition explicit. Avoid broad hidden provisioning that makes missing dependencies hard to see.
-- In tests, prefer the repo's existing Effect test helpers and live tests for filesystem, git, child process, locks, or timing behavior.
+- Keep exported SDK behavior as native Effect functions, not plain functions that only return `Effect.gen`.
+- Prefer `Schema` for API and domain data shapes.
+- Use `Data.TaggedError` or `Schema.TaggedErrorClass` for typed domain errors.
+- Keep HTTP/client boundaries thin: build URLs, decode/encode, call services, and map transport errors.
+- Put business rules and SDK behavior in Effect services/functions.
+- Keep layer composition explicit with `Context.Service`, `Layer.succeed`, `Layer.effect`, and `Effect.provide`.
 - Do not introduce `any`, non-null assertions, unchecked casts, or older Effect APIs just to satisfy types.
-- Do not answer from memory. Verify against `.opencode/references/effect-smol` or nearby code first.
+- Do not call live CREA APIs from default tests.
 
 ## Testing Patterns
 
-- Use `testEffect(...)` from `packages/opencode/test/lib/effect.ts` for tests that exercise Effect services, layers, runtime context, scoped resources, or platform integrations.
-- Use `it.live(...)` for filesystem, git repositories, HTTP servers, sockets, child processes, locks, real time, and other live platform behavior.
-- Run tests from package directories such as `packages/opencode`; never run package tests from the repo root.
-- Prefer explicit test layers over ad hoc managed runtimes. Keep dependency provisioning visible in the test file.
-- Use scoped fixtures and finalizers for resources that must be cleaned up, including temporary directories, flags, databases, fibers, servers, and global state.
+- Use colocated `src/*.test.ts` files.
+- Use `describe` and `it` from `node:test`.
+- Use `assert` from `node:assert/strict`.
+- Run effects with `Effect.runPromise(...)`.
+- For expected Effect failures, use `Effect.exit(...)` plus `Exit` assertions, or `assert.rejects(...)` around `Effect.runPromise(...)`.
+- Mock yielded services through Effect Context and Layer composition.
+- Prefer `Layer.succeed(Service)(mock)` or `Effect.provide(effect, Layer.succeed(Service)(mock))` for service mocks.
+- Mock HTTP with injected `fetch` functions through `makeDdfLayer(...)`; do not monkey-patch global fetch.
+- Run `pnpm test` from the repo root. It currently runs typecheck and `node --import tsx --test src/*.test.ts`.
+- Do not use OpenCode's `testEffect(...)`, `it.live(...)`, Bun test helpers, or OpenCode fixture layers in this repo.
