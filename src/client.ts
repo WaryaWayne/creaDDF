@@ -1,4 +1,4 @@
-import { Cache, Clock, Config, Context, Data, Duration, Effect, Layer, Metric, Redacted, Schedule, Schema } from "effect";
+import { Cache, Config, Context, Data, Duration, Effect, Layer, Metric, Redacted, Schedule, Schema } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -105,7 +105,7 @@ export const ddfConfigFromEnv = Config.all({
   clientId: Config.string("CREA_DDF_CLIENT_ID"),
   clientSecret: Config.redacted("CREA_DDF_CLIENT_SECRET"),
   baseUrl: Config.string("CREA_DDF_BASE_URL").pipe(Config.withDefault("https://ddfapi.realtor.ca")),
-  identityUrl: Config.string("CREA_DDF_IDENTITY_URL").pipe(Config.withDefault("https://identity.crea.ca/connect/token")),
+  identityUrl: Config.string("CREA_DDF_AUTH_URL").pipe(Config.withDefault("https://identity.crea.ca/connect/token")),
 });
 export const DdfAuth = Context.Service<DdfAuthApi>("DdfAuth");
 export const DdfHttp = Context.Service<DdfHttpApi>("DdfHttp");

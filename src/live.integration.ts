@@ -26,7 +26,6 @@ const liveEnvNames = [
   "CREA_DDF_CLIENT_SECRET",
   "CREA_DDF_BASE_URL",
   "CREA_DDF_AUTH_URL",
-  "CREA_DDF_PROPERTY_REPLICATION_URL",
   "CREA_ANALYTICS_URL",
   "CREA_DESTINATION_ID",
 ] as const;
@@ -185,6 +184,6 @@ if (!hasLiveCredentials) {
   const visible =
     visibleLiveEnvNames.length > 0 ? visibleLiveEnvNames.join(", ") : "none";
   process.stdout.write(
-    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional host-only URLs: CREA_DDF_BASE_URL, CREA_DDF_AUTH_URL, CREA_DDF_PROPERTY_REPLICATION_URL, CREA_ANALYTICS_URL, CREA_DESTINATION_ID. CREA_DDF_BASE_URL must be the API host only, not /odata/v1.\n`,
+    `Skipping live CREA/DDF tests: missing required ${missingRequiredLiveEnvNames.join(", ")}. Visible CREA live env names: ${visible}. Optional host-only URLs: CREA_DDF_BASE_URL, CREA_DDF_AUTH_URL, CREA_ANALYTICS_URL, CREA_DESTINATION_ID. CREA_DDF_BASE_URL must be the API host only, not /odata/v1.\n`,
   );
 }
