@@ -24,8 +24,8 @@ export const MemberSchema = Schema.Struct({
   MemberPostalCode: Schema.Union([Schema.Null, Schema.String]),
   MemberPager: Schema.Union([Schema.Null, Schema.String]),
   MemberTollFreePhone: Schema.Union([Schema.Null, Schema.String]),
-  ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
-  OriginalEntryTimestamp: Schema.Union([Schema.Null, Schema.DateFromString]),
+  ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateTimeUtcFromString]),
+  OriginalEntryTimestamp: Schema.Union([Schema.Null, Schema.DateTimeUtcFromString]),
   MemberCity: Schema.Union([Schema.Null, Schema.String]),
   MemberAOR: Schema.Union([
     Schema.Literals([
@@ -587,7 +587,7 @@ export const MemberSchema = Schema.Struct({
         ]),
         ModificationTimestamp: Schema.Union([
           Schema.Null,
-          Schema.DateFromString,
+          Schema.DateTimeUtcFromString,
         ]),
         ResourceName: Schema.Union([
           Schema.Literals(["Office", "Member", "Property"]),
