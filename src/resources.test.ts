@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { assert, describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { DdfHttp, encodeODataQuery, makeDdfLayer } from "./client";
 import type { DdfHttpApi } from "./client";
@@ -44,7 +43,7 @@ const configFor = (fetchMock: typeof fetch) => ({
 });
 
 const requestedUrlFor = async (
-  effect: Effect.Effect<unknown, unknown, DdfHttpApi>,
+  effect: Effect.Effect<unknown, unknown, DdfHttp>,
 ) => {
   const requestedUrls: Array<string> = [];
   const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -484,14 +483,13 @@ describe("selected resource decoding", () => {
       throw new Error(`Unexpected request: ${url}`);
     }) as typeof fetch;
 
-    await assert.rejects(
+    await expect(
       Effect.runPromise(
         getOffice("office-1").pipe(
           Effect.provide(makeDdfLayer(configFor(fetchMock))),
         ),
       ),
-      /schema decoding|ResourceName/,
-    );
+    ).rejects.toThrow(/schema decoding|ResourceName/);
   });
 });
 
@@ -618,12 +616,11 @@ describe("lead resource", () => {
       Message: "x".repeat(501),
     } as unknown as LeadInput;
 
-    await assert.rejects(
+    await expect(
       Effect.runPromise(
         createLead(invalid).pipe(Effect.provide(Layer.succeed(DdfHttp)(http))),
       ),
-      /Failed to encode DDF lead input as JSON/,
-    );
+    ).rejects.toThrow(/Failed to encode DDF lead input as JSON/);
     assert.equal(called, false);
   });
 });

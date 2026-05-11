@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import {
   buildAnalyticsLogEventUrl,
@@ -32,32 +31,28 @@ describe("analytics", () => {
     assert.equal(url.searchParams.has("LanguageID"), false);
   });
 
-  it("encodes optional analytics fields and allows an environment URL override", () => {
-    const previous = process.env.CREA_ANALYTICS_URL;
-    process.env.CREA_ANALYTICS_URL = "https://analytics.test/LogEvents";
-    try {
-      const built = buildAnalyticsLogEventUrl({
+  it("encodes optional analytics fields and allows a URL override", () => {
+    const built = buildAnalyticsLogEventUrl(
+      {
         ...baseInput,
         EventType: "email_realtor",
         IP: "192.168.1.1",
         ReferralURL: "https://example.test/path?q=John O'Brien & Co",
         LanguageID: 2,
-      });
-      const url = new URL(built);
+      },
+      "https://analytics.test/LogEvents",
+    );
+    const url = new URL(built);
 
-      assert.equal(url.origin + url.pathname, "https://analytics.test/LogEvents");
-      assert.equal(url.searchParams.get("EventType"), "email_realtor");
-      assert.equal(url.searchParams.get("IP"), "192.168.1.1");
-      assert.equal(
-        url.searchParams.get("ReferralURL"),
-        "https://example.test/path?q=John O'Brien & Co",
-      );
-      assert.equal(url.searchParams.get("LanguageID"), "2");
-      assert.match(built, /ReferralURL=https%3A%2F%2Fexample\.test/);
-    } finally {
-      if (previous === undefined) delete process.env.CREA_ANALYTICS_URL;
-      else process.env.CREA_ANALYTICS_URL = previous;
-    }
+    assert.equal(url.origin + url.pathname, "https://analytics.test/LogEvents");
+    assert.equal(url.searchParams.get("EventType"), "email_realtor");
+    assert.equal(url.searchParams.get("IP"), "192.168.1.1");
+    assert.equal(
+      url.searchParams.get("ReferralURL"),
+      "https://example.test/path?q=John O'Brien & Co",
+    );
+    assert.equal(url.searchParams.get("LanguageID"), "2");
+    assert.match(built, /ReferralURL=https%3A%2F%2Fexample\.test/);
   });
 
   it("uses client config analyticsUrl without adding auth or secrets", async () => {
@@ -89,10 +84,16 @@ describe("analytics", () => {
     );
 
     const url = new URL(requestedUrl);
-    assert.equal(url.origin + url.pathname, "https://analytics.override.test/log");
+    assert.equal(
+      url.origin + url.pathname,
+      "https://analytics.override.test/log",
+    );
     assert.equal(url.searchParams.get("EventType"), "Click");
     assert.equal(requestedInit?.method, "GET");
-    assert.equal(requestedInit?.headers, undefined);
+    assert.equal(
+      new Headers(requestedInit?.headers).has("Authorization"),
+      false,
+    );
     assert.equal(JSON.stringify(debugEvents).includes("super-secret"), false);
   });
 });

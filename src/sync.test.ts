@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { assert, describe, it } from "@effect/vitest";
 import { Data, Effect, Layer, Schema } from "effect";
 import {
   DdfApiHttpError,
@@ -41,7 +40,7 @@ const emptyHttp = (overrides: Partial<DdfHttpApi>): DdfHttpApi => ({
 });
 
 const runWithHttp = <A, E>(
-  effect: Effect.Effect<A, E, DdfHttpApi>,
+  effect: Effect.Effect<A, E, DdfHttp>,
   http: DdfHttpApi,
 ) =>
   Effect.runPromise(effect.pipe(Effect.provide(Layer.succeed(DdfHttp)(http))));
@@ -223,7 +222,6 @@ describe("syncProperties", () => {
             new DdfApiHttpError({
               url: "https://ddf.test/property/http-fail",
               status: 503,
-              statusText: "Service Unavailable",
             }),
           );
         }
@@ -293,7 +291,6 @@ describe("syncProperties", () => {
             new DdfApiHttpError({
               url: "https://ddf.test/property/hydrate-fail",
               status: 503,
-              statusText: "Service Unavailable",
             }),
           );
         }
@@ -529,7 +526,6 @@ describe("syncMembers and syncOffices", () => {
             new DdfApiHttpError({
               url: "https://ddf.test/member/member-fail",
               status: 503,
-              statusText: "Service Unavailable",
             }),
           );
         }
@@ -611,7 +607,6 @@ describe("syncMembers and syncOffices", () => {
             new DdfApiHttpError({
               url: path,
               status: 503,
-              statusText: "Service Unavailable",
             }),
           );
         }

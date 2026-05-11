@@ -10,7 +10,7 @@ import {
 } from "effect";
 import type { Success as EffectSuccess } from "effect/Effect";
 import { DdfHttp } from "./client";
-import type { DdfHttpApi, DdfHttpError } from "./client";
+import type { DdfHttpError } from "./client";
 import {
   getMember,
   getOffice,
@@ -418,12 +418,10 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
   },
 );
 
-class RunPersistError extends Data.TaggedError("RunPersistError") {}
-
 const runPersist = Effect.fn("DdfSync.runPersist")(function* (
   resource: SyncResource,
   key: string,
-  persist: Effect.Effect<void, RunPersistError>,
+  persist: Effect.Effect<void, unknown>,
 ) {
   const exit = yield* Effect.exit(persist);
   if (Exit.isSuccess(exit)) return null;
@@ -433,7 +431,7 @@ const runPersist = Effect.fn("DdfSync.runPersist")(function* (
 const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
   resource: SyncResource,
   key: string,
-  hydrate: (key: string) => Effect.Effect<Record, DdfHttpError, DdfHttpApi>,
+  hydrate: (key: string) => Effect.Effect<Record, DdfHttpError, DdfHttp>,
 ) {
   const exit = yield* Effect.exit(hydrate(key));
   if (Exit.isSuccess(exit)) return { record: exit.value, error: null };
@@ -518,9 +516,9 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         failedWatermarks.push(identifier.ModificationTimestamp);
         continue;
       }
-      if (!result.record) continue;
+      if (result.record === null) continue;
 
-      const graph: PropertyGraph = normalizePropertyGraph(result.record);
+      const graph: PropertyGraph = yield* normalizePropertyGraph(result.record);
       records.push(graph);
 
       const propertyKey = String(graph.property.ListingKey ?? "");
@@ -638,7 +636,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
       failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
     }
-    if (!result.record) continue;
+    if (result.record === null) continue;
     records.push(result.record);
     const memberKey = String(result.record.MemberKey ?? "");
     const persist = Effect.gen(function* () {
@@ -748,7 +746,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
       failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
     }
-    if (!result.record) continue;
+    if (result.record === null) continue;
     records.push(result.record);
     const office = result.record as Record<string, unknown>;
     const officeKey = String(office.OfficeKey ?? "");

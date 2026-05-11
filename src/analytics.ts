@@ -48,7 +48,7 @@ const analyticsParamEntries = (input: AnalyticsLogEventInput) => {
 
 export const buildAnalyticsLogEventUrl = (
   input: AnalyticsLogEventInput,
-  analyticsUrl = process.env.CREA_ANALYTICS_URL || DEFAULT_CREA_ANALYTICS_URL,
+  analyticsUrl = DEFAULT_CREA_ANALYTICS_URL,
 ) => {
   const url = new URL(analyticsUrl);
   for (const [key, value] of analyticsParamEntries(input)) {

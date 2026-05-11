@@ -6,6 +6,7 @@ export type DdfResponseSchema<T> = Schema.Decoder<T, never>;
 export interface DdfODataListQuery<Field extends string = string> {
   readonly select?: ReadonlyArray<Field>;
   readonly filter?: string;
+  readonly count?: boolean;
   readonly top?: number;
   readonly skip?: number;
   readonly orderby?: string | ReadonlyArray<string>;
@@ -25,6 +26,7 @@ export interface DdfRequestOptions {
   readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly headers?: Readonly<Record<string, string>>;
   readonly json?: unknown;
+  readonly body?: BodyInit | null;
 }
 
 export interface DdfHttpApi {

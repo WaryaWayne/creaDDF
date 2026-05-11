@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { assert, describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Exit } from "effect";
 import {
   DdfHttp,
@@ -235,14 +234,13 @@ describe("client", () => {
 
     const malformedFetch = (async () =>
       Response.json({ access_token: "", expires_in: 3600 })) as typeof fetch;
-    await assert.rejects(
+    await expect(
       Effect.runPromise(
         withClient(malformedFetch, (http) =>
           http.requestJson("/odata/v1/Property"),
         ),
       ),
-      /Token response is missing required fields/,
-    );
+    ).rejects.toThrow(/Token response is missing required fields/);
   });
 
   it("adds JSON accept and authorization headers to API requests", async () => {

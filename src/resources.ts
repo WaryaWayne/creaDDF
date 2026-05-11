@@ -163,18 +163,16 @@ export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
-  return yield* http
-    .getOData(
-      "/odata/v1/Property",
-      propertyKey,
+  return yield* http.getOData(
+    "/odata/v1/Property",
+    propertyKey,
+    query,
+    schemaForSelect(
       query,
-      schemaForSelect(
-        query,
-        SelectedPropertyListingSchema,
-        SinglePropertyListingResponseSchema,
-      ),
-    )
-    .pipe(Effect.provide(DdfHttp));
+      SelectedPropertyListingSchema,
+      SinglePropertyListingResponseSchema,
+    ),
+  );
 });
 
 export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(

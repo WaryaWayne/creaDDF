@@ -1,7 +1,7 @@
-import { DdfConfig } from "@/client";
+import { DdfConfig } from "../config/Service";
 import { ddfTokenRequestCount } from "@/metrics";
-import { Duration, Effect, Metric, Redacted, Result, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/unstable/http";
+import { Duration, Effect, Metric, Redacted, Schema } from "effect";
+import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
 import {
   DdfTokenFetchError,
   DdfTokenHttpError,
@@ -12,8 +12,8 @@ import {
 const TokenResponseSchema = Schema.Struct({
   access_token: Schema.String,
   expires_in: Schema.Number,
-  token_type: Schema.String,
-  scope: Schema.String,
+  token_type: Schema.optional(Schema.String),
+  scope: Schema.optional(Schema.String),
 });
 
 const secretValue = (secret: string | Redacted.Redacted<string>) =>
@@ -38,16 +38,17 @@ export const fetchNewAccessToken = Effect.fn("DdfAuth.fetchNewAccessToken")(
     });
     yield* Metric.update(ddfTokenRequestCount, 1);
 
-    const request = HttpClientRequest.post(identityUrl).pipe(
-      HttpClientRequest.bodyUrlParams({
-        grant_type: "client_credentials",
-        client_id: cfg.clientId,
-        client_secret: secretValue(cfg.clientSecret),
-        scope: "DDFApi_Read",
-      }),
-    );
     const response = yield* client
-      .execute(request)
+      .post(identityUrl, {
+        body: HttpBody.urlParams(
+          UrlParams.fromInput({
+            grant_type: "client_credentials",
+            client_id: cfg.clientId,
+            client_secret: secretValue(cfg.clientSecret),
+            scope: "DDFApi_Read",
+          }),
+        ),
+      })
       .pipe(
         Effect.mapError(
           (cause) => new DdfTokenFetchError({ url: identityUrl, cause }),
@@ -62,21 +63,27 @@ export const fetchNewAccessToken = Effect.fn("DdfAuth.fetchNewAccessToken")(
       });
     }
 
-    const jsonResponse = yield* response.json;
+    const jsonResponse: unknown = yield* response.json.pipe(
+      Effect.mapError(
+        (cause) => new DdfTokenJsonParseError({ url: identityUrl, cause }),
+      ),
+    );
 
-    const parseResult = yield* Effect.try({
-      try: () => Schema.decodeUnknownResult(TokenResponseSchema)(jsonResponse),
-      catch: (cause) => new DdfTokenJsonParseError({ url: identityUrl, cause }),
-    });
+    const { access_token, expires_in } = yield* Schema.decodeUnknownEffect(
+      TokenResponseSchema,
+    )(jsonResponse).pipe(
+      Effect.mapError(
+        (failure) =>
+          new DdfTokenResponseValidationError({ url: identityUrl, failure }),
+      ),
+    );
 
-    if (Result.isFailure(parseResult)) {
+    if (access_token.length === 0) {
       return yield* new DdfTokenResponseValidationError({
         url: identityUrl,
-        failure: parseResult.failure,
+        failure: "empty access_token",
       });
     }
-
-    const { access_token, expires_in } = parseResult.success;
 
     return {
       token: Redacted.make(access_token),

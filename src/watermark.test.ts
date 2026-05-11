@@ -1,5 +1,4 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
+import { assert, describe, it } from "@effect/vitest";
 import { Effect, Metric } from "effect";
 import { DdfWatermarkStore } from "./watermark";
 import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "./metrics";

@@ -5,7 +5,11 @@ export class DdfTokenResponseValidationError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly failure: unknown;
-}> {}
+}> {
+  override get message() {
+    return `Token response is missing required fields from ${this.url}`;
+  }
+}
 
 export class DdfTokenFetchError extends Data.TaggedError("DdfTokenFetchError")<{
   readonly url: string;
