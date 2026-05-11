@@ -5,10 +5,8 @@ import {
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   timestamp,
-  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import type { SyncResource, SyncStage } from "../sync";
 
@@ -49,14 +47,13 @@ export const ddfPropertyRooms = pgTable(
   "ddf_property_rooms",
   {
     listingKey: text("listing_key").notNull(),
-    roomKey: text("room_key").notNull(),
+    roomKey: text("room_key").primaryKey(),
     roomType: text("room_type"),
     roomLevel: text("room_level"),
     raw: jsonb("raw").$type<unknown>().notNull(),
     ...timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.listingKey, table.roomKey] }),
     index("ddf_property_rooms_listing_idx").on(table.listingKey),
   ],
 );
@@ -64,7 +61,7 @@ export const ddfPropertyRooms = pgTable(
 export const ddfMedia = pgTable(
   "ddf_media",
   {
-    mediaKey: text("media_key").notNull(),
+    mediaKey: text("media_key").primaryKey(),
     resource: text("resource").$type<SyncResource>().notNull(),
     resourceKey: text("resource_key").notNull(),
     modificationTimestamp: timestamp("modification_timestamp", {
@@ -78,10 +75,8 @@ export const ddfMedia = pgTable(
     ...timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.resource, table.resourceKey, table.mediaKey] }),
     index("ddf_media_owner_idx").on(table.resource, table.resourceKey),
     index("ddf_media_modified_idx").on(table.modificationTimestamp),
-    uniqueIndex("ddf_media_media_key_idx").on(table.mediaKey),
   ],
 );
 

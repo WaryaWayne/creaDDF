@@ -1,17 +1,11 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { Cause, Data, DateTime, Effect } from "effect";
 import type {
-  MediaRecord,
-  MemberRecord,
   MemberSyncSink,
-  OfficeRecord,
   OfficeSyncSink,
-  OpenHouseRecord,
   OpenHouseSyncSink,
   PropertyGraph,
-  PropertyRecord,
   PropertySyncSink,
-  RoomRecord,
   SyncOwner,
   SyncRecordError,
 } from "../sync";
@@ -296,7 +290,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                       .insert(ddfPropertyRooms)
                       .values({ ...row, listingKey: roomListingKey, roomKey })
                       .onConflictDoUpdate({
-                        target: [ddfPropertyRooms.listingKey, ddfPropertyRooms.roomKey],
+                        target: ddfPropertyRooms.roomKey,
                         set: { ...row, listingKey: roomListingKey, roomKey, ...touchUpdatedAt },
                       });
                   }),
@@ -318,7 +312,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                       .insert(ddfMedia)
                       .values({ ...row, mediaKey })
                       .onConflictDoUpdate({
-                        target: [ddfMedia.resource, ddfMedia.resourceKey, ddfMedia.mediaKey],
+                        target: ddfMedia.mediaKey,
                         set: { ...row, mediaKey, ...touchUpdatedAt },
                       });
                   }),
@@ -362,7 +356,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                       .insert(ddfMedia)
                       .values({ ...mediaRow, mediaKey })
                       .onConflictDoUpdate({
-                        target: [ddfMedia.resource, ddfMedia.resourceKey, ddfMedia.mediaKey],
+                        target: ddfMedia.mediaKey,
                         set: { ...mediaRow, mediaKey, ...touchUpdatedAt },
                       });
                   }),
@@ -406,7 +400,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                       .insert(ddfMedia)
                       .values({ ...mediaRow, mediaKey })
                       .onConflictDoUpdate({
-                        target: [ddfMedia.resource, ddfMedia.resourceKey, ddfMedia.mediaKey],
+                        target: ddfMedia.mediaKey,
                         set: { ...mediaRow, mediaKey, ...touchUpdatedAt },
                       });
                   }),
@@ -447,7 +441,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           .insert(ddfPropertyRooms)
           .values({ ...row, listingKey, roomKey })
           .onConflictDoUpdate({
-            target: [ddfPropertyRooms.listingKey, ddfPropertyRooms.roomKey],
+            target: ddfPropertyRooms.roomKey,
             set: { ...row, listingKey, roomKey, ...touchUpdatedAt },
           })
           .pipe(Effect.mapError(mapSinkError("upsertRoom")));
@@ -465,7 +459,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           .insert(ddfMedia)
           .values({ ...row, mediaKey })
           .onConflictDoUpdate({
-            target: [ddfMedia.resource, ddfMedia.resourceKey, ddfMedia.mediaKey],
+            target: ddfMedia.mediaKey,
             set: { ...row, mediaKey, ...touchUpdatedAt },
           })
           .pipe(Effect.mapError(mapSinkError("upsertMedia")));
