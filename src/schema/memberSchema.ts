@@ -618,7 +618,7 @@ export const MemberSchema = Schema.Struct({
     Schema.Null,
   ]),
   MemberStatus: Schema.Union([
-    Schema.Literals(["active", "Inactive"]),
+    Schema.Literals(["Active", "Inactive"]),
     Schema.Null,
   ]),
   MemberType: Schema.Union([

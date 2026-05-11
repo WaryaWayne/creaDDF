@@ -1,4 +1,11 @@
-import { Context, Duration, Effect, Layer, Metric, Schema } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Layer,
+  Metric,
+  Schema,
+} from "effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -23,6 +30,7 @@ import {
   DdfApiJsonParseError,
   DdfApiResponseSchemaDecodeError,
   DdfApiTransportError,
+  schemaDecodeIssuesFromCause,
   statusError,
 } from "./errors";
 import {
@@ -78,9 +86,12 @@ const decodeJson = <T>(
   if (schema === undefined) return Effect.succeed(json as T);
 
   return Schema.decodeUnknownEffect(schema)(json).pipe(
-    Effect.mapError(
-      (cause) => new DdfApiResponseSchemaDecodeError({ url, cause }),
-    ),
+    Effect.mapError((cause) => {
+      const issues = schemaDecodeIssuesFromCause(cause);
+      return new DdfApiResponseSchemaDecodeError(
+        issues === undefined ? { url, cause } : { url, cause, issues },
+      );
+    }),
   );
 };
 
@@ -274,6 +285,7 @@ export class DdfHttp extends Context.Service<DdfHttp, DdfHttpApi>()(
           Effect.tapError((cause) =>
             Effect.logWarning("CREA DDF schema decode failed", {
               url,
+              issues: cause.issues,
               cause,
             }),
           ),

@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, SchemaIssue } from "effect";
 import type {
   DdfTokenTransportError,
   DdfTokenHttpError,
@@ -9,6 +9,40 @@ import type {
   DdfInvalidODataQueryError,
   DdfUnsupportedODataParameterError,
 } from "./odata";
+
+type DdfSchemaDecodeIssue = ReturnType<
+  ReturnType<typeof SchemaIssue.makeFormatterStandardSchemaV1>
+>["issues"][number];
+
+const formatSchemaIssue = SchemaIssue.makeFormatterStandardSchemaV1();
+
+const formatPathSegment = (
+  segment: NonNullable<DdfSchemaDecodeIssue["path"]>[number],
+) => (typeof segment === "object" ? String(segment.key) : String(segment));
+
+const formatIssuePath = (path: DdfSchemaDecodeIssue["path"]) => {
+  const segments = path ?? [];
+  return segments.length === 0
+    ? "<root>"
+    : segments.map(formatPathSegment).join(".");
+};
+
+const formatSchemaDecodeIssue = (issue: DdfSchemaDecodeIssue) =>
+  `${formatIssuePath(issue.path)}: ${issue.message}`;
+
+export const schemaDecodeIssuesFromCause = (
+  cause: unknown,
+): ReadonlyArray<DdfSchemaDecodeIssue> | undefined => {
+  if (
+    typeof cause === "object" &&
+    cause !== null &&
+    "issue" in cause &&
+    SchemaIssue.isIssue(cause.issue)
+  ) {
+    return formatSchemaIssue(cause.issue).issues;
+  }
+  return undefined;
+};
 
 export class DdfApiTransportError extends Data.TaggedError(
   "DdfApiTransportError",
@@ -141,9 +175,14 @@ export class DdfApiResponseSchemaDecodeError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly cause: unknown;
+  readonly issues?: ReadonlyArray<DdfSchemaDecodeIssue>;
 }> {
   override get message() {
-    return `DDF API response failed schema decoding from ${this.url}`;
+    const details =
+      this.issues === undefined || this.issues.length === 0
+        ? ""
+        : `: ${this.issues.map(formatSchemaDecodeIssue).join("; ")}`;
+    return `DDF API response failed schema decoding from ${this.url}${details}`;
   }
 }
 
