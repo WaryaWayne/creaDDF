@@ -1,7 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Cause } from "effect";
+import { Cause, DateTime } from "effect";
 import {
   mediaRowFromRecord,
+  memberRowFromRecord,
+  officeRowFromRecord,
+  openHouseRowFromRecord,
   propertyRowFromRecord,
   roomRowFromRecord,
   serializeSyncRecordError,
@@ -54,6 +57,50 @@ describe("database sync sink row mapping", () => {
       sortOrder: 2,
       raw: media,
     });
+  });
+
+  it("persists Effect DateTime timestamp values", () => {
+    const timestamp = DateTime.makeUnsafe("2024-01-02T03:04:05.000Z");
+
+    assert.equal(
+      propertyRowFromRecord({
+        ListingKey: "listing-1",
+        ModificationTimestamp: timestamp,
+      }).modificationTimestamp?.toISOString(),
+      "2024-01-02T03:04:05.000Z",
+    );
+
+    assert.equal(
+      mediaRowFromRecord(
+        { MediaKey: "media-1", ModificationTimestamp: timestamp },
+        { resource: "Property", key: "listing-1" },
+      ).modificationTimestamp?.toISOString(),
+      "2024-01-02T03:04:05.000Z",
+    );
+
+    assert.equal(
+      memberRowFromRecord({
+        MemberKey: "member-1",
+        ModificationTimestamp: timestamp,
+      }).modificationTimestamp?.toISOString(),
+      "2024-01-02T03:04:05.000Z",
+    );
+
+    assert.equal(
+      officeRowFromRecord({
+        OfficeKey: "office-1",
+        ModificationTimestamp: timestamp,
+      }).modificationTimestamp?.toISOString(),
+      "2024-01-02T03:04:05.000Z",
+    );
+
+    assert.equal(
+      openHouseRowFromRecord({
+        OpenHouseKey: "open-house-1",
+        OpenHouseDate: timestamp,
+      }).openHouseDate?.toISOString(),
+      "2024-01-02T03:04:05.000Z",
+    );
   });
 
   it("serializes sync error causes into stable JSON DTOs", () => {

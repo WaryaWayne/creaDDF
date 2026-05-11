@@ -400,12 +400,17 @@ describe("selected resource decoding", () => {
 
         assert.equal(result.offices.value[0]?.OfficeKey, "office-1");
         assert.equal(result.office.OfficeName, "Example Brokerage");
-        assert.equal(result.office.ModificationTimestamp instanceof Date, true);
-        assert.equal(
-          result.office.OfficeSocialMedia?.[0]?.ModificationTimestamp instanceof
-            Date,
-          true,
-        );
+        const officeTimestamp = result.office.ModificationTimestamp;
+        if (!DateTime.isDateTime(officeTimestamp) || !DateTime.isUtc(officeTimestamp)) {
+          assert.fail("expected office ModificationTimestamp to decode as Effect DateTime.Utc");
+        }
+        assert.equal(DateTime.formatIso(officeTimestamp), "2024-01-25T00:00:00.000Z");
+
+        const socialTimestamp = result.office.OfficeSocialMedia?.[0]?.ModificationTimestamp;
+        if (!DateTime.isDateTime(socialTimestamp) || !DateTime.isUtc(socialTimestamp)) {
+          assert.fail("expected office social ModificationTimestamp to decode as Effect DateTime.Utc");
+        }
+        assert.equal(DateTime.formatIso(socialTimestamp), "2024-01-20T00:00:00.000Z");
       }),
   );
 

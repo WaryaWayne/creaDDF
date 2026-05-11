@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 
 const NullableString = Schema.NullOr(Schema.String)
-const NullableDateTime = Schema.NullOr(Schema.DateFromString)
+const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString)
 
 export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
   Schema.Struct({
