@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
+import { Cause } from "effect";
 import {
   mediaRowFromRecord,
   propertyRowFromRecord,
   roomRowFromRecord,
+  serializeSyncRecordError,
 } from "./sink";
 
 describe("database sync sink row mapping", () => {
@@ -52,5 +54,21 @@ describe("database sync sink row mapping", () => {
       sortOrder: 2,
       raw: media,
     });
+  });
+
+  it("serializes sync error causes into stable JSON DTOs", () => {
+    const error = serializeSyncRecordError({
+      resource: "Property",
+      key: "listing-1",
+      stage: "persist",
+      message: "persist failed",
+      cause: Cause.fail(new Error("database unavailable")),
+    });
+
+    assert.equal(error.resource, "Property");
+    assert.equal(error.key, "listing-1");
+    assert.equal(error.cause.type, "EffectCause");
+    assert.equal(error.cause.message, "database unavailable");
+    assert.match(error.cause.pretty ?? "", /database unavailable/);
   });
 });

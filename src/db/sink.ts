@@ -1,5 +1,5 @@
-import { inArray } from "drizzle-orm";
-import { Data, Effect } from "effect";
+import { and, eq, inArray } from "drizzle-orm";
+import { Cause, Data, Effect } from "effect";
 import type {
   MediaRecord,
   MemberRecord,
@@ -168,6 +168,65 @@ export const openHouseRowFromRecord = (openHouse: unknown) => {
   };
 };
 
+
+export interface SerializedCause {
+  readonly type: string;
+  readonly message: string;
+  readonly name?: string;
+  readonly stack?: string;
+  readonly pretty?: string;
+}
+
+export interface SerializedSyncRecordError {
+  readonly resource: SyncRecordError["resource"];
+  readonly key: string;
+  readonly stage: SyncRecordError["stage"];
+  readonly message: string;
+  readonly cause: SerializedCause;
+}
+
+const serializeCauseValue = (cause: unknown): SerializedCause => {
+  if (Cause.isCause(cause)) {
+    const squashed = Cause.squash(cause);
+    const serialized = serializeCauseValue(squashed);
+    return {
+      ...serialized,
+      type: "EffectCause",
+      pretty: Cause.pretty(cause),
+    };
+  }
+  if (cause instanceof Error) {
+    return {
+      type: "Error",
+      name: cause.name,
+      message: cause.message,
+      stack: cause.stack,
+    };
+  }
+  if (typeof cause === "object" && cause !== null) {
+    const record = asRecord(cause);
+    const message = stringField(record, "message") ?? String(cause);
+    const tag = stringField(record, "_tag");
+    return {
+      type: tag ?? "Object",
+      message,
+    };
+  }
+  return {
+    type: typeof cause,
+    message: String(cause),
+  };
+};
+
+export const serializeSyncRecordError = (
+  error: SyncRecordError,
+): SerializedSyncRecordError => ({
+  resource: error.resource,
+  key: error.key,
+  stage: error.stage,
+  message: error.message,
+  cause: serializeCauseValue(error.cause),
+});
 const mapSinkError = (operation: string) => (cause: unknown) =>
   new DdfDatabaseSinkError({ operation, cause });
 
@@ -196,6 +255,19 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
               set: { ...row, listingKey, ...touchUpdatedAt },
             })
             .pipe(Effect.mapError(mapSinkError("upsertProperty")));
+          yield* db
+            .delete(ddfPropertyRooms)
+            .where(eq(ddfPropertyRooms.listingKey, listingKey))
+            .pipe(Effect.mapError(mapSinkError("replacePropertyRooms")));
+          yield* db
+            .delete(ddfMedia)
+            .where(
+              and(
+                eq(ddfMedia.resource, "Property"),
+                eq(ddfMedia.resourceKey, listingKey),
+              ),
+            )
+            .pipe(Effect.mapError(mapSinkError("replacePropertyMedia")));
         },
       ),
       upsertRoom: Effect.fn("DdfDatabaseSyncSink.upsertRoom")(function* (
@@ -251,6 +323,12 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
             set: { ...row, memberKey, ...touchUpdatedAt },
           })
           .pipe(Effect.mapError(mapSinkError("upsertMember")));
+        yield* db
+          .delete(ddfMedia)
+          .where(
+            and(eq(ddfMedia.resource, "Member"), eq(ddfMedia.resourceKey, memberKey)),
+          )
+          .pipe(Effect.mapError(mapSinkError("replaceMemberMedia")));
       }),
       upsertOffice: Effect.fn("DdfDatabaseSyncSink.upsertOffice")(function* (
         office,
@@ -265,6 +343,12 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
             set: { ...row, officeKey, ...touchUpdatedAt },
           })
           .pipe(Effect.mapError(mapSinkError("upsertOffice")));
+        yield* db
+          .delete(ddfMedia)
+          .where(
+            and(eq(ddfMedia.resource, "Office"), eq(ddfMedia.resourceKey, officeKey)),
+          )
+          .pipe(Effect.mapError(mapSinkError("replaceOfficeMedia")));
       }),
       upsertOpenHouse: Effect.fn("DdfDatabaseSyncSink.upsertOpenHouse")(
         function* (openHouse) {
@@ -322,20 +406,21 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
             error.stage,
             error.message,
           ].join(":");
+          const serialized = serializeSyncRecordError(error);
           yield* db
             .insert(ddfSyncErrors)
             .values({
               id,
               runId: options?.runId ?? null,
-              resource: error.resource,
-              recordKey: error.key,
-              stage: error.stage,
-              message: error.message,
-              cause: String(error.cause),
+              resource: serialized.resource,
+              recordKey: serialized.key,
+              stage: serialized.stage,
+              message: serialized.message,
+              cause: serialized.cause,
             })
             .onConflictDoUpdate({
               target: ddfSyncErrors.id,
-              set: { message: error.message, cause: String(error.cause) },
+              set: { message: serialized.message, cause: serialized.cause },
             })
             .pipe(Effect.mapError(mapSinkError("recordSyncError")));
         },

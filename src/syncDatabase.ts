@@ -15,7 +15,8 @@ import {
 } from "./sync";
 import { DdfDatabase } from "./db/layer";
 import { runDdfDatabaseMigrations } from "./db/runMigrations";
-import { makeDdfDatabaseSyncSink } from "./db/sink";
+import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "./db/sink";
+import type { SerializedSyncRecordError } from "./db/sink";
 import { ddfSyncRuns } from "./db/schema";
 import {
   loadDatabaseWatermark,
@@ -48,7 +49,7 @@ export interface SyncDdfDatabaseDependencies {
 export interface DdfDatabaseResourceSummary {
   readonly counts: SyncResult<unknown>["counts"];
   readonly nextWatermark: string | null;
-  readonly errors: ReadonlyArray<SyncRecordError>;
+  readonly errors: ReadonlyArray<SerializedSyncRecordError>;
 }
 
 export interface SyncDdfDatabaseOnceSummary {
@@ -65,7 +66,7 @@ export interface SyncDdfDatabaseOnceSummary {
 const resourceSummary = (result: { readonly counts: SyncResult<unknown>["counts"]; readonly nextWatermark: string | null; readonly errors: ReadonlyArray<SyncRecordError>; }): DdfDatabaseResourceSummary => ({
   counts: result.counts,
   nextWatermark: result.nextWatermark,
-  errors: result.errors,
+  errors: result.errors.map(serializeSyncRecordError),
 });
 
 const openHouseQueryWithSince = (

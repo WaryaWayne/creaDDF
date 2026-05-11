@@ -14,7 +14,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "build": "pnpm run typecheck && tsc --noCheck",
     "test": "pnpm run typecheck && vitest run",
     "prepare": "effect-language-service patch",
     "test:live": "node --env-file-if-exists=.env --import tsx --test src/live.integration.ts",
