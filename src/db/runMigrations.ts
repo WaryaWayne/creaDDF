@@ -4,7 +4,6 @@ import { SqlClient } from "effect/unstable/sql/SqlClient";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { DdfDatabase } from "./layer";
-import { embeddedDdfDatabaseMigrations } from "./migrations";
 import { splitSqlStatements } from "./migrationUtils";
 export { splitSqlStatements } from "./migrationUtils";
 
@@ -22,6 +21,9 @@ export class DdfDatabaseMigrationLoadError extends Data.TaggedError(
 export interface RunDdfDatabaseMigrationsOptions {
   readonly migrationsDirectory?: string;
 }
+
+const defaultMigrationsDirectory = () =>
+  fileURLToPath(new URL("./migrations", import.meta.url));
 
 const loadDdfDatabaseMigrations = Effect.fn(
   "DdfDatabaseMigrations.load",
@@ -74,9 +76,9 @@ const loadDdfDatabaseMigrations = Effect.fn(
 export const runDdfDatabaseMigrations = Effect.fn(
   "DdfDatabaseMigrations.run",
 )(function* (options?: RunDdfDatabaseMigrationsOptions) {
-  const loader = options?.migrationsDirectory === undefined
-    ? embeddedDdfDatabaseMigrations
-    : loadDdfDatabaseMigrations(options.migrationsDirectory);
+  const loader = loadDdfDatabaseMigrations(
+    options?.migrationsDirectory ?? defaultMigrationsDirectory(),
+  );
   return yield* Migrator.make({})({
     loader,
     table: "ddf_effect_migrations",

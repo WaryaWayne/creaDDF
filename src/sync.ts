@@ -146,6 +146,9 @@ export interface BaseSyncOptions {
 }
 
 export interface PropertySyncSink {
+  readonly upsertPropertyGraph?: (
+    graph: PropertyGraph,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertProperty?: (
     property: PropertyRecord,
   ) => Effect.Effect<void, unknown>;
@@ -167,6 +170,10 @@ export interface PropertySyncSink {
 }
 
 export interface MemberSyncSink {
+  readonly upsertMemberWithMedia?: (
+    member: MemberRecord,
+    media: ReadonlyArray<MediaRecord>,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertMember?: (
     member: MemberRecord,
   ) => Effect.Effect<void, unknown>;
@@ -184,6 +191,10 @@ export interface MemberSyncSink {
 }
 
 export interface OfficeSyncSink {
+  readonly upsertOfficeWithMedia?: (
+    office: OfficeRecord,
+    media: ReadonlyArray<MediaRecord>,
+  ) => Effect.Effect<void, unknown>;
   readonly upsertOffice?: (
     office: OfficeRecord,
   ) => Effect.Effect<void, unknown>;
@@ -506,6 +517,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
     const hasRecordSink =
+      options?.sink?.upsertPropertyGraph !== undefined ||
       options?.sink?.upsertProperty !== undefined ||
       options?.sink?.upsertRoom !== undefined ||
       options?.sink?.upsertMedia !== undefined;
@@ -523,6 +535,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
 
       const propertyKey = String(graph.property.ListingKey ?? "");
       const persist = Effect.gen(function* () {
+        if (options?.sink?.upsertPropertyGraph !== undefined) {
+          yield* options.sink.upsertPropertyGraph(graph);
+          return;
+        }
         if (options?.sink?.upsertProperty) {
           yield* options.sink.upsertProperty(graph.property);
         }
@@ -627,6 +643,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
   const hasRecordSink =
+    options?.sink?.upsertMemberWithMedia !== undefined ||
     options?.sink?.upsertMember !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
@@ -639,15 +656,20 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     if (result.record === null) continue;
     records.push(result.record);
     const memberKey = String(result.record.MemberKey ?? "");
+    const memberMedia = (Array.isArray((result.record as Record<string, unknown>).Media)
+      ? ((result.record as Record<string, unknown>).Media as MediaType)
+      : []
+    ).map((media) => normalizeMedia("Member", memberKey, media));
     const persist = Effect.gen(function* () {
+      if (options?.sink?.upsertMemberWithMedia !== undefined) {
+        yield* options.sink.upsertMemberWithMedia(result.record, memberMedia);
+        return;
+      }
       if (options?.sink?.upsertMember)
         yield* options.sink.upsertMember(result.record);
       if (options?.sink?.upsertMedia) {
         yield* Effect.forEach(
-          (Array.isArray((result.record as Record<string, unknown>).Media)
-            ? ((result.record as Record<string, unknown>).Media as MediaType)
-            : []
-          ).map((media) => normalizeMedia("Member", memberKey, media)),
+          memberMedia,
           (media) =>
             options.sink?.upsertMedia?.(media, {
               resource: "Member",
@@ -737,6 +759,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
   const hasRecordSink =
+    options?.sink?.upsertOfficeWithMedia !== undefined ||
     options?.sink?.upsertOffice !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
@@ -750,14 +773,19 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     records.push(result.record);
     const office = result.record as Record<string, unknown>;
     const officeKey = String(office.OfficeKey ?? "");
+    const officeMedia = (Array.isArray(office.Media) ? (office.Media as MediaType) : []).map(
+      (media) => normalizeMedia("Office", officeKey, media),
+    );
     const persist = Effect.gen(function* () {
+      if (options?.sink?.upsertOfficeWithMedia !== undefined) {
+        yield* options.sink.upsertOfficeWithMedia(result.record, officeMedia);
+        return;
+      }
       if (options?.sink?.upsertOffice)
         yield* options.sink.upsertOffice(result.record);
       if (options?.sink?.upsertMedia) {
         yield* Effect.forEach(
-          (Array.isArray(office.Media) ? (office.Media as MediaType) : []).map(
-            (media) => normalizeMedia("Office", officeKey, media),
-          ),
+          officeMedia,
           (media) =>
             options.sink?.upsertMedia?.(media, {
               resource: "Office",
