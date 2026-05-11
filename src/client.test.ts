@@ -103,7 +103,7 @@ describe("client", () => {
 
     assert.equal(
       query,
-      "?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=PropertySubType+eq+%27Office%27+and+Price+gt+500000&%24top=10&%24skip=5&%24orderby=ModificationTimestamp+desc%2CListingKey",
+      "?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=PropertySubType%20eq%20%27Office%27%20and%20Price%20gt%20500000&%24top=10&%24skip=5&%24orderby=ModificationTimestamp%20desc%2CListingKey",
     );
   });
 
@@ -144,7 +144,7 @@ describe("client", () => {
 
         assert.equal(
           url,
-          "https://ddf.test/odata/v1/Property/PropertyReplication?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp+gt+2024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp+desc",
+          "https://ddf.test/odata/v1/Property/PropertyReplication?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp%20gt%202024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp%20desc",
         );
         return Response.json({ value: [] });
       });

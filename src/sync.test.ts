@@ -146,7 +146,7 @@ describe("syncProperties", () => {
             paths.push(path);
             if (
               path ===
-              "/odata/v1/Property/PropertyReplication(DestinationId=7)?%24filter=ModificationTimestamp+gt+2024-01-01T00%3A00%3A00.000Z&%24orderby=ModificationTimestamp+asc%2CListingKey+asc"
+              "/odata/v1/Property/PropertyReplication(DestinationId=7)?%24filter=ModificationTimestamp%20gt%202024-01-01T00%3A00%3A00.000Z&%24orderby=ModificationTimestamp%20asc%2CListingKey%20asc"
             ) {
               return response<T>({
                 "@odata.nextLink": "https://ddf.test/page-2",
@@ -198,7 +198,7 @@ describe("syncProperties", () => {
         );
 
         assert.deepEqual(paths, [
-          "/odata/v1/Property/PropertyReplication(DestinationId=7)?%24filter=ModificationTimestamp+gt+2024-01-01T00%3A00%3A00.000Z&%24orderby=ModificationTimestamp+asc%2CListingKey+asc",
+          "/odata/v1/Property/PropertyReplication(DestinationId=7)?%24filter=ModificationTimestamp%20gt%202024-01-01T00%3A00%3A00.000Z&%24orderby=ModificationTimestamp%20asc%2CListingKey%20asc",
           "https://ddf.test/page-2",
         ]);
         assert.equal(result.nextWatermark, "2024-01-03T00:00:00.000Z");

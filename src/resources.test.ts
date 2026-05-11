@@ -196,23 +196,23 @@ describe("odata resource paths", () => {
         yield* requestedUrlFor(
           listProperties({ select: ["ListingKey"], top: 2 }),
         ),
-        "/odata/v1/Property?%24select=ListingKey&%24top=2&%24orderby=ModificationTimestamp+desc%2CListingKey+asc",
+        "/odata/v1/Property?%24select=ListingKey&%24top=2&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(listMembers()),
-        "/odata/v1/Member?%24orderby=ModificationTimestamp+desc%2CMemberKey+asc",
+        "/odata/v1/Member?%24orderby=ModificationTimestamp%20desc%2CMemberKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(listOffices()),
-        "/odata/v1/Office?%24orderby=ModificationTimestamp+desc%2COfficeKey+asc",
+        "/odata/v1/Office?%24orderby=ModificationTimestamp%20desc%2COfficeKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(listOpenHouses()),
-        "/odata/v1/OpenHouse?%24orderby=OpenHouseDate+desc%2COpenHouseKey+asc",
+        "/odata/v1/OpenHouse?%24orderby=OpenHouseDate%20desc%2COpenHouseKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(listDestinations()),
-        "/odata/v1/Destination?%24orderby=DestinationId+asc",
+        "/odata/v1/Destination?%24orderby=DestinationId%20asc",
       );
     }),
   );
@@ -257,7 +257,7 @@ describe("selected resource decoding", () => {
 
           if (
             url ===
-            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp&%24top=1&%24orderby=ModificationTimestamp+desc%2CListingKey+asc"
+            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
           ) {
             return Response.json({
               value: [
@@ -270,7 +270,7 @@ describe("selected resource decoding", () => {
           }
           if (
             url ===
-            "https://ddf.test/odata/v1/Office?%24select=OfficeKey&%24top=1&%24orderby=ModificationTimestamp+desc%2COfficeKey+asc"
+            "https://ddf.test/odata/v1/Office?%24select=OfficeKey&%24top=1&%24orderby=ModificationTimestamp%20desc%2COfficeKey%20asc"
           ) {
             return Response.json({ value: [{ OfficeKey: "office-1" }] });
           }
@@ -381,7 +381,7 @@ describe("selected resource decoding", () => {
 
           if (
             url ===
-            "https://ddf.test/odata/v1/Office?%24top=1&%24orderby=ModificationTimestamp+desc%2COfficeKey+asc"
+            "https://ddf.test/odata/v1/Office?%24top=1&%24orderby=ModificationTimestamp%20desc%2COfficeKey%20asc"
           ) {
             return Response.json({ value: [officeRecord] });
           }
@@ -431,7 +431,7 @@ describe("selected resource decoding", () => {
           return tokenResponse.clone();
         if (
           url ===
-          "https://ddf.test/odata/v1/Destination?%24top=1&%24orderby=DestinationId+asc"
+          "https://ddf.test/odata/v1/Destination?%24top=1&%24orderby=DestinationId%20asc"
         )
           return Response.json({ value: [destinationRecord] });
         if (url === "https://ddf.test/odata/v1/Destination(123)")
@@ -567,15 +567,15 @@ describe("replication resource paths", () => {
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(replicateProperties()),
-        "/odata/v1/Property/PropertyReplication?%24orderby=ModificationTimestamp+asc%2CListingKey+asc",
+        "/odata/v1/Property/PropertyReplication?%24orderby=ModificationTimestamp%20asc%2CListingKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateMembers()),
-        "/odata/v1/Member/MemberReplication?%24orderby=ModificationTimestamp+asc%2CMemberKey+asc",
+        "/odata/v1/Member/MemberReplication?%24orderby=ModificationTimestamp%20asc%2CMemberKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateOffices()),
-        "/odata/v1/Office/OfficeReplication?%24orderby=ModificationTimestamp+asc%2COfficeKey+asc",
+        "/odata/v1/Office/OfficeReplication?%24orderby=ModificationTimestamp%20asc%2COfficeKey%20asc",
       );
     }),
   );
@@ -584,15 +584,15 @@ describe("replication resource paths", () => {
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(replicatePropertiesForDestination(123)),
-        "/odata/v1/Property/PropertyReplication(DestinationId=123)?%24orderby=ModificationTimestamp+asc%2CListingKey+asc",
+        "/odata/v1/Property/PropertyReplication(DestinationId=123)?%24orderby=ModificationTimestamp%20asc%2CListingKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateMembersForDestination(123)),
-        "/odata/v1/Member/MemberReplication(DestinationId=123)?%24orderby=ModificationTimestamp+asc%2CMemberKey+asc",
+        "/odata/v1/Member/MemberReplication(DestinationId=123)?%24orderby=ModificationTimestamp%20asc%2CMemberKey%20asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateOfficesForDestination(123)),
-        "/odata/v1/Office/OfficeReplication(DestinationId=123)?%24orderby=ModificationTimestamp+asc%2COfficeKey+asc",
+        "/odata/v1/Office/OfficeReplication(DestinationId=123)?%24orderby=ModificationTimestamp%20asc%2COfficeKey%20asc",
       );
     }),
   );
@@ -610,7 +610,7 @@ describe("replication resource paths", () => {
 
       assert.equal(
         url,
-        "/odata/v1/Property/PropertyReplication(DestinationId=123)?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp+gt+2024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp+desc",
+        "/odata/v1/Property/PropertyReplication(DestinationId=123)?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp%20gt%202024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp%20desc",
       );
     }),
   );

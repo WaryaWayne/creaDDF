@@ -10,8 +10,8 @@ import {
   ddfApiRequestCount,
   ddfApiRetryCount,
   ddfRequestDuration,
-} from "@/metrics";
-import { ODataUnknownListEnvelopeSchema } from "@/schema/odata";
+} from "../../metrics";
+import { ODataUnknownListEnvelopeSchema } from "../../schema/odata";
 import {
   DdfTokenTransportError,
   DdfTokenHttpError,

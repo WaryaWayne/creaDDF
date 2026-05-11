@@ -150,7 +150,7 @@ export const encodeODataQuery = (
     }
   }
 
-  const s = p.toString();
+  const s = p.toString().replaceAll("+", "%20");
   return s.length > 0 ? `?${s}` : "";
 };
 

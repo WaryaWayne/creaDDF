@@ -4,7 +4,7 @@ import {
   ddfAuthCacheHitCount,
   ddfAuthCacheMissCount,
   ddfTokenRefreshCount,
-} from "@/metrics";
+} from "../../metrics";
 import type { DdfAuthError } from "../http/errors";
 import type { DdfAuthApi } from "./types";
 
