@@ -23,7 +23,7 @@
         "ignoreEffectWarningsInTscExitCode": true,
         "diagnosticSeverity": {
           "anyUnknownInErrorContext": "warning",
-          "asyncFunction": "warning",
+          "asyncFunction": "error",
           "catchAllToMapError": "warning",
           "catchUnfailableEffect": "warning",
           "classSelfMismatch": "warning",

@@ -18,22 +18,31 @@ const fetchLayerFor = (config: DdfClientConfig) => {
   const fetchOverride = config.fetch;
   if (fetchOverride === undefined) return Layer.empty;
 
-  return Layer.succeed(FetchHttpClient.Fetch, (async (input, init) => {
+  return Layer.succeed(FetchHttpClient.Fetch, ((input, init) => {
     if (input instanceof Request) {
       const headers = new Headers(input.headers);
-      let body: BodyInit | null | undefined = undefined;
-      if (input.method !== "GET" && input.method !== "HEAD") {
-        const text = await input.clone().text();
-        const contentType = headers.get("content-type") ?? "";
-        body = contentType.includes("application/x-www-form-urlencoded")
-          ? new URLSearchParams(text)
-          : text;
+      if (input.method === "GET" || input.method === "HEAD") {
+        return fetchOverride(input.url, {
+          method: input.method,
+          headers,
+          body: undefined,
+        });
       }
-      return fetchOverride(input.url, {
-        method: input.method,
-        headers,
-        body,
-      });
+
+      return input
+        .clone()
+        .text()
+        .then((text) => {
+          const contentType = headers.get("content-type") ?? "";
+          const body = contentType.includes("application/x-www-form-urlencoded")
+            ? new URLSearchParams(text)
+            : text;
+          return fetchOverride(input.url, {
+            method: input.method,
+            headers,
+            body,
+          });
+        });
     }
 
     const headers = new Headers(init?.headers);

@@ -7,6 +7,13 @@ import {
 } from "./analytics";
 import { makeDdfLayer } from "./client";
 
+const fetchMockFrom =
+  (
+    handler: (input: RequestInfo | URL, init?: RequestInit) => Response,
+  ): typeof fetch =>
+  (input, init) =>
+    Promise.resolve(handler(input, init));
+
 const baseInput = {
   ListingID: 12830763,
   DestinationID: 355,
@@ -55,45 +62,52 @@ describe("analytics", () => {
     assert.match(built, /ReferralURL=https%3A%2F%2Fexample\.test/);
   });
 
-  it("uses client config analyticsUrl without adding auth or secrets", async () => {
-    let requestedUrl = "";
-    let requestedInit: RequestInit | undefined;
-    const debugEvents: Array<unknown> = [];
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      requestedUrl = String(input);
-      requestedInit = init;
-      return new Response(null, { status: 204 });
-    }) as typeof fetch;
+  it.effect(
+    "uses client config analyticsUrl without adding auth or secrets",
+    () =>
+      Effect.gen(function* () {
+        let requestedUrl = "";
+        let requestedInit: RequestInit | undefined;
+        const debugEvents: Array<unknown> = [];
+        const fetchMock = fetchMockFrom(
+          (input: RequestInfo | URL, init?: RequestInit) => {
+            requestedUrl = String(input);
+            requestedInit = init;
+            return new Response(null, { status: 204 });
+          },
+        );
 
-    await Effect.runPromise(
-      logAnalyticsEvent({
-        ...baseInput,
-        EventType: "Click",
-        ReferralURL: "https://example.test/listing/12830763",
-      }).pipe(
-        Effect.provide(
-          makeDdfLayer({
-            clientId: "client-id",
-            clientSecret: "super-secret-client-secret",
-            analyticsUrl: "https://analytics.override.test/log",
-            fetch: fetchMock,
-            logger: { debug: (event) => debugEvents.push(event) },
-          }),
-        ),
-      ),
-    );
+        yield* logAnalyticsEvent({
+          ...baseInput,
+          EventType: "Click",
+          ReferralURL: "https://example.test/listing/12830763",
+        }).pipe(
+          Effect.provide(
+            makeDdfLayer({
+              clientId: "client-id",
+              clientSecret: "super-secret-client-secret",
+              analyticsUrl: "https://analytics.override.test/log",
+              fetch: fetchMock,
+              logger: { debug: (event) => debugEvents.push(event) },
+            }),
+          ),
+        );
 
-    const url = new URL(requestedUrl);
-    assert.equal(
-      url.origin + url.pathname,
-      "https://analytics.override.test/log",
-    );
-    assert.equal(url.searchParams.get("EventType"), "Click");
-    assert.equal(requestedInit?.method, "GET");
-    assert.equal(
-      new Headers(requestedInit?.headers).has("Authorization"),
-      false,
-    );
-    assert.equal(JSON.stringify(debugEvents).includes("super-secret"), false);
-  });
+        const url = new URL(requestedUrl);
+        assert.equal(
+          url.origin + url.pathname,
+          "https://analytics.override.test/log",
+        );
+        assert.equal(url.searchParams.get("EventType"), "Click");
+        assert.equal(requestedInit?.method, "GET");
+        assert.equal(
+          new Headers(requestedInit?.headers).has("Authorization"),
+          false,
+        );
+        assert.equal(
+          JSON.stringify(debugEvents).includes("super-secret"),
+          false,
+        );
+      }),
+  );
 });

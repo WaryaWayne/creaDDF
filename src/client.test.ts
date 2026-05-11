@@ -16,6 +16,7 @@ const configFor = (fetchMock: typeof fetch) => ({
   identityUrl: "https://identity.test/connect/token",
   baseUrl: "https://ddf.test",
   fetch: fetchMock,
+  retryPolicy: { baseDelayMillis: 0 },
 });
 
 const withClient = <A>(
@@ -26,6 +27,13 @@ const withClient = <A>(
     const http = yield* DdfHttp;
     return yield* use(http);
   }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+
+const fetchMockFrom =
+  (
+    handler: (input: RequestInfo | URL, init?: RequestInit) => Response,
+  ): typeof fetch =>
+  (input, init) =>
+    Promise.resolve(handler(input, init));
 
 const tokenResponse = (token: string) =>
   Response.json({ access_token: token, expires_in: 3600 });
@@ -121,315 +129,345 @@ describe("client", () => {
     );
   });
 
-  it("sends the expected token body and decodes JSON responses", async () => {
-    const calls: Array<{ url: string; init?: RequestInit }> = [];
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({ url, init });
+  it.effect("sends the expected token body and decodes JSON responses", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      const fetchMock = fetchMockFrom(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = String(input);
+          calls.push({ url, init });
 
-      if (url === "https://identity.test/connect/token") {
-        assert.equal(init?.method, "POST");
-        assert.equal(init?.body instanceof URLSearchParams, true);
-        assert.equal(
-          (init?.body as URLSearchParams).get("grant_type"),
-          "client_credentials",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("client_id"),
-          "client-id",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("client_secret"),
-          "client-secret",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("scope"),
-          "DDFApi_Read",
-        );
-        return tokenResponse("token-123");
-      }
+          if (url === "https://identity.test/connect/token") {
+            assert.equal(init?.method, "POST");
+            assert.equal(init?.body instanceof URLSearchParams, true);
+            assert.equal(
+              (init?.body as URLSearchParams).get("grant_type"),
+              "client_credentials",
+            );
+            assert.equal(
+              (init?.body as URLSearchParams).get("client_id"),
+              "client-id",
+            );
+            assert.equal(
+              (init?.body as URLSearchParams).get("client_secret"),
+              "client-secret",
+            );
+            assert.equal(
+              (init?.body as URLSearchParams).get("scope"),
+              "DDFApi_Read",
+            );
+            return tokenResponse("token-123");
+          }
 
-      assert.equal(
-        url,
-        "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
+          assert.equal(
+            url,
+            "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
+          );
+          return Response.json({ value: [{ ListingKey: "listing-1" }] });
+        },
       );
-      return Response.json({ value: [{ ListingKey: "listing-1" }] });
-    }) as typeof fetch;
 
-    const result = await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      const result = yield* withClient(fetchMock, (http) =>
         http.listOData("/odata/v1/Property", {
           select: ["ListingKey"],
           top: 1,
         }),
-      ),
-    );
+      );
 
-    assert.deepEqual(result, { value: [{ ListingKey: "listing-1" }] });
-    assert.equal(calls.length, 2);
-  });
+      assert.deepEqual(result, { value: [{ ListingKey: "listing-1" }] });
+      assert.equal(calls.length, 2);
+    }),
+  );
 
-  it("caches a valid token across API requests", async () => {
-    let tokenCalls = 0;
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        tokenCalls += 1;
-        return tokenResponse("cached-token");
-      }
+  it.effect("caches a valid token across API requests", () =>
+    Effect.gen(function* () {
+      let tokenCalls = 0;
+      let apiCalls = 0;
+      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        if (String(input) === "https://identity.test/connect/token") {
+          tokenCalls += 1;
+          return tokenResponse("cached-token");
+        }
 
-      apiCalls += 1;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+        apiCalls += 1;
+        return Response.json({ ok: true });
+      });
 
-    await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      yield* withClient(fetchMock, (http) =>
         Effect.gen(function* () {
           yield* http.requestJson("/odata/v1/Property");
           yield* http.requestJson("/odata/v1/Member");
         }),
-      ),
-    );
+      );
 
-    assert.equal(tokenCalls, 1);
-    assert.equal(apiCalls, 2);
-  });
+      assert.equal(tokenCalls, 1);
+      assert.equal(apiCalls, 2);
+    }),
+  );
 
-  it("fails token requests before caching non-ok or malformed responses", async () => {
-    const tokenStatuses: Array<number> = [];
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        if (tokenStatuses.length === 0) {
-          tokenStatuses.push(500);
-          return new Response(
-            JSON.stringify({ error: "temporarily unavailable" }),
-            { status: 500 },
-          );
-        }
+  it.effect(
+    "fails token requests before caching non-ok or malformed responses",
+    () =>
+      Effect.gen(function* () {
+        const tokenStatuses: Array<number> = [];
+        let apiCalls = 0;
+        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+          if (String(input) === "https://identity.test/connect/token") {
+            if (tokenStatuses.length === 0) {
+              tokenStatuses.push(500);
+              return new Response(
+                JSON.stringify({ error: "temporarily unavailable" }),
+                { status: 500 },
+              );
+            }
 
-        tokenStatuses.push(200);
-        return tokenResponse("fresh-token");
-      }
+            tokenStatuses.push(200);
+            return tokenResponse("fresh-token");
+          }
 
-      apiCalls += 1;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+          apiCalls += 1;
+          return Response.json({ ok: true });
+        });
 
-    const result = await Effect.runPromise(
-      withClient(fetchMock, (http) =>
-        Effect.gen(function* () {
-          const first = yield* Effect.exit(
-            http.requestJson("/odata/v1/Property"),
-          );
-          const second = yield* http.requestJson("/odata/v1/Property");
-          return { first, second };
-        }),
-      ),
-    );
+        const result = yield* withClient(fetchMock, (http) =>
+          Effect.gen(function* () {
+            const first = yield* Effect.exit(
+              http.requestJson("/odata/v1/Property"),
+            );
+            const second = yield* http.requestJson("/odata/v1/Property");
+            return { first, second };
+          }),
+        );
 
-    assert.equal(Exit.isFailure(result.first), true);
-    assert.deepEqual(tokenStatuses, [500, 200]);
-    assert.equal(apiCalls, 1);
+        assert.equal(Exit.isFailure(result.first), true);
+        assert.deepEqual(tokenStatuses, [500, 200]);
+        assert.equal(apiCalls, 1);
 
-    const malformedFetch = (async () =>
-      Response.json({ access_token: "", expires_in: 3600 })) as typeof fetch;
-    await expect(
-      Effect.runPromise(
-        withClient(malformedFetch, (http) =>
-          http.requestJson("/odata/v1/Property"),
-        ),
-      ),
-    ).rejects.toThrow(/Token response is missing required fields/);
-  });
+        const malformedFetch = fetchMockFrom(() =>
+          Response.json({
+            access_token: "",
+            expires_in: 3600,
+          }),
+        );
+        yield* Effect.promise(() =>
+          expect(
+            Effect.runPromise(
+              withClient(malformedFetch, (http) =>
+                http.requestJson("/odata/v1/Property"),
+              ),
+            ),
+          ).rejects.toThrow(/Token response is missing required fields/),
+        );
+      }),
+  );
 
-  it("adds JSON accept and authorization headers to API requests", async () => {
-    let apiHeaders: Headers | undefined;
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
+  it.effect("adds JSON accept and authorization headers to API requests", () =>
+    Effect.gen(function* () {
+      let apiHeaders: Headers | undefined;
+      const fetchMock = fetchMockFrom(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input) === "https://identity.test/connect/token")
+            return tokenResponse("token-123");
 
-      apiHeaders = init?.headers as Headers;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+          apiHeaders = init?.headers as Headers;
+          return Response.json({ ok: true });
+        },
+      );
 
-    await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      yield* withClient(fetchMock, (http) =>
         http.requestJson("/v1/Lead/CreateLead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ListingKey: "listing-1" }),
         }),
-      ),
-    );
+      );
 
-    assert.equal(apiHeaders?.get("Accept"), "application/json");
-    assert.equal(apiHeaders?.get("Authorization"), "Bearer token-123");
-    assert.equal(apiHeaders?.get("Content-Type"), "application/json");
-  });
+      assert.equal(apiHeaders?.get("Accept"), "application/json");
+      assert.equal(apiHeaders?.get("Authorization"), "Bearer token-123");
+      assert.equal(apiHeaders?.get("Content-Type"), "application/json");
+    }),
+  );
 
-  it("refreshes auth once after a 401 response", async () => {
-    let tokenCalls = 0;
-    const apiAuthorizations: Array<string | null> = [];
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        tokenCalls += 1;
-        return tokenResponse(`token-${tokenCalls}`);
-      }
+  it.effect("refreshes auth once after a 401 response", () =>
+    Effect.gen(function* () {
+      let tokenCalls = 0;
+      const apiAuthorizations: Array<string | null> = [];
+      const fetchMock = fetchMockFrom(
+        (input: RequestInfo | URL, init?: RequestInit) => {
+          if (String(input) === "https://identity.test/connect/token") {
+            tokenCalls += 1;
+            return tokenResponse(`token-${tokenCalls}`);
+          }
 
-      apiAuthorizations.push((init?.headers as Headers).get("Authorization"));
-      if (apiAuthorizations.length === 1) {
-        return new Response(JSON.stringify({ error: "expired" }), {
-          status: 401,
+          apiAuthorizations.push(
+            (init?.headers as Headers).get("Authorization"),
+          );
+          if (apiAuthorizations.length === 1) {
+            return new Response(JSON.stringify({ error: "expired" }), {
+              status: 401,
+            });
+          }
+
+          return Response.json({ value: [] });
+        },
+      );
+
+      yield* withClient(fetchMock, (http) =>
+        http.requestJson("/odata/v1/Property"),
+      );
+
+      assert.equal(tokenCalls, 2);
+      assert.deepEqual(apiAuthorizations, ["Bearer token-1", "Bearer token-2"]);
+    }),
+  );
+
+  it.effect(
+    "maps common HTTP statuses to typed API errors with response bodies",
+    () =>
+      Effect.gen(function* () {
+        const statuses = new Map([
+          [400, "DdfApiBadRequestQueryError"],
+          [401, "DdfApiUnauthorizedAfterRefreshError"],
+          [403, "DdfApiForbiddenError"],
+          [404, "DdfApiNotFoundError"],
+          [408, "DdfApiTimeoutError"],
+          [415, "DdfApiUnsupportedMediaTypeError"],
+          [500, "DdfApiInternalServerError"],
+          [503, "DdfApiRetryableServiceUnavailableError"],
+        ]);
+
+        for (const [status, tag] of statuses) {
+          const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+            if (String(input) === "https://identity.test/connect/token")
+              return tokenResponse("token-123");
+            return new Response("body text", { status, statusText: "Nope" });
+          });
+
+          const exit = yield* Effect.exit(
+            withClient(fetchMock, (http) =>
+              http.requestJson("/odata/v1/Property"),
+            ),
+          );
+          assert.equal(Exit.isFailure(exit), true);
+          if (Exit.isFailure(exit)) {
+            const cause = String(exit.cause);
+            assert.match(cause, new RegExp(tag));
+            assert.match(cause, /body text|Nope|DDF API/);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "honors custom retry policy and emits retry logger calls without waiting",
+    () =>
+      Effect.gen(function* () {
+        const events: Array<DdfLogEvent> = [];
+        let apiCalls = 0;
+        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+          if (String(input) === "https://identity.test/connect/token")
+            return tokenResponse("token-123");
+
+          apiCalls += 1;
+          if (apiCalls === 1) return new Response(null, { status: 500 });
+          return Response.json({ ok: true });
         });
-      }
 
-      return Response.json({ value: [] });
-    }) as typeof fetch;
+        const result = yield* Effect.gen(function* () {
+          const http = yield* DdfHttp;
+          return yield* http.requestJson("/odata/v1/Property");
+        }).pipe(
+          Effect.provide(
+            makeDdfLayer({
+              ...configFor(fetchMock),
+              retryPolicy: {
+                maxRetries: 1,
+                baseDelayMillis: 0,
+                retryableStatuses: [500],
+              },
+              logger: {
+                debug: (event) => events.push(event),
+                warn: (event) => events.push(event),
+              },
+            }),
+          ),
+        );
 
-    await Effect.runPromise(
-      withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
-    );
+        assert.deepEqual(result, { ok: true });
+        assert.equal(apiCalls, 2);
+        assert.deepEqual(
+          events.filter((event) => event.type === "api_retry"),
+          [
+            {
+              type: "api_retry",
+              url: "https://ddf.test/odata/v1/Property",
+              status: 500,
+              attempt: 1,
+              delayMillis: 0,
+            },
+          ],
+        );
+      }),
+  );
 
-    assert.equal(tokenCalls, 2);
-    assert.deepEqual(apiAuthorizations, ["Bearer token-1", "Bearer token-2"]);
-  });
-
-  it("maps common HTTP statuses to typed API errors with response bodies", async () => {
-    const statuses = new Map([
-      [400, "DdfApiBadRequestQueryError"],
-      [401, "DdfApiUnauthorizedAfterRefreshError"],
-      [403, "DdfApiForbiddenError"],
-      [404, "DdfApiNotFoundError"],
-      [408, "DdfApiTimeoutError"],
-      [415, "DdfApiUnsupportedMediaTypeError"],
-      [500, "DdfApiInternalServerError"],
-      [503, "DdfApiRetryableServiceUnavailableError"],
-    ]);
-
-    for (const [status, tag] of statuses) {
-      const fetchMock = (async (input: RequestInfo | URL) => {
+  it.effect("does not retry statuses omitted from a custom retry policy", () =>
+    Effect.gen(function* () {
+      let apiCalls = 0;
+      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
         if (String(input) === "https://identity.test/connect/token")
           return tokenResponse("token-123");
-        return new Response("body text", { status, statusText: "Nope" });
-      }) as typeof fetch;
-
-      const exit = await Effect.runPromiseExit(
-        withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
-      );
-      assert.equal(Exit.isFailure(exit), true);
-      if (Exit.isFailure(exit)) {
-        const cause = String(exit.cause);
-        assert.match(cause, new RegExp(tag));
-        assert.match(cause, /body text|Nope|DDF API/);
-      }
-    }
-  });
-
-  it("honors custom retry policy and emits retry logger calls without waiting", async () => {
-    const events: Array<DdfLogEvent> = [];
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
-
-      apiCalls += 1;
-      if (apiCalls === 1) return new Response(null, { status: 500 });
-      return Response.json({ ok: true });
-    }) as typeof fetch;
-
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const http = yield* DdfHttp;
-        return yield* http.requestJson("/odata/v1/Property");
-      }).pipe(
-        Effect.provide(
-          makeDdfLayer({
-            ...configFor(fetchMock),
-            retryPolicy: {
-              maxRetries: 1,
-              baseDelayMillis: 0,
-              retryableStatuses: [500],
-            },
-            logger: {
-              debug: (event) => events.push(event),
-              warn: (event) => events.push(event),
-            },
-          }),
-        ),
-      ),
-    );
-
-    assert.deepEqual(result, { ok: true });
-    assert.equal(apiCalls, 2);
-    assert.deepEqual(
-      events.filter((event) => event.type === "api_retry"),
-      [
-        {
-          type: "api_retry",
-          url: "https://ddf.test/odata/v1/Property",
-          status: 500,
-          attempt: 1,
-          delayMillis: 0,
-        },
-      ],
-    );
-  });
-
-  it("does not retry statuses omitted from a custom retry policy", async () => {
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
-
-      apiCalls += 1;
-      return new Response("no retry", { status: 503 });
-    }) as typeof fetch;
-
-    const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const http = yield* DdfHttp;
-        return yield* http.requestJson("/odata/v1/Property");
-      }).pipe(
-        Effect.provide(
-          makeDdfLayer({
-            ...configFor(fetchMock),
-            retryPolicy: {
-              maxRetries: 3,
-              baseDelayMillis: 0,
-              retryableStatuses: [408],
-            },
-          }),
-        ),
-      ),
-    );
-
-    assert.equal(Exit.isFailure(exit), true);
-    assert.equal(apiCalls, 1);
-  });
-
-  it("retries bounded 408 and 503 responses", async () => {
-    for (const status of [408, 503]) {
-      let tokenCalls = 0;
-      let apiCalls = 0;
-      const fetchMock = (async (input: RequestInfo | URL) => {
-        if (String(input) === "https://identity.test/connect/token") {
-          tokenCalls += 1;
-          return tokenResponse("token-123");
-        }
 
         apiCalls += 1;
-        if (apiCalls < 3) return new Response(null, { status });
-        return Response.json({ ok: true, status });
-      }) as typeof fetch;
+        return new Response("no retry", { status: 503 });
+      });
 
-      const result = await Effect.runPromise(
-        withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const http = yield* DdfHttp;
+          return yield* http.requestJson("/odata/v1/Property");
+        }).pipe(
+          Effect.provide(
+            makeDdfLayer({
+              ...configFor(fetchMock),
+              retryPolicy: {
+                maxRetries: 3,
+                baseDelayMillis: 0,
+                retryableStatuses: [408],
+              },
+            }),
+          ),
+        ),
       );
 
-      assert.deepEqual(result, { ok: true, status });
-      assert.equal(tokenCalls, 1);
-      assert.equal(apiCalls, 3);
-    }
-  });
+      assert.equal(Exit.isFailure(exit), true);
+      assert.equal(apiCalls, 1);
+    }),
+  );
+
+  it.effect("retries bounded 408 and 503 responses", () =>
+    Effect.gen(function* () {
+      for (const status of [408, 503]) {
+        let tokenCalls = 0;
+        let apiCalls = 0;
+        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+          if (String(input) === "https://identity.test/connect/token") {
+            tokenCalls += 1;
+            return tokenResponse("token-123");
+          }
+
+          apiCalls += 1;
+          if (apiCalls < 3) return new Response(null, { status });
+          return Response.json({ ok: true, status });
+        });
+
+        const result = yield* withClient(fetchMock, (http) =>
+          http.requestJson("/odata/v1/Property"),
+        );
+
+        assert.deepEqual(result, { ok: true, status });
+        assert.equal(tokenCalls, 1);
+        assert.equal(apiCalls, 3);
+      }
+    }),
+  );
 });
