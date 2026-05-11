@@ -1,7 +1,7 @@
 import { DdfConfig } from "@/client";
 import { ddfTokenRequestCount } from "@/metrics";
 import { Duration, Effect, Metric, Redacted, Result, Schema } from "effect";
-import { HttpClient, UrlParams } from "effect/unstable/http";
+import { HttpClient, HttpClientRequest } from "effect/unstable/http";
 import {
   DdfTokenFetchError,
   DdfTokenHttpError,
@@ -38,17 +38,16 @@ export const fetchNewAccessToken = Effect.fn("DdfAuth.fetchNewAccessToken")(
     });
     yield* Metric.update(ddfTokenRequestCount, 1);
 
+    const request = HttpClientRequest.post(identityUrl).pipe(
+      HttpClientRequest.bodyUrlParams({
+        grant_type: "client_credentials",
+        client_id: cfg.clientId,
+        client_secret: secretValue(cfg.clientSecret),
+        scope: "DDFApi_Read",
+      }),
+    );
     const response = yield* client
-      .post(identityUrl, {
-        urlParams: UrlParams.fromInput({
-          values: {
-            grant_type: "client_credentials",
-            client_id: cfg.clientId,
-            client_secret: secretValue(cfg.clientSecret),
-            scope: "DDFApi_Read",
-          },
-        }),
-      })
+      .execute(request)
       .pipe(
         Effect.mapError(
           (cause) => new DdfTokenFetchError({ url: identityUrl, cause }),

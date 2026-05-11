@@ -1,7 +1,16 @@
-import { Cause, DateTime, Effect, Exit, Metric, Option, Schema } from "effect";
+import {
+  Cause,
+  Data,
+  DateTime,
+  Effect,
+  Exit,
+  Metric,
+  Option,
+  Schema,
+} from "effect";
 import type { Success as EffectSuccess } from "effect/Effect";
 import { DdfHttp } from "./client";
-import type { DdfHttpApi } from "./client";
+import type { DdfHttpApi, DdfHttpError } from "./client";
 import {
   getMember,
   getOffice,
@@ -35,7 +44,11 @@ import {
   PropertyReplicationIdentifierResponseSchema,
 } from "./schema/odata";
 import type { ODataListQuery, ReplicationQuery } from "./types";
-import { ddfSyncFailedCount, ddfSyncHydratedCount, ddfSyncPersistedCount } from "./metrics";
+import {
+  ddfSyncFailedCount,
+  ddfSyncHydratedCount,
+  ddfSyncPersistedCount,
+} from "./metrics";
 import { DdfWatermarkStore } from "./watermark";
 
 type SelectQuery = { readonly select?: ReadonlyArray<string> };
@@ -320,7 +333,7 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
     const out: Array<Identifier> = [...first.value];
     let next = first["@odata.nextLink"] ?? null;
 
-    while (next) {
+    while (next !== null) {
       const page = yield* http.requestJson(next, undefined, schema);
       out.push(...page.value);
       next = page["@odata.nextLink"] ?? null;
@@ -342,7 +355,7 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   const errors: Array<SyncRecordError> = [];
   let next = first["@odata.nextLink"] ?? null;
 
-  while (next) {
+  while (next !== null) {
     const pageKey = `page:${next}`;
     const pageExit = yield* Effect.exit(
       http.requestJson(next, undefined, schema),
@@ -405,10 +418,12 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
   },
 );
 
+class RunPersistError extends Data.TaggedError("RunPersistError") {}
+
 const runPersist = Effect.fn("DdfSync.runPersist")(function* (
   resource: SyncResource,
   key: string,
-  persist: Effect.Effect<void, unknown>,
+  persist: Effect.Effect<void, RunPersistError>,
 ) {
   const exit = yield* Effect.exit(persist);
   if (Exit.isSuccess(exit)) return null;
@@ -418,7 +433,7 @@ const runPersist = Effect.fn("DdfSync.runPersist")(function* (
 const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
   resource: SyncResource,
   key: string,
-  hydrate: (key: string) => Effect.Effect<Record, unknown, DdfHttpApi>,
+  hydrate: (key: string) => Effect.Effect<Record, DdfHttpError, DdfHttpApi>,
 ) {
   const exit = yield* Effect.exit(hydrate(key));
   if (Exit.isSuccess(exit)) return { record: exit.value, error: null };
@@ -440,20 +455,22 @@ const syncCounts = (
   failed: errors.length,
 });
 
-const saveWatermarkToService = Effect.fn("DdfSync.saveWatermarkToService")(function* (
-  resource: SyncResource,
-  watermark: string,
-) {
-  const store = yield* Effect.serviceOption(DdfWatermarkStore);
-  if (Option.isSome(store)) yield* store.value.save(resource, watermark);
-});
+const saveWatermarkToService = Effect.fn("DdfSync.saveWatermarkToService")(
+  function* (resource: SyncResource, watermark: string) {
+    const store = yield* Effect.serviceOption(DdfWatermarkStore);
+    if (Option.isSome(store)) yield* store.value.save(resource, watermark);
+  },
+);
 
 const trackSyncMetrics = (counts: SyncCounts) =>
-  Effect.all([
-    Metric.update(ddfSyncHydratedCount, counts.hydrated),
-    Metric.update(ddfSyncPersistedCount, counts.persisted),
-    Metric.update(ddfSyncFailedCount, counts.failed),
-  ], { discard: true });
+  Effect.all(
+    [
+      Metric.update(ddfSyncHydratedCount, counts.hydrated),
+      Metric.update(ddfSyncPersistedCount, counts.persisted),
+      Metric.update(ddfSyncFailedCount, counts.failed),
+    ],
+    { discard: true },
+  );
 
 export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
   function* (options?: PropertySyncOptions) {
@@ -496,7 +513,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       options?.sink?.upsertMedia !== undefined;
 
     for (const { identifier, result } of hydrated) {
-      if (result.error) {
+      if (result.error !== null) {
         errors.push(result.error);
         failedWatermarks.push(identifier.ModificationTimestamp);
         continue;
@@ -656,7 +673,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     successfulWatermarks,
     failedWatermarks,
   );
-  if (nextWatermark) {
+  if (nextWatermark !== null) {
     yield* saveWatermarkToService("Member", nextWatermark);
     if (options?.sink?.saveWatermark) {
       const persistError = yield* runPersist(

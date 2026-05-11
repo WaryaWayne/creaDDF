@@ -1,5 +1,9 @@
 import { Data } from "effect";
-import type { ODataGetQuery, ODataListQuery, ReplicationQuery } from "@/types";
+import type {
+  DdfODataGetQuery,
+  DdfODataListQuery,
+  DdfReplicationQuery,
+} from "./types";
 
 const ODATA_TOP_MAX = 100;
 
@@ -14,28 +18,60 @@ export class DdfInvalidODataQueryError extends Data.TaggedError(
   }
 }
 
+export class DdfUnsupportedODataParameterError extends Data.TaggedError(
+  "DdfUnsupportedODataParameterError",
+)<{
+  readonly option: string;
+  readonly messageText: string;
+}> {
+  override get message() {
+    return this.messageText;
+  }
+}
+
+const unsupportedODataParameter = (option: string) =>
+  new DdfUnsupportedODataParameterError({
+    option,
+    messageText: `DDF OData parameter ${option} is not listed as supported by CREA DDF documentation`,
+  });
+
 const validateODataQuery = (
-  query?: ODataListQuery | ODataGetQuery | ReplicationQuery,
+  query?: DdfODataListQuery | DdfODataGetQuery | DdfReplicationQuery,
 ) => {
-  if (query !== undefined && "top" in query && query.top !== undefined) {
-    if (
-      !Number.isInteger(query.top) ||
-      query.top < 0 ||
-      query.top > ODATA_TOP_MAX
-    ) {
-      throw new DdfInvalidODataQueryError({
-        option: "$top",
-        messageText: `DDF OData $top must be an integer between 0 and ${ODATA_TOP_MAX}`,
-      });
+  if (query !== undefined && "count" in query && query.count !== undefined) {
+    throw unsupportedODataParameter("$count");
+  }
+  if (query !== undefined && "top" in query) {
+    const top = query.top;
+    if (top !== undefined) {
+      if (
+        typeof top !== "number" ||
+        !Number.isInteger(top) ||
+        top < 0 ||
+        top > ODATA_TOP_MAX
+      ) {
+        throw new DdfInvalidODataQueryError({
+          option: "$top",
+          messageText: `DDF OData $top must be an integer between 0 and ${ODATA_TOP_MAX}`,
+        });
+      }
+    }
+  }
+  if (query !== undefined && "skip" in query) {
+    const skip = query.skip;
+    if (skip !== undefined) {
+      if (typeof skip !== "number" || !Number.isInteger(skip) || skip < 0) {
+        throw new DdfInvalidODataQueryError({
+          option: "$skip",
+          messageText: "DDF OData $skip must be a non-negative integer",
+        });
+      }
     }
   }
 };
 
 const odataStringLiteral = (value: string) =>
   `'${value.replaceAll("'", "''")}'`;
-
-const odataDateLiteral = (value: string | Date) =>
-  value instanceof Date ? value.toISOString() : value;
 
 export type ODataPrimitive = string | number | boolean | Date | null;
 
@@ -69,8 +105,6 @@ export const filters = {
     clause: string | ((variable: string) => string),
   ) =>
     `${collection}/any(${variable}: ${typeof clause === "function" ? clause(variable) : clause})`,
-  modifiedAfter: (field: string, dateOrString: Date | string) =>
-    `${field} gt ${odataDateLiteral(dateOrString)}`,
   and: (...clauses: ReadonlyArray<string>) =>
     clauses
       .filter(Boolean)
@@ -84,7 +118,7 @@ export const filters = {
 } as const;
 
 export const encodeODataQuery = (
-  query?: ODataListQuery | ODataGetQuery | ReplicationQuery,
+  query?: DdfODataListQuery | DdfODataGetQuery | DdfReplicationQuery,
 ): string => {
   validateODataQuery(query);
   if (query === undefined) return "";
@@ -96,8 +130,6 @@ export const encodeODataQuery = (
     query.select.length > 0
   )
     p.set("$select", query.select.join(","));
-  if ("count" in query && query.count !== undefined)
-    p.set("$count", String(query.count));
   if (
     "filter" in query &&
     query.filter !== undefined &&
@@ -117,7 +149,7 @@ export const encodeODataQuery = (
     }
   }
 
-  const s = p.toString();
+  const s = p.toString().replaceAll("+", "%20");
   return s.length > 0 ? `?${s}` : "";
 };
 

@@ -1,4 +1,4 @@
-import { Data, Effect } from "effect";
+import { Config, Data, Effect } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { DdfConfig } from "./client";
 
@@ -57,23 +57,15 @@ export const buildAnalyticsLogEventUrl = (
   return url.toString();
 };
 
-export const logAnalyticsEvent = Effect.fn("DdfAnalytics.logAnalyticsEvent")(
-  function* (input: AnalyticsLogEventInput) {
-    const cfg = yield* DdfConfig;
-    const url = buildAnalyticsLogEventUrl(input, cfg.analyticsUrl);
-
-    yield* Effect.logDebug("CREA analytics request", { url });
-    cfg.logger?.debug?.({ type: "api_request", url });
-    if (cfg.fetch) {
-      yield* Effect.tryPromise({
-        try: () => cfg.fetch!(url, { method: "GET" }),
-        catch: (cause) => new DdfAnalyticsFetchError({ url, cause }),
-      });
-    } else {
-      const client = yield* HttpClient.HttpClient;
-      yield* client.get(url).pipe(
-        Effect.mapError((cause) => new DdfAnalyticsFetchError({ url, cause })),
-      );
-    }
-  },
-);
+export const logAnalyticsEvent = Effect.fn("logAnalyticsEvent")(function* (
+  input: AnalyticsLogEventInput,
+) {
+  const client = yield* HttpClient.HttpClient;
+  const cfg = yield* DdfConfig;
+  const url = buildAnalyticsLogEventUrl(input, cfg.analyticsUrl);
+  return yield* client
+    .get(url)
+    .pipe(
+      Effect.mapError((cause) => new DdfAnalyticsFetchError({ url, cause })),
+    );
+});

@@ -5,6 +5,8 @@ import {
   ddfAuthCacheMissCount,
   ddfTokenRefreshCount,
 } from "@/metrics";
+import { FetchHttpClient } from "effect/unstable/http";
+import { DdfClientConfig } from "@/client";
 
 export class DdfAuthService extends Context.Service<DdfAuthService>()(
   "crea-ddf-effect-sdk/client/auth/Service/DdfAuthService",
@@ -37,5 +39,13 @@ export class DdfAuthService extends Context.Service<DdfAuthService>()(
     }),
   },
 ) {
-  static readonly layer = Layer.effect(this, this.make);
+  static readonly layer = Layer.effect(this, this.make).pipe(
+    Layer.merge(FetchHttpClient.layer),
+  );
 }
+
+const wow = Effect.gen(function* () {
+  const wow = yield* DdfAuthService;
+  const token = yield* wow.getAccessToken({ forceRefresh: false });
+  
+});

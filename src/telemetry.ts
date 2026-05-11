@@ -2,6 +2,12 @@ import { Layer } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Otlp from "effect/unstable/observability/Otlp";
 
+import {
+  layer,
+  layerJson,
+  layerProtobuf
+} from "effect/unstable/observability/Otlp";
+
 export interface DdfOtlpTelemetryOptions {
   readonly baseUrl: string;
   readonly serviceName?: string;

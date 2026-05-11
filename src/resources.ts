@@ -46,7 +46,7 @@ const partialStruct = <Fields extends Schema.Struct.Fields>(
       Object.fromEntries(
         Object.entries(fields).map(([key, field]) => [
           key,
-          Schema.optionalKey(field as Schema.Top),
+          Schema.optionalKey(field),
         ]),
       ) as { readonly [Key in keyof Fields]: Schema.optionalKey<Fields[Key]> },
   );
@@ -163,17 +163,20 @@ export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
-  return yield* http.getOData(
-    "/odata/v1/Property",
-    propertyKey,
-    query,
-    schemaForSelect(
+  return yield* http
+    .getOData(
+      "/odata/v1/Property",
+      propertyKey,
       query,
-      SelectedPropertyListingSchema,
-      SinglePropertyListingResponseSchema,
-    ),
-  );
+      schemaForSelect(
+        query,
+        SelectedPropertyListingSchema,
+        SinglePropertyListingResponseSchema,
+      ),
+    )
+    .pipe(Effect.provide(DdfHttp));
 });
+
 export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(
   function* (query?: ReplicationQuery) {
     const http = yield* DdfHttp;
@@ -334,9 +337,10 @@ export const createLead = Effect.fn("DdfLead.createLead")(function* (
   options?: { suppressEmail?: boolean },
 ) {
   const http = yield* DdfHttp;
-  const path = options?.suppressEmail
-    ? "/v1/Lead/CreateLead?SuppressEmail=true"
-    : "/v1/Lead/CreateLead";
+  const path =
+    options?.suppressEmail !== undefined
+      ? "/v1/Lead/CreateLead?SuppressEmail=true"
+      : "/v1/Lead/CreateLead";
   const body = yield* encodeLeadInputJson(input);
 
   return yield* http.requestJson(

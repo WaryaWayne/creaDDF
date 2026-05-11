@@ -1,20 +1,17 @@
 import { Data } from "effect";
-import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type {
   DdfTokenFetchError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
 } from "../auth/errors";
-import type { DdfInvalidODataQueryError } from "./odata";
+import type {
+  DdfInvalidODataQueryError,
+  DdfUnsupportedODataParameterError,
+} from "./odata";
 
-const formatHttpStatus = (status: number, statusText: string) => {
-  const text = statusText.trim();
-  return text.length > 0 ? `${status} ${text}` : String(status);
-};
-
-export class DdfApiTransportFetchFailure extends Data.TaggedError(
-  "DdfApiTransportFetchFailure",
+export class DdfApiTransportError extends Data.TaggedError(
+  "DdfApiTransportError",
 )<{
   readonly url: string;
   readonly cause: unknown;
@@ -27,14 +24,10 @@ export class DdfApiTransportFetchFailure extends Data.TaggedError(
 export class DdfApiHttpError extends Data.TaggedError("DdfApiHttpError")<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
-    return `DDF API request failed with HTTP ${formatHttpStatus(
-      this.status,
-      this.statusText,
-    )} from ${this.url}`;
+    return `DDF API request failed with HTTP ${this.status} from ${this.url}`;
   }
 }
 
@@ -43,11 +36,10 @@ export class DdfApiBadRequestQueryError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
-    return `DDF API rejected the request/query with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+    return `DDF API rejected the request/query with HTTP ${this.status} from ${this.url}`;
   }
 }
 
@@ -56,7 +48,6 @@ export class DdfApiUnauthorizedAfterRefreshError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
@@ -69,11 +60,10 @@ export class DdfApiForbiddenError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
-    return `DDF API forbids this request with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+    return `DDF API forbids this request with HTTP ${this.status} from ${this.url}`;
   }
 }
 
@@ -82,7 +72,6 @@ export class DdfApiNotFoundError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
@@ -93,11 +82,10 @@ export class DdfApiNotFoundError extends Data.TaggedError(
 export class DdfApiTimeoutError extends Data.TaggedError("DdfApiTimeoutError")<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
-    return `DDF API request timed out with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+    return `DDF API request timed out with HTTP ${this.status} from ${this.url}`;
   }
 }
 
@@ -106,20 +94,18 @@ export class DdfApiUnsupportedMediaTypeError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
-    return `DDF API rejected the media type with HTTP ${formatHttpStatus(this.status, this.statusText)} from ${this.url}`;
+    return `DDF API rejected the media type with HTTP ${this.status} from ${this.url}`;
   }
 }
 
-export class DdfApiRetryableServiceUnavailableError extends Data.TaggedError(
-  "DdfApiRetryableServiceUnavailableError",
+export class DdfApiServiceUnavailableError extends Data.TaggedError(
+  "DdfApiServiceUnavailableError",
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
@@ -132,7 +118,6 @@ export class DdfApiInternalServerError extends Data.TaggedError(
 )<{
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }> {
   override get message() {
@@ -162,10 +147,6 @@ export class DdfApiResponseSchemaDecodeError extends Data.TaggedError(
   }
 }
 
-export class RetryableApiStatus extends Data.TaggedError("RetryableApiStatus")<{
-  readonly response: HttpClientResponse.HttpClientResponse;
-}> {}
-
 export type DdfApiMappedHttpError =
   | DdfApiHttpError
   | DdfApiBadRequestQueryError
@@ -174,7 +155,7 @@ export type DdfApiMappedHttpError =
   | DdfApiNotFoundError
   | DdfApiTimeoutError
   | DdfApiUnsupportedMediaTypeError
-  | DdfApiRetryableServiceUnavailableError
+  | DdfApiServiceUnavailableError
   | DdfApiInternalServerError;
 
 export type DdfAuthError =
@@ -185,16 +166,16 @@ export type DdfAuthError =
 
 export type DdfHttpError =
   | DdfAuthError
-  | DdfApiTransportFetchFailure
+  | DdfApiTransportError
   | DdfApiMappedHttpError
   | DdfApiJsonParseError
   | DdfApiResponseSchemaDecodeError
-  | DdfInvalidODataQueryError;
+  | DdfInvalidODataQueryError
+  | DdfUnsupportedODataParameterError;
 
 export const statusError = (args: {
   readonly url: string;
   readonly status: number;
-  readonly statusText: string;
   readonly bodyText?: string;
 }): DdfApiMappedHttpError => {
   switch (args.status) {
@@ -213,7 +194,7 @@ export const statusError = (args: {
     case 500:
       return new DdfApiInternalServerError(args);
     case 503:
-      return new DdfApiRetryableServiceUnavailableError(args);
+      return new DdfApiServiceUnavailableError(args);
     default:
       return new DdfApiHttpError(args);
   }

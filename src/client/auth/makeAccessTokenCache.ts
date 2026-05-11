@@ -9,6 +9,5 @@ export const makeAccessTokenCache = Cache.makeWith(
       if (exit._tag === "Failure") return Duration.zero;
       return Duration.millis(exit.value.ttlMillis);
     },
-    requireServicesAt: "lookup",
   },
 );

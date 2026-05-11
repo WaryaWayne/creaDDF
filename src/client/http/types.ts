@@ -1,13 +1,30 @@
 import type { Effect, Schema } from "effect";
-import type { ODataGetQuery, ODataListQuery, ReplicationQuery } from "@/types";
 import type { DdfHttpError } from "./errors";
 
 export type DdfResponseSchema<T> = Schema.Decoder<T, never>;
 
+export interface DdfODataListQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+  readonly filter?: string;
+  readonly top?: number;
+  readonly skip?: number;
+  readonly orderby?: string | ReadonlyArray<string>;
+}
+
+export interface DdfODataGetQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+}
+
+export interface DdfReplicationQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+  readonly filter?: string;
+  readonly orderby?: string | ReadonlyArray<string>;
+}
+
 export interface DdfRequestOptions {
   readonly method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   readonly headers?: Readonly<Record<string, string>>;
-  readonly body?: BodyInit | null;
+  readonly json?: unknown;
 }
 
 export interface DdfHttpApi {
@@ -18,18 +35,18 @@ export interface DdfHttpApi {
   ) => Effect.Effect<T, DdfHttpError>;
   listOData: <T = unknown>(
     path: string,
-    query?: ODataListQuery,
+    query?: DdfODataListQuery,
     schema?: DdfResponseSchema<T>,
   ) => Effect.Effect<T, DdfHttpError>;
   getOData: <T = unknown>(
     path: string,
     key: string | number,
-    query?: ODataGetQuery,
+    query?: DdfODataGetQuery,
     schema?: DdfResponseSchema<T>,
   ) => Effect.Effect<T, DdfHttpError>;
   replicateIdentifiers: <T = unknown>(
     path: string,
-    query?: ReplicationQuery,
+    query?: DdfReplicationQuery,
     schema?: DdfResponseSchema<T>,
   ) => Effect.Effect<T, DdfHttpError>;
   paginateOData: (first: string) => Effect.Effect<Array<unknown>, DdfHttpError>;

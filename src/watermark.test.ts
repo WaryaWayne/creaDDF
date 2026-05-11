@@ -1,16 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Effect, Metric } from "effect";
-import {
-  DdfWatermarkStore,
-  DdfWatermarkStoreLive,
-} from "./watermark";
+import { DdfWatermarkStore } from "./watermark";
 import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "./metrics";
 
 describe("watermark persistence", () => {
   it("loads and saves watermarks through the Effect KeyValueStore service", async () => {
-    const beforeLoads = await Effect.runPromise(Metric.value(ddfWatermarkLoadCount));
-    const beforeSaves = await Effect.runPromise(Metric.value(ddfWatermarkSaveCount));
+    const beforeLoads = await Effect.runPromise(
+      Metric.value(ddfWatermarkLoadCount),
+    );
+    const beforeSaves = await Effect.runPromise(
+      Metric.value(ddfWatermarkSaveCount),
+    );
 
     const result = await Effect.runPromise(
       Effect.gen(function* () {
@@ -20,11 +21,15 @@ describe("watermark persistence", () => {
         const saved = yield* store.load("Property");
         const member = yield* store.load("Member");
         return { empty, saved, member };
-      }).pipe(Effect.provide(DdfWatermarkStoreLive)),
+      }).pipe(Effect.provide(DdfWatermarkStore.layerMemory)),
     );
 
-    const afterLoads = await Effect.runPromise(Metric.value(ddfWatermarkLoadCount));
-    const afterSaves = await Effect.runPromise(Metric.value(ddfWatermarkSaveCount));
+    const afterLoads = await Effect.runPromise(
+      Metric.value(ddfWatermarkLoadCount),
+    );
+    const afterSaves = await Effect.runPromise(
+      Metric.value(ddfWatermarkSaveCount),
+    );
 
     assert.deepEqual(result, {
       empty: null,
