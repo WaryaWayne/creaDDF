@@ -18,6 +18,7 @@ export interface DdfODataGetQuery<Field extends string = string> {
 
 export interface DdfReplicationQuery<Field extends string = string> {
   readonly select?: ReadonlyArray<Field>;
+  readonly count?: boolean;
   readonly filter?: string;
   readonly orderby?: string | ReadonlyArray<string>;
 }

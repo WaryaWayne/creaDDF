@@ -60,4 +60,7 @@ export const ddfConfigFromEnv = Config.all({
   identityUrl: Config.string("CREA_DDF_AUTH_URL").pipe(
     Config.withDefault("https://identity.crea.ca/connect/token"),
   ),
+  analyticsUrl: Config.string("CREA_ANALYTICS_URL").pipe(
+    Config.withDefault(undefined),
+  ),
 });

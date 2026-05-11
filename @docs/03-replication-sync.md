@@ -6,17 +6,17 @@ Replication is the right path for local database sync. The docs say normal pagin
 
 Property:
 
-- `/odata/v1/Property/PropertyReplication()`
+- `/odata/v1/Property/PropertyReplication`
 - `/odata/v1/Property/PropertyReplication(DestinationId={DestinationId})`
 
 Member:
 
-- `/odata/v1/Member/MemberReplication()`
+- `/odata/v1/Member/MemberReplication`
 - `/odata/v1/Member/MemberReplication(DestinationId={DestinationId})`
 
 Office:
 
-- `/odata/v1/Office/OfficeReplication()`
+- `/odata/v1/Office/OfficeReplication`
 - `/odata/v1/Office/OfficeReplication(DestinationId={DestinationId})`
 
 No OpenHouse replication endpoint was exposed in the OpenAPI path list.
@@ -27,26 +27,26 @@ Replication returns identifiers and modification timestamps only:
 
 ```ts
 type PropertyIdentifier = {
-  ListingKey?: string | null
-  ModificationTimestamp?: string | null
-}
+  ListingKey?: string | null;
+  ModificationTimestamp?: string | null;
+};
 
 type MemberIdentifier = {
-  MemberKey?: string | null
-  ModificationTimestamp?: string | null
-}
+  MemberKey?: string | null;
+  ModificationTimestamp?: string | null;
+};
 
 type OfficeIdentifier = {
-  OfficeKey?: string | null
-  ModificationTimestamp?: string | null
-}
+  OfficeKey?: string | null;
+  ModificationTimestamp?: string | null;
+};
 ```
 
 Hydrate changed records by calling the main single-record endpoint for each key.
 
 ## Initial Load
 
-1. Read the full active identifier set from `PropertyReplication()`.
+1. Read the full active identifier set from `PropertyReplication`.
 2. Batch hydrate each `ListingKey` from `/odata/v1/Property/{PropertyKey}`.
 3. Decode the hydrated property with Effect Schema.
 4. Normalize embedded `Rooms` and `Media` into linked records.
@@ -60,7 +60,7 @@ Repeat the same pattern for members if the app needs agent data.
 Use a timestamp filter on replication:
 
 ```txt
-/odata/v1/Property/PropertyReplication()?$filter=ModificationTimestamp gt 2024-01-25T00:00:00.00Z
+/odata/v1/Property/PropertyReplication?$filter=ModificationTimestamp gt 2024-01-25T00:00:00.00Z
 ```
 
 Then hydrate each returned key from the main endpoint.
@@ -84,8 +84,8 @@ syncProperties({
   onProperty: async (property) => {},
   onRoom: async (room, property) => {},
   onMedia: async (media, owner) => {},
-  onWatermark: async (watermark) => {}
-})
+  onWatermark: async (watermark) => {},
+});
 ```
 
 All hooks should be optional. Without hooks, the same function should still return decoded records and a summary so callers can save data themselves.
@@ -113,8 +113,8 @@ syncProperties({
   mode: "incremental",
   since: lastWatermark,
   destinationId,
-  concurrency: 5
-})
+  concurrency: 5,
+});
 ```
 
 The caller owns cron/timer scheduling. The SDK owns safe request flow, token renewal, pagination, hydration, validation, and sync result reporting.
@@ -127,12 +127,23 @@ The SDK should expose a persistence boundary that can be implemented by the call
 
 ```ts
 type PropertySyncSink = {
-  upsertProperty?: (property: PropertyListing) => Effect.Effect<void, unknown>
-  upsertRoom?: (room: PropertyRoom, property: PropertyListing) => Effect.Effect<void, unknown>
-  upsertMedia?: (media: Media, owner: SyncOwner) => Effect.Effect<void, unknown>
-  saveWatermark?: (resource: SyncResource, watermark: string) => Effect.Effect<void, unknown>
-  markMissingPropertiesInactive?: (keys: ReadonlyArray<string>) => Effect.Effect<void, unknown>
-}
+  upsertProperty?: (property: PropertyListing) => Effect.Effect<void, unknown>;
+  upsertRoom?: (
+    room: PropertyRoom,
+    property: PropertyListing,
+  ) => Effect.Effect<void, unknown>;
+  upsertMedia?: (
+    media: Media,
+    owner: SyncOwner,
+  ) => Effect.Effect<void, unknown>;
+  saveWatermark?: (
+    resource: SyncResource,
+    watermark: string,
+  ) => Effect.Effect<void, unknown>;
+  markMissingPropertiesInactive?: (
+    keys: ReadonlyArray<string>,
+  ) => Effect.Effect<void, unknown>;
+};
 ```
 
 The app using this library can implement that sink with Drizzle ORM. Once the data is in the app database, the app owns querying and cross-linking.

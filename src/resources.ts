@@ -31,7 +31,9 @@ const replicationPath = (
   replicationName: string,
   destinationId?: number,
 ) =>
-  `/odata/v1/${resource}/${replicationName}(${destinationId === undefined ? "" : `DestinationId=${destinationId}`})`;
+  destinationId === undefined
+    ? `/odata/v1/${resource}/${replicationName}`
+    : `/odata/v1/${resource}/${replicationName}(DestinationId=${destinationId})`;
 
 type SelectQuery = { readonly select?: ReadonlyArray<string> };
 

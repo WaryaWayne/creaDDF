@@ -1,9 +1,11 @@
 import { assert, describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, Exit, Layer } from "effect";
+import { ConfigProvider, DateTime, Effect, Exit, Layer } from "effect";
 import {
   DdfAuth,
   DdfConfig,
   DdfHttp,
+  ddfConfigFromEnv,
+  makeDdfLayerFromEnv,
   type DdfLogEvent,
   DdfInvalidODataQueryError,
   encodeODataQuery,
@@ -130,6 +132,60 @@ describe("client", () => {
       DdfInvalidODataQueryError,
     );
   });
+
+  it.effect("keeps documented replication query options on direct HTTP calls", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+
+        if (url === "https://identity.test/connect/token") {
+          return tokenResponse("replication-token");
+        }
+
+        assert.equal(
+          url,
+          "https://ddf.test/odata/v1/Property/PropertyReplication?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp+gt+2024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp+desc",
+        );
+        return Response.json({ value: [] });
+      });
+
+      const result = yield* withClient(httpHandler, (http) =>
+        http.replicateIdentifiers("/odata/v1/Property/PropertyReplication", {
+          select: ["ListingKey", "ModificationTimestamp"],
+          count: true,
+          filter: "ModificationTimestamp gt 2024-01-25T00:00:00.00Z",
+          orderby: "ModificationTimestamp desc",
+        }),
+      );
+
+      assert.deepEqual(result, { value: [] });
+    }),
+  );
+
+  it.effect("loads analyticsUrl from CREA_ANALYTICS_URL for env layers", () =>
+    Effect.gen(function* () {
+      const provider = ConfigProvider.fromUnknown({
+        CREA_DDF_CLIENT_ID: "env-client-id",
+        CREA_DDF_CLIENT_SECRET: "env-client-secret",
+        CREA_ANALYTICS_URL: "https://analytics.env.test/log",
+      });
+
+      const parsedConfig = yield* ddfConfigFromEnv.parse(provider);
+      assert.equal(
+        parsedConfig.analyticsUrl,
+        "https://analytics.env.test/log",
+      );
+
+      const layerConfig = yield* Effect.gen(function* () {
+        return yield* DdfConfig;
+      }).pipe(
+        Effect.provide(makeDdfLayerFromEnv),
+        Effect.provideService(ConfigProvider.ConfigProvider, provider),
+      );
+
+      assert.equal(layerConfig.analyticsUrl, "https://analytics.env.test/log");
+    }),
+  );
 
   it("builds ergonomic OData filters for documented operators and functions", () => {
     const date = DateTime.toDateUtc(

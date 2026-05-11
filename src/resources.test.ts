@@ -567,15 +567,15 @@ describe("replication resource paths", () => {
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(replicateProperties()),
-        "/odata/v1/Property/PropertyReplication()?%24orderby=ModificationTimestamp+asc%2CListingKey+asc",
+        "/odata/v1/Property/PropertyReplication?%24orderby=ModificationTimestamp+asc%2CListingKey+asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateMembers()),
-        "/odata/v1/Member/MemberReplication()?%24orderby=ModificationTimestamp+asc%2CMemberKey+asc",
+        "/odata/v1/Member/MemberReplication?%24orderby=ModificationTimestamp+asc%2CMemberKey+asc",
       );
       assert.equal(
         yield* requestedUrlFor(replicateOffices()),
-        "/odata/v1/Office/OfficeReplication()?%24orderby=ModificationTimestamp+asc%2COfficeKey+asc",
+        "/odata/v1/Office/OfficeReplication?%24orderby=ModificationTimestamp+asc%2COfficeKey+asc",
       );
     }),
   );
