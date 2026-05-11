@@ -1,18 +1,46 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   buildAnalyticsLogEventUrl,
   DEFAULT_CREA_ANALYTICS_URL,
   logAnalyticsEvent,
 } from "./analytics";
-import { makeDdfLayer } from "./client";
+import { DdfConfig } from "./client";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
-const fetchMockFrom =
-  (
-    handler: (input: RequestInfo | URL, init?: RequestInit) => Response,
-  ): typeof fetch =>
-  (input, init) =>
-    Promise.resolve(handler(input, init));
+interface MockRequestOptions {
+  readonly method: string;
+  readonly headers: Headers;
+}
+
+type HttpHandler = (url: string, init: MockRequestOptions) => Response;
+
+const nativeClientFrom = (handler: HttpHandler): HttpClient.HttpClient =>
+  HttpClient.make((request, url) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        handler(url.toString(), {
+          method: request.method,
+          headers: new Headers(request.headers),
+        }),
+      ),
+    ),
+  );
+
+const layerFor = (handler: HttpHandler) =>
+  Layer.mergeAll(
+    DdfConfig.layer({
+      clientId: "client-id",
+      clientSecret: "super-secret-client-secret",
+      analyticsUrl: "https://analytics.override.test/log",
+      logger: { debug: (event) => debugEvents.push(event) },
+    }),
+    Layer.succeed(HttpClient.HttpClient, nativeClientFrom(handler)),
+  );
+
+const debugEvents: Array<unknown> = [];
 
 const baseInput = {
   ListingID: 12830763,
@@ -67,31 +95,19 @@ describe("analytics", () => {
     () =>
       Effect.gen(function* () {
         let requestedUrl = "";
-        let requestedInit: RequestInit | undefined;
-        const debugEvents: Array<unknown> = [];
-        const fetchMock = fetchMockFrom(
-          (input: RequestInfo | URL, init?: RequestInit) => {
-            requestedUrl = String(input);
-            requestedInit = init;
-            return new Response(null, { status: 204 });
-          },
-        );
+        let requestedInit: MockRequestOptions | undefined;
+        debugEvents.length = 0;
+        const httpHandler: HttpHandler = (input, init) => {
+          requestedUrl = String(input);
+          requestedInit = init;
+          return new Response(null, { status: 204 });
+        };
 
         yield* logAnalyticsEvent({
           ...baseInput,
           EventType: "Click",
           ReferralURL: "https://example.test/listing/12830763",
-        }).pipe(
-          Effect.provide(
-            makeDdfLayer({
-              clientId: "client-id",
-              clientSecret: "super-secret-client-secret",
-              analyticsUrl: "https://analytics.override.test/log",
-              fetch: fetchMock,
-              logger: { debug: (event) => debugEvents.push(event) },
-            }),
-          ),
-        );
+        }).pipe(Effect.provide(layerFor(httpHandler)));
 
         const url = new URL(requestedUrl);
         assert.equal(
@@ -105,7 +121,7 @@ describe("analytics", () => {
           false,
         );
         assert.equal(
-          JSON.stringify(debugEvents).includes("super-secret"),
+          debugEvents.some((event) => String(event).includes("super-secret")),
           false,
         );
       }),

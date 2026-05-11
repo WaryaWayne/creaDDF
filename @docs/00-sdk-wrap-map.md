@@ -8,7 +8,7 @@ Do not half-bake the method surface. If the local docs/OpenAPI expose a resource
 
 Implement these before resource wrappers:
 
-- `createDdfClient(config)` - accepts `clientId`, `clientSecret`, optional `baseUrl`, optional `identityUrl`, fetch implementation, logging, retry policy, and clock.
+- `createDdfClient(config)` - accepts `clientId`, `clientSecret`, optional `baseUrl`, optional `identityUrl`, logging, retry policy, and clock.
 - `getAccessToken()` - POST client-credentials form data to `https://identity.crea.ca/connect/token`.
 - `withBearerToken(request)` - attaches `Authorization: Bearer <access_token>`.
 - `requestJson<T>(path, options)` - handles JSON parsing, API errors, and schema decoding.
@@ -23,7 +23,7 @@ This package should be a helper library, not an app, database schema owner, or s
 
 The SDK should own:
 
-- Auth token fetching, caching, and proactive renewal.
+- Auth token acquisition, caching, and proactive renewal.
 - HTTP request construction and retry behavior.
 - OData query encoding.
 - Pagination through `@odata.nextLink`.
@@ -55,33 +55,33 @@ Use one shared query model for list endpoints:
 
 ```ts
 type ODataListQuery<Field extends string = string> = {
-  select?: Field[]
-  count?: boolean
-  filter?: string
-  top?: number
-  skip?: number
-  orderby?: string | string[]
-}
+  select?: Field[];
+  count?: boolean;
+  filter?: string;
+  top?: number;
+  skip?: number;
+  orderby?: string | string[];
+};
 ```
 
 Use a narrower query for single record lookups:
 
 ```ts
 type ODataGetQuery<Field extends string = string> = {
-  select?: Field[]
-}
+  select?: Field[];
+};
 ```
 
 Replication supports no `$top` or `$skip` in the published OpenAPI parameters, so keep it separate:
 
 ```ts
 type ReplicationQuery<Field extends string = string> = {
-  destinationId?: number
-  select?: Field[]
-  count?: boolean
-  filter?: string
-  orderby?: string | string[]
-}
+  destinationId?: number;
+  select?: Field[];
+  count?: boolean;
+  filter?: string;
+  orderby?: string | string[];
+};
 ```
 
 Avoid replacing the generic OData surface with hundreds of brittle one-off search methods. Build the generic query surface thoroughly, then add helpers for common predicates.

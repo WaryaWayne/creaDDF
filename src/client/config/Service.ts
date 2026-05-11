@@ -42,8 +42,6 @@ export interface DdfClientConfig {
   readonly retryPolicy?: DdfRetryPolicy;
   readonly tokenExpiryBuffer?: Duration.Input;
   readonly logger?: DdfLogger;
-  /** Optional test/edge override for the Effect FetchHttpClient service. */
-  readonly fetch?: typeof fetch;
 }
 
 export class DdfConfig extends Context.Service<DdfConfig, DdfClientConfig>()(

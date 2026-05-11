@@ -14,56 +14,9 @@ export * from "./client/http/odata";
 export * from "./client/http/Service";
 export * from "./client/http/types";
 
-const fetchLayerFor = (config: DdfClientConfig) => {
-  const fetchOverride = config.fetch;
-  if (fetchOverride === undefined) return Layer.empty;
-
-  return Layer.succeed(FetchHttpClient.Fetch, ((input, init) => {
-    if (input instanceof Request) {
-      const headers = new Headers(input.headers);
-      if (input.method === "GET" || input.method === "HEAD") {
-        return fetchOverride(input.url, {
-          method: input.method,
-          headers,
-          body: undefined,
-        });
-      }
-
-      return input
-        .clone()
-        .text()
-        .then((text) => {
-          const contentType = headers.get("content-type") ?? "";
-          const body = contentType.includes("application/x-www-form-urlencoded")
-            ? new URLSearchParams(text)
-            : text;
-          return fetchOverride(input.url, {
-            method: input.method,
-            headers,
-            body,
-          });
-        });
-    }
-
-    const headers = new Headers(init?.headers);
-    let body = init?.body;
-    if (body instanceof Uint8Array) {
-      const text = new TextDecoder().decode(body);
-      const contentType = headers.get("content-type") ?? "";
-      body =
-        contentType.includes("application/x-www-form-urlencoded") ||
-        text.includes("grant_type=client_credentials")
-          ? new URLSearchParams(text)
-          : text;
-    }
-    return fetchOverride(input, { ...init, headers, body });
-  }) as typeof fetch);
-};
-
 export const makeDdfLayer = (config: DdfClientConfig) => {
   const configLayer = DdfConfig.layer(config);
-  const fetchLayer = fetchLayerFor(config);
-  const nativeHttpLayer = FetchHttpClient.layer.pipe(Layer.provide(fetchLayer));
+  const nativeHttpLayer = FetchHttpClient.layer;
   const baseLayer = Layer.mergeAll(configLayer, nativeHttpLayer);
   const authLayer = DdfAuth.layer.pipe(Layer.provide(baseLayer));
   const httpLayer = DdfHttp.layer.pipe(

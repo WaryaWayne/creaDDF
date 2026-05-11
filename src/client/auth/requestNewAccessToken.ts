@@ -3,7 +3,7 @@ import { ddfTokenRequestCount } from "@/metrics";
 import { Duration, Effect, Metric, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
 import {
-  DdfTokenFetchError,
+  DdfTokenTransportError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
@@ -19,7 +19,7 @@ const TokenResponseSchema = Schema.Struct({
 const secretValue = (secret: string | Redacted.Redacted<string>) =>
   typeof secret === "string" ? secret : Redacted.value(secret);
 
-export const fetchNewAccessToken = Effect.fn("DdfAuth.fetchNewAccessToken")(
+export const requestNewAccessToken = Effect.fn("DdfAuth.requestNewAccessToken")(
   function* () {
     const cfg = yield* DdfConfig;
     const client = yield* HttpClient.HttpClient;
@@ -51,7 +51,7 @@ export const fetchNewAccessToken = Effect.fn("DdfAuth.fetchNewAccessToken")(
       })
       .pipe(
         Effect.mapError(
-          (cause) => new DdfTokenFetchError({ url: identityUrl, cause }),
+          (cause) => new DdfTokenTransportError({ url: identityUrl, cause }),
         ),
       );
 

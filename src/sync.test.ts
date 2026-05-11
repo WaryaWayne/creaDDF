@@ -5,7 +5,11 @@ import {
   DdfApiResponseSchemaDecodeError,
   DdfHttp,
 } from "./client";
-import type { DdfHttpApi, DdfResponseSchema } from "./client";
+import type {
+  DdfHttpApi,
+  DdfRequestOptions,
+  DdfResponseSchema,
+} from "./client";
 import {
   diffLocalKeysAgainstMasterList,
   getMemberMasterList,
@@ -875,7 +879,7 @@ describe("syncOpenHouses", () => {
             }),
           requestJson: <T = unknown>(
             _path: string,
-            _init?: RequestInit,
+            _init?: DdfRequestOptions,
             schema?: DdfResponseSchema<T>,
           ) => {
             const payload = { value: [{ OpenHouseKey: 456 }] };
@@ -929,7 +933,7 @@ describe("syncOpenHouses", () => {
           },
           requestJson: <T = unknown>(
             path: string,
-            _init?: RequestInit,
+            _init?: DdfRequestOptions,
             schema?: DdfResponseSchema<T>,
           ) => {
             paths.push(path);

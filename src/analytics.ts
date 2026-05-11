@@ -18,14 +18,14 @@ export interface AnalyticsLogEventInput {
   readonly LanguageID?: AnalyticsLanguageID;
 }
 
-export class DdfAnalyticsFetchError extends Data.TaggedError(
-  "DdfAnalyticsFetchError",
+export class DdfAnalyticsTransportError extends Data.TaggedError(
+  "DdfAnalyticsTransportError",
 )<{
   readonly url: string;
   readonly cause: unknown;
 }> {
   override get message() {
-    return `CREA analytics event failed before receiving a response from ${this.url}`;
+    return `CREA analytics event transport failed before receiving a response from ${this.url}`;
   }
 }
 
@@ -66,6 +66,8 @@ export const logAnalyticsEvent = Effect.fn("logAnalyticsEvent")(function* (
   return yield* client
     .get(url)
     .pipe(
-      Effect.mapError((cause) => new DdfAnalyticsFetchError({ url, cause })),
+      Effect.mapError(
+        (cause) => new DdfAnalyticsTransportError({ url, cause }),
+      ),
     );
 });

@@ -1,39 +1,89 @@
 import { assert, describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, Exit } from "effect";
+import { DateTime, Effect, Exit, Layer } from "effect";
 import {
+  DdfAuth,
+  DdfConfig,
   DdfHttp,
   type DdfLogEvent,
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
-  makeDdfLayer,
 } from "./client";
-import type { DdfHttpApi } from "./client";
+import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
-const configFor = (fetchMock: typeof fetch) => ({
+interface MockRequestOptions {
+  readonly method: string;
+  readonly headers: Headers;
+  readonly body?: string | URLSearchParams;
+}
+
+type HttpHandler = (url: string, init: MockRequestOptions) => Response;
+
+const configFor = (
+  overrides: Partial<DdfClientConfig> = {},
+): DdfClientConfig => ({
   clientId: "client-id",
   clientSecret: "client-secret",
   identityUrl: "https://identity.test/connect/token",
   baseUrl: "https://ddf.test",
-  fetch: fetchMock,
   retryPolicy: { baseDelayMillis: 0 },
+  ...overrides,
 });
 
+const bodyFromRequest = (request: HttpClientRequest.HttpClientRequest) => {
+  if (request.body._tag !== "Uint8Array") return undefined;
+  const text = new TextDecoder().decode(request.body.body);
+  const contentType = request.body.contentType;
+  return contentType.includes("application/x-www-form-urlencoded")
+    ? new URLSearchParams(text)
+    : text;
+};
+
+const nativeClientFrom = (handler: HttpHandler): HttpClient.HttpClient =>
+  HttpClient.make((request, url) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        handler(url.toString(), {
+          method: request.method,
+          headers: new Headers(request.headers),
+          body: bodyFromRequest(request),
+        }),
+      ),
+    ),
+  );
+
+const layerFor = (
+  handler: HttpHandler,
+  overrides: Partial<DdfClientConfig> = {},
+) => {
+  const configLayer = DdfConfig.layer(configFor(overrides));
+  const nativeHttpLayer = Layer.succeed(
+    HttpClient.HttpClient,
+    nativeClientFrom(handler),
+  );
+  const baseLayer = Layer.mergeAll(configLayer, nativeHttpLayer);
+  const authLayer = DdfAuth.layer.pipe(Layer.provide(baseLayer));
+  const httpLayer = DdfHttp.layer.pipe(
+    Layer.provide(Layer.mergeAll(baseLayer, authLayer)),
+  );
+
+  return Layer.mergeAll(configLayer, nativeHttpLayer, authLayer, httpLayer);
+};
+
 const withClient = <A>(
-  fetchMock: typeof fetch,
+  handler: HttpHandler,
   use: (http: DdfHttpApi) => Effect.Effect<A, Error>,
 ) =>
   Effect.gen(function* () {
     const http = yield* DdfHttp;
     return yield* use(http);
-  }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+  }).pipe(Effect.provide(layerFor(handler)));
 
-const fetchMockFrom =
-  (
-    handler: (input: RequestInfo | URL, init?: RequestInit) => Response,
-  ): typeof fetch =>
-  (input, init) =>
-    Promise.resolve(handler(input, init));
+const httpHandlerFrom = (handler: HttpHandler) => handler;
 
 const tokenResponse = (token: string) =>
   Response.json({ access_token: token, expires_in: 3600 });
@@ -131,43 +181,41 @@ describe("client", () => {
 
   it.effect("sends the expected token body and decodes JSON responses", () =>
     Effect.gen(function* () {
-      const calls: Array<{ url: string; init?: RequestInit }> = [];
-      const fetchMock = fetchMockFrom(
-        (input: RequestInfo | URL, init?: RequestInit) => {
-          const url = String(input);
-          calls.push({ url, init });
+      const calls: Array<{ url: string; init: MockRequestOptions }> = [];
+      const httpHandler = httpHandlerFrom((input, init) => {
+        const url = String(input);
+        calls.push({ url, init });
 
-          if (url === "https://identity.test/connect/token") {
-            assert.equal(init?.method, "POST");
-            assert.equal(init?.body instanceof URLSearchParams, true);
-            assert.equal(
-              (init?.body as URLSearchParams).get("grant_type"),
-              "client_credentials",
-            );
-            assert.equal(
-              (init?.body as URLSearchParams).get("client_id"),
-              "client-id",
-            );
-            assert.equal(
-              (init?.body as URLSearchParams).get("client_secret"),
-              "client-secret",
-            );
-            assert.equal(
-              (init?.body as URLSearchParams).get("scope"),
-              "DDFApi_Read",
-            );
-            return tokenResponse("token-123");
-          }
-
+        if (url === "https://identity.test/connect/token") {
+          assert.equal(init?.method, "POST");
+          assert.equal(init?.body instanceof URLSearchParams, true);
           assert.equal(
-            url,
-            "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
+            (init?.body as URLSearchParams).get("grant_type"),
+            "client_credentials",
           );
-          return Response.json({ value: [{ ListingKey: "listing-1" }] });
-        },
-      );
+          assert.equal(
+            (init?.body as URLSearchParams).get("client_id"),
+            "client-id",
+          );
+          assert.equal(
+            (init?.body as URLSearchParams).get("client_secret"),
+            "client-secret",
+          );
+          assert.equal(
+            (init?.body as URLSearchParams).get("scope"),
+            "DDFApi_Read",
+          );
+          return tokenResponse("token-123");
+        }
 
-      const result = yield* withClient(fetchMock, (http) =>
+        assert.equal(
+          url,
+          "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
+        );
+        return Response.json({ value: [{ ListingKey: "listing-1" }] });
+      });
+
+      const result = yield* withClient(httpHandler, (http) =>
         http.listOData("/odata/v1/Property", {
           select: ["ListingKey"],
           top: 1,
@@ -183,7 +231,7 @@ describe("client", () => {
     Effect.gen(function* () {
       let tokenCalls = 0;
       let apiCalls = 0;
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         if (String(input) === "https://identity.test/connect/token") {
           tokenCalls += 1;
           return tokenResponse("cached-token");
@@ -193,7 +241,7 @@ describe("client", () => {
         return Response.json({ ok: true });
       });
 
-      yield* withClient(fetchMock, (http) =>
+      yield* withClient(httpHandler, (http) =>
         Effect.gen(function* () {
           yield* http.requestJson("/odata/v1/Property");
           yield* http.requestJson("/odata/v1/Member");
@@ -211,7 +259,7 @@ describe("client", () => {
       Effect.gen(function* () {
         const tokenStatuses: Array<number> = [];
         let apiCalls = 0;
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           if (String(input) === "https://identity.test/connect/token") {
             if (tokenStatuses.length === 0) {
               tokenStatuses.push(500);
@@ -229,7 +277,7 @@ describe("client", () => {
           return Response.json({ ok: true });
         });
 
-        const result = yield* withClient(fetchMock, (http) =>
+        const result = yield* withClient(httpHandler, (http) =>
           Effect.gen(function* () {
             const first = yield* Effect.exit(
               http.requestJson("/odata/v1/Property"),
@@ -243,7 +291,7 @@ describe("client", () => {
         assert.deepEqual(tokenStatuses, [500, 200]);
         assert.equal(apiCalls, 1);
 
-        const malformedFetch = fetchMockFrom(() =>
+        const malformedHandler = httpHandlerFrom(() =>
           Response.json({
             access_token: "",
             expires_in: 3600,
@@ -252,7 +300,7 @@ describe("client", () => {
         yield* Effect.promise(() =>
           expect(
             Effect.runPromise(
-              withClient(malformedFetch, (http) =>
+              withClient(malformedHandler, (http) =>
                 http.requestJson("/odata/v1/Property"),
               ),
             ),
@@ -264,17 +312,15 @@ describe("client", () => {
   it.effect("adds JSON accept and authorization headers to API requests", () =>
     Effect.gen(function* () {
       let apiHeaders: Headers | undefined;
-      const fetchMock = fetchMockFrom(
-        (input: RequestInfo | URL, init?: RequestInit) => {
-          if (String(input) === "https://identity.test/connect/token")
-            return tokenResponse("token-123");
+      const httpHandler = httpHandlerFrom((input, init) => {
+        if (String(input) === "https://identity.test/connect/token")
+          return tokenResponse("token-123");
 
-          apiHeaders = init?.headers as Headers;
-          return Response.json({ ok: true });
-        },
-      );
+        apiHeaders = init?.headers as Headers;
+        return Response.json({ ok: true });
+      });
 
-      yield* withClient(fetchMock, (http) =>
+      yield* withClient(httpHandler, (http) =>
         http.requestJson("/v1/Lead/CreateLead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -292,27 +338,23 @@ describe("client", () => {
     Effect.gen(function* () {
       let tokenCalls = 0;
       const apiAuthorizations: Array<string | null> = [];
-      const fetchMock = fetchMockFrom(
-        (input: RequestInfo | URL, init?: RequestInit) => {
-          if (String(input) === "https://identity.test/connect/token") {
-            tokenCalls += 1;
-            return tokenResponse(`token-${tokenCalls}`);
-          }
+      const httpHandler = httpHandlerFrom((input, init) => {
+        if (String(input) === "https://identity.test/connect/token") {
+          tokenCalls += 1;
+          return tokenResponse(`token-${tokenCalls}`);
+        }
 
-          apiAuthorizations.push(
-            (init?.headers as Headers).get("Authorization"),
-          );
-          if (apiAuthorizations.length === 1) {
-            return new Response(JSON.stringify({ error: "expired" }), {
-              status: 401,
-            });
-          }
+        apiAuthorizations.push((init?.headers as Headers).get("Authorization"));
+        if (apiAuthorizations.length === 1) {
+          return new Response(JSON.stringify({ error: "expired" }), {
+            status: 401,
+          });
+        }
 
-          return Response.json({ value: [] });
-        },
-      );
+        return Response.json({ value: [] });
+      });
 
-      yield* withClient(fetchMock, (http) =>
+      yield* withClient(httpHandler, (http) =>
         http.requestJson("/odata/v1/Property"),
       );
 
@@ -337,14 +379,14 @@ describe("client", () => {
         ]);
 
         for (const [status, tag] of statuses) {
-          const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+          const httpHandler = httpHandlerFrom((input) => {
             if (String(input) === "https://identity.test/connect/token")
               return tokenResponse("token-123");
             return new Response("body text", { status, statusText: "Nope" });
           });
 
           const exit = yield* Effect.exit(
-            withClient(fetchMock, (http) =>
+            withClient(httpHandler, (http) =>
               http.requestJson("/odata/v1/Property"),
             ),
           );
@@ -364,7 +406,7 @@ describe("client", () => {
       Effect.gen(function* () {
         const events: Array<DdfLogEvent> = [];
         let apiCalls = 0;
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           if (String(input) === "https://identity.test/connect/token")
             return tokenResponse("token-123");
 
@@ -378,8 +420,7 @@ describe("client", () => {
           return yield* http.requestJson("/odata/v1/Property");
         }).pipe(
           Effect.provide(
-            makeDdfLayer({
-              ...configFor(fetchMock),
+            layerFor(httpHandler, {
               retryPolicy: {
                 maxRetries: 1,
                 baseDelayMillis: 0,
@@ -413,7 +454,7 @@ describe("client", () => {
   it.effect("does not retry statuses omitted from a custom retry policy", () =>
     Effect.gen(function* () {
       let apiCalls = 0;
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         if (String(input) === "https://identity.test/connect/token")
           return tokenResponse("token-123");
 
@@ -427,8 +468,7 @@ describe("client", () => {
           return yield* http.requestJson("/odata/v1/Property");
         }).pipe(
           Effect.provide(
-            makeDdfLayer({
-              ...configFor(fetchMock),
+            layerFor(httpHandler, {
               retryPolicy: {
                 maxRetries: 3,
                 baseDelayMillis: 0,
@@ -449,7 +489,7 @@ describe("client", () => {
       for (const status of [408, 503]) {
         let tokenCalls = 0;
         let apiCalls = 0;
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           if (String(input) === "https://identity.test/connect/token") {
             tokenCalls += 1;
             return tokenResponse("token-123");
@@ -460,7 +500,7 @@ describe("client", () => {
           return Response.json({ ok: true, status });
         });
 
-        const result = yield* withClient(fetchMock, (http) =>
+        const result = yield* withClient(httpHandler, (http) =>
           http.requestJson("/odata/v1/Property"),
         );
 

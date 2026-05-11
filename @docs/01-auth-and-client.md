@@ -24,11 +24,11 @@ Successful response shape:
 
 ```ts
 type TokenResponse = {
-  access_token: string
-  expires_in: number
-  token_type: "Bearer"
-  scope: "DDFApi_Read"
-}
+  access_token: string;
+  expires_in: number;
+  token_type: "Bearer";
+  scope: "DDFApi_Read";
+};
 ```
 
 The docs say `expires_in` should be 3600 seconds and the token is not sliding. Cache it, but renew before expiry.
@@ -66,6 +66,6 @@ SDK behavior should be:
 Good module split:
 
 - `DdfAuth` service - owns token acquisition/cache.
-- `DdfHttp` service - owns fetch, retries, request construction, and error decoding.
+- `DdfHttp` service - owns native Effect HTTP, retries, request construction, and error decoding.
 - `DdfOData` helpers - builds query strings and follows `@odata.nextLink`.
 - Resource services - Property, Member, OpenHouse, Destination, Office, and Lead.

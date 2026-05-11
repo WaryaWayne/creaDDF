@@ -11,12 +11,14 @@ export class DdfTokenResponseValidationError extends Data.TaggedError(
   }
 }
 
-export class DdfTokenFetchError extends Data.TaggedError("DdfTokenFetchError")<{
+export class DdfTokenTransportError extends Data.TaggedError(
+  "DdfTokenTransportError",
+)<{
   readonly url: string;
   readonly cause: unknown;
 }> {
   override get message() {
-    return `Token request failed before receiving a response from ${this.url}`;
+    return `Token request transport failed before receiving a response from ${this.url}`;
   }
 }
 

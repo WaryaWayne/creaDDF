@@ -24,7 +24,7 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 - `02-odata-querying.md` - supported OData query options and pagination rules.
 - `03-replication-sync.md` - how to do initial load, incremental sync, delete pruning, and the persistence boundary.
 - `04-implementation-standards.md` - required Effect implementation style and colocated test rules.
-- `ddfapi-openapi.json` - raw embedded OpenAPI 3.0.4 spec from the docs page, included as an offline fallback if web fetch fails.
+- `ddfapi-openapi.json` - raw embedded OpenAPI 3.0.4 spec from the docs page, included as an offline fallback if live documentation retrieval fails.
 - `openapi-path-inventory.md` - generated list of every path from the embedded OpenAPI model.
 - `model-field-inventory.md` - generated field checklist for core models.
 - `resources/01-property-listings.md` - Property endpoint guide.
@@ -80,7 +80,6 @@ const program = Effect.gen(function* () {
   const ddfLayer = makeDdfLayer({
     clientId: Redacted.value(config.clientId),
     clientSecret: Redacted.value(config.clientSecret),
-    fetch,
   });
 
   return yield* Effect.gen(function* () {

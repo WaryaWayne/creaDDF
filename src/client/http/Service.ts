@@ -13,7 +13,7 @@ import {
 } from "@/metrics";
 import { ODataUnknownListEnvelopeSchema } from "@/schema/odata";
 import {
-  DdfTokenFetchError,
+  DdfTokenTransportError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
@@ -86,7 +86,7 @@ const decodeJson = <T>(
 
 const authErrorFor = (cfg: DdfClientConfig, cause: unknown) => {
   if (
-    cause instanceof DdfTokenFetchError ||
+    cause instanceof DdfTokenTransportError ||
     cause instanceof DdfTokenHttpError ||
     cause instanceof DdfTokenJsonParseError ||
     cause instanceof DdfTokenResponseValidationError

@@ -70,7 +70,6 @@ maybeLive("live CREA/DDF integration", () => {
           baseUrl: config.baseUrl,
           identityUrl: config.identityUrl,
           analyticsUrl: config.analyticsUrl,
-          fetch,
         });
 
         return yield* Effect.gen(function* () {

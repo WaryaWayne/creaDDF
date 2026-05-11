@@ -1,6 +1,6 @@
 import { Data } from "effect";
 import type {
-  DdfTokenFetchError,
+  DdfTokenTransportError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
@@ -159,7 +159,7 @@ export type DdfApiMappedHttpError =
   | DdfApiInternalServerError;
 
 export type DdfAuthError =
-  | DdfTokenFetchError
+  | DdfTokenTransportError
   | DdfTokenHttpError
   | DdfTokenJsonParseError
   | DdfTokenResponseValidationError;

@@ -1,7 +1,10 @@
 import { assert, describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
-import { DdfHttp, encodeODataQuery, makeDdfLayer } from "./client";
-import type { DdfHttpApi } from "./client";
+import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "./client";
+import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import {
   createLead,
   getDestination,
@@ -30,24 +33,65 @@ import type {
 
 const keyLiteral = (key: string | number) =>
   typeof key === "number" ? String(key) : `'${key.replaceAll("'", "''")}'`;
-const fetchMockFrom =
-  (
-    handler: (input: RequestInfo | URL, init?: RequestInit) => Response,
-  ): typeof fetch =>
-  (input, init) =>
-    Promise.resolve(handler(input, init));
+interface MockRequestOptions {
+  readonly method: string;
+  readonly headers: Headers;
+  readonly body?: string | URLSearchParams;
+}
+
+type HttpHandler = (url: string, init: MockRequestOptions) => Response;
+
+const httpHandlerFrom = (handler: HttpHandler) => handler;
 
 const tokenResponse = Response.json({
   access_token: "token-123",
   expires_in: 3600,
 });
-const configFor = (fetchMock: typeof fetch) => ({
+
+const configFor = (): DdfClientConfig => ({
   clientId: "client-id",
   clientSecret: "client-secret",
   identityUrl: "https://identity.test/connect/token",
   baseUrl: "https://ddf.test",
-  fetch: fetchMock,
 });
+
+const bodyFromRequest = (request: HttpClientRequest.HttpClientRequest) => {
+  if (request.body._tag !== "Uint8Array") return undefined;
+  const text = new TextDecoder().decode(request.body.body);
+  const contentType = request.body.contentType;
+  return contentType.includes("application/x-www-form-urlencoded")
+    ? new URLSearchParams(text)
+    : text;
+};
+
+const nativeClientFrom = (handler: HttpHandler): HttpClient.HttpClient =>
+  HttpClient.make((request, url) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        handler(url.toString(), {
+          method: request.method,
+          headers: new Headers(request.headers),
+          body: bodyFromRequest(request),
+        }),
+      ),
+    ),
+  );
+
+const layerFor = (handler: HttpHandler) => {
+  const configLayer = DdfConfig.layer(configFor());
+  const nativeHttpLayer = Layer.succeed(
+    HttpClient.HttpClient,
+    nativeClientFrom(handler),
+  );
+  const baseLayer = Layer.mergeAll(configLayer, nativeHttpLayer);
+  const authLayer = DdfAuth.layer.pipe(Layer.provide(baseLayer));
+  const httpLayer = DdfHttp.layer.pipe(
+    Layer.provide(Layer.mergeAll(baseLayer, authLayer)),
+  );
+
+  return Layer.mergeAll(configLayer, nativeHttpLayer, authLayer, httpLayer);
+};
 
 const requestedUrlFor = (effect: Effect.Effect<unknown, unknown, DdfHttp>) =>
   Effect.gen(function* () {
@@ -206,7 +250,7 @@ describe("selected resource decoding", () => {
     "decodes selected property and office list rows as partial resources",
     () =>
       Effect.gen(function* () {
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           const url = String(input);
           if (url === "https://identity.test/connect/token")
             return tokenResponse.clone();
@@ -241,7 +285,7 @@ describe("selected resource decoding", () => {
           });
           const offices = yield* listOffices({ select: ["OfficeKey"], top: 1 });
           return { properties, offices };
-        }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+        }).pipe(Effect.provide(layerFor(httpHandler)));
 
         assert.equal(result.properties.value[0]?.ListingKey, "listing-1");
         assert.equal(result.offices.value[0]?.OfficeKey, "office-1");
@@ -257,7 +301,7 @@ describe("selected resource decoding", () => {
     "decodes selected keyed resources without requiring non-selected fields",
     () =>
       Effect.gen(function* () {
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           const url = String(input);
           if (url === "https://identity.test/connect/token")
             return tokenResponse.clone();
@@ -316,7 +360,7 @@ describe("selected resource decoding", () => {
             select: ["DestinationId"],
           });
           return { property, member, office, openHouse, destination };
-        }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+        }).pipe(Effect.provide(layerFor(httpHandler)));
 
         assert.equal(result.property.ListingKey, "property-1");
         assert.equal(result.member.MemberKey, "member-1");
@@ -330,7 +374,7 @@ describe("selected resource decoding", () => {
     "decodes full office list and keyed resources with Office schema",
     () =>
       Effect.gen(function* () {
-        const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+        const httpHandler = httpHandlerFrom((input) => {
           const url = String(input);
           if (url === "https://identity.test/connect/token")
             return tokenResponse.clone();
@@ -352,7 +396,7 @@ describe("selected resource decoding", () => {
           const offices = yield* listOffices({ top: 1 });
           const office = yield* getOffice("office-1");
           return { offices, office };
-        }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+        }).pipe(Effect.provide(layerFor(httpHandler)));
 
         assert.equal(result.offices.value[0]?.OfficeKey, "office-1");
         assert.equal(result.office.OfficeName, "Example Brokerage");
@@ -381,7 +425,7 @@ describe("selected resource decoding", () => {
         ModificationTimestamp: "2024-01-02T00:00:00.000Z",
         FullNSP: true,
       };
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
         if (url === "https://identity.test/connect/token")
           return tokenResponse.clone();
@@ -399,7 +443,7 @@ describe("selected resource decoding", () => {
         const destinations = yield* listDestinations({ top: 1 });
         const destination = yield* getDestination(123);
         return { destinations, destination };
-      }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+      }).pipe(Effect.provide(layerFor(httpHandler)));
 
       assert.equal(
         result.destinations.value[0]?.DestinationName,
@@ -430,7 +474,7 @@ describe("selected resource decoding", () => {
         ModificationTimestamp: "2024-01-02T00:00:00.000Z",
         FullNSP: false,
       };
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
         if (url === "https://identity.test/connect/token")
           return tokenResponse.clone();
@@ -440,7 +484,7 @@ describe("selected resource decoding", () => {
       });
 
       const destination = yield* getDestination(456).pipe(
-        Effect.provide(makeDdfLayer(configFor(fetchMock))),
+        Effect.provide(layerFor(httpHandler)),
       );
 
       assert.equal(destination.DestinationType, "Website");
@@ -450,7 +494,7 @@ describe("selected resource decoding", () => {
 
   it.effect("decodes selected Property national association id fields", () =>
     Effect.gen(function* () {
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
         if (url === "https://identity.test/connect/token")
           return tokenResponse.clone();
@@ -485,7 +529,7 @@ describe("selected resource decoding", () => {
           "CoListOfficeNationalAssociationId2",
           "CoListOfficeNationalAssociationId3",
         ],
-      }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+      }).pipe(Effect.provide(layerFor(httpHandler)));
 
       assert.equal(property.ListAgentNationalAssociationId, "agent-primary");
       assert.equal(property.CoListOfficeNationalAssociationId2, "office-2");
@@ -494,7 +538,7 @@ describe("selected resource decoding", () => {
 
   it.effect("rejects invalid office payloads at the resource boundary", () =>
     Effect.gen(function* () {
-      const fetchMock = fetchMockFrom((input: RequestInfo | URL) => {
+      const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
         if (url === "https://identity.test/connect/token")
           return tokenResponse.clone();
@@ -510,9 +554,7 @@ describe("selected resource decoding", () => {
       yield* Effect.promise(() =>
         expect(
           Effect.runPromise(
-            getOffice("office-1").pipe(
-              Effect.provide(makeDdfLayer(configFor(fetchMock))),
-            ),
+            getOffice("office-1").pipe(Effect.provide(layerFor(httpHandler))),
           ),
         ).rejects.toThrow(/schema decoding|ResourceName/),
       );
@@ -577,10 +619,10 @@ describe("replication resource paths", () => {
 describe("lead resource", () => {
   it.effect("creates a lead without suppressing email by default", () =>
     Effect.gen(function* () {
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
       const response = <T>(value: unknown) => Effect.succeed(value as T);
       const http: DdfHttpApi = {
-        requestJson: <T = unknown>(url: string, init?: RequestInit) => {
+        requestJson: <T = unknown>(url: string, init?: DdfRequestOptions) => {
           requests.push({ url, init });
           return response<T>({ success: true });
         },
@@ -608,10 +650,10 @@ describe("lead resource", () => {
 
   it.effect("creates a lead with email suppressed when requested", () =>
     Effect.gen(function* () {
-      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
       const response = <T>(value: unknown) => Effect.succeed(value as T);
       const http: DdfHttpApi = {
-        requestJson: <T = unknown>(url: string, init?: RequestInit) => {
+        requestJson: <T = unknown>(url: string, init?: DdfRequestOptions) => {
           requests.push({ url, init });
           return response<T>({ success: true });
         },
