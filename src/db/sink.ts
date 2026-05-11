@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { Cause, Data, Effect } from "effect";
+import { Cause, Data, DateTime, Effect } from "effect";
 import type {
   MediaRecord,
   MemberRecord,
@@ -60,8 +60,16 @@ const booleanField = (record: JsonRecord, field: string): boolean | null => {
 
 const timestampField = (record: JsonRecord, field: string): Date | null => {
   const value = record[field];
+
   if (value instanceof Date) return value;
+
+  if (DateTime.isDateTime(value)) {
+    const millis = Date.parse(DateTime.formatIso(value));
+    return Number.isFinite(millis) ? new Date(millis) : null;
+  }
+
   if (typeof value !== "string") return null;
+
   const millis = Date.parse(value);
   return Number.isFinite(millis) ? new Date(millis) : null;
 };
