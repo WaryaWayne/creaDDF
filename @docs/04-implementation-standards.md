@@ -10,11 +10,15 @@ Use named `Effect.fn` wrappers so spans, telemetry, stack traces, and failure re
 
 ```ts
 export const listProperties = Effect.fn("DdfProperty.listProperties")(
-  function*(query?: ODataListQuery<PropertyField>) {
-    const client = yield* DdfHttp
-    return yield* client.listOData("/odata/v1/Property", query, PropertyListSchema)
+  function* (query?: ODataListQuery<PropertyField>) {
+    const client = yield* DdfHttp;
+    return yield* client.listOData(
+      "/odata/v1/Property",
+      query,
+      PropertyListSchema,
+    );
   },
-)
+);
 ```
 
 Use `Effect.gen` inside the `Effect.fn` generator body through `yield*`; do not wrap the exported method as a regular function whose only job is returning `Effect.gen`.
@@ -54,7 +58,7 @@ Tests should mock yielded services through Effect Context and Layer composition 
 
 Mock these boundaries through services:
 
-- Fetch/HTTP transport.
+- Native Effect HTTP transport.
 - Clock/time for token expiry and retry backoff.
 - Logger/telemetry observer when behavior depends on emitted diagnostics.
 - Persistence sinks for sync workflows.

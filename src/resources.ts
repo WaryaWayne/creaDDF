@@ -31,7 +31,9 @@ const replicationPath = (
   replicationName: string,
   destinationId?: number,
 ) =>
-  `/odata/v1/${resource}/${replicationName}(${destinationId === undefined ? "" : `DestinationId=${destinationId}`})`;
+  destinationId === undefined
+    ? `/odata/v1/${resource}/${replicationName}`
+    : `/odata/v1/${resource}/${replicationName}(DestinationId=${destinationId})`;
 
 type SelectQuery = { readonly select?: ReadonlyArray<string> };
 
@@ -163,18 +165,16 @@ export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
-  return yield* http
-    .getOData(
-      "/odata/v1/Property",
-      propertyKey,
+  return yield* http.getOData(
+    "/odata/v1/Property",
+    propertyKey,
+    query,
+    schemaForSelect(
       query,
-      schemaForSelect(
-        query,
-        SelectedPropertyListingSchema,
-        SinglePropertyListingResponseSchema,
-      ),
-    )
-    .pipe(Effect.provide(DdfHttp));
+      SelectedPropertyListingSchema,
+      SinglePropertyListingResponseSchema,
+    ),
+  );
 });
 
 export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(

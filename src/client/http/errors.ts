@@ -1,6 +1,6 @@
 import { Data } from "effect";
 import type {
-  DdfTokenFetchError,
+  DdfTokenTransportError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
@@ -101,8 +101,8 @@ export class DdfApiUnsupportedMediaTypeError extends Data.TaggedError(
   }
 }
 
-export class DdfApiServiceUnavailableError extends Data.TaggedError(
-  "DdfApiServiceUnavailableError",
+export class DdfApiRetryableServiceUnavailableError extends Data.TaggedError(
+  "DdfApiRetryableServiceUnavailableError",
 )<{
   readonly url: string;
   readonly status: number;
@@ -155,11 +155,11 @@ export type DdfApiMappedHttpError =
   | DdfApiNotFoundError
   | DdfApiTimeoutError
   | DdfApiUnsupportedMediaTypeError
-  | DdfApiServiceUnavailableError
+  | DdfApiRetryableServiceUnavailableError
   | DdfApiInternalServerError;
 
 export type DdfAuthError =
-  | DdfTokenFetchError
+  | DdfTokenTransportError
   | DdfTokenHttpError
   | DdfTokenJsonParseError
   | DdfTokenResponseValidationError;
@@ -194,7 +194,7 @@ export const statusError = (args: {
     case 500:
       return new DdfApiInternalServerError(args);
     case 503:
-      return new DdfApiServiceUnavailableError(args);
+      return new DdfApiRetryableServiceUnavailableError(args);
     default:
       return new DdfApiHttpError(args);
   }

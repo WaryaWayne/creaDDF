@@ -1,32 +1,91 @@
-import { describe, it } from "node:test";
-import assert from "node:assert/strict";
-import { DateTime, Effect, Exit } from "effect";
+import { assert, describe, expect, it } from "@effect/vitest";
+import { ConfigProvider, DateTime, Effect, Exit, Layer } from "effect";
 import {
+  DdfAuth,
+  DdfConfig,
   DdfHttp,
+  ddfConfigFromEnv,
+  makeDdfLayerFromEnv,
   type DdfLogEvent,
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
-  makeDdfLayer,
 } from "./client";
-import type { DdfHttpApi } from "./client";
+import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
-const configFor = (fetchMock: typeof fetch) => ({
+interface MockRequestOptions {
+  readonly method: string;
+  readonly headers: Headers;
+  readonly body?: string | URLSearchParams;
+}
+
+type HttpHandler = (url: string, init: MockRequestOptions) => Response;
+
+const configFor = (
+  overrides: Partial<DdfClientConfig> = {},
+): DdfClientConfig => ({
   clientId: "client-id",
   clientSecret: "client-secret",
   identityUrl: "https://identity.test/connect/token",
   baseUrl: "https://ddf.test",
-  fetch: fetchMock,
+  retryPolicy: { baseDelayMillis: 0 },
+  ...overrides,
 });
 
+const bodyFromRequest = (request: HttpClientRequest.HttpClientRequest) => {
+  if (request.body._tag !== "Uint8Array") return undefined;
+  const text = new TextDecoder().decode(request.body.body);
+  const contentType = request.body.contentType;
+  return contentType.includes("application/x-www-form-urlencoded")
+    ? new URLSearchParams(text)
+    : text;
+};
+
+const nativeClientFrom = (handler: HttpHandler): HttpClient.HttpClient =>
+  HttpClient.make((request, url) =>
+    Effect.succeed(
+      HttpClientResponse.fromWeb(
+        request,
+        handler(url.toString(), {
+          method: request.method,
+          headers: new Headers(request.headers),
+          body: bodyFromRequest(request),
+        }),
+      ),
+    ),
+  );
+
+const layerFor = (
+  handler: HttpHandler,
+  overrides: Partial<DdfClientConfig> = {},
+) => {
+  const configLayer = DdfConfig.layer(configFor(overrides));
+  const nativeHttpLayer = Layer.succeed(
+    HttpClient.HttpClient,
+    nativeClientFrom(handler),
+  );
+  const baseLayer = Layer.mergeAll(configLayer, nativeHttpLayer);
+  const authLayer = DdfAuth.layer.pipe(Layer.provide(baseLayer));
+  const httpLayer = DdfHttp.layer.pipe(
+    Layer.provide(Layer.mergeAll(baseLayer, authLayer)),
+  );
+
+  return Layer.mergeAll(configLayer, nativeHttpLayer, authLayer, httpLayer);
+};
+
 const withClient = <A>(
-  fetchMock: typeof fetch,
+  handler: HttpHandler,
   use: (http: DdfHttpApi) => Effect.Effect<A, Error>,
 ) =>
   Effect.gen(function* () {
     const http = yield* DdfHttp;
     return yield* use(http);
-  }).pipe(Effect.provide(makeDdfLayer(configFor(fetchMock))));
+  }).pipe(Effect.provide(layerFor(handler)));
+
+const httpHandlerFrom = (handler: HttpHandler) => handler;
 
 const tokenResponse = (token: string) =>
   Response.json({ access_token: token, expires_in: 3600 });
@@ -44,7 +103,7 @@ describe("client", () => {
 
     assert.equal(
       query,
-      "?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=PropertySubType+eq+%27Office%27+and+Price+gt+500000&%24top=10&%24skip=5&%24orderby=ModificationTimestamp+desc%2CListingKey",
+      "?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=PropertySubType%20eq%20%27Office%27%20and%20Price%20gt%20500000&%24top=10&%24skip=5&%24orderby=ModificationTimestamp%20desc%2CListingKey",
     );
   });
 
@@ -73,6 +132,60 @@ describe("client", () => {
       DdfInvalidODataQueryError,
     );
   });
+
+  it.effect("keeps documented replication query options on direct HTTP calls", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+
+        if (url === "https://identity.test/connect/token") {
+          return tokenResponse("replication-token");
+        }
+
+        assert.equal(
+          url,
+          "https://ddf.test/odata/v1/Property/PropertyReplication?%24select=ListingKey%2CModificationTimestamp&%24count=true&%24filter=ModificationTimestamp%20gt%202024-01-25T00%3A00%3A00.00Z&%24orderby=ModificationTimestamp%20desc",
+        );
+        return Response.json({ value: [] });
+      });
+
+      const result = yield* withClient(httpHandler, (http) =>
+        http.replicateIdentifiers("/odata/v1/Property/PropertyReplication", {
+          select: ["ListingKey", "ModificationTimestamp"],
+          count: true,
+          filter: "ModificationTimestamp gt 2024-01-25T00:00:00.00Z",
+          orderby: "ModificationTimestamp desc",
+        }),
+      );
+
+      assert.deepEqual(result, { value: [] });
+    }),
+  );
+
+  it.effect("loads analyticsUrl from CREA_ANALYTICS_URL for env layers", () =>
+    Effect.gen(function* () {
+      const provider = ConfigProvider.fromUnknown({
+        CREA_DDF_CLIENT_ID: "env-client-id",
+        CREA_DDF_CLIENT_SECRET: "env-client-secret",
+        CREA_ANALYTICS_URL: "https://analytics.env.test/log",
+      });
+
+      const parsedConfig = yield* ddfConfigFromEnv.parse(provider);
+      assert.equal(
+        parsedConfig.analyticsUrl,
+        "https://analytics.env.test/log",
+      );
+
+      const layerConfig = yield* Effect.gen(function* () {
+        return yield* DdfConfig;
+      }).pipe(
+        Effect.provide(makeDdfLayerFromEnv),
+        Effect.provideService(ConfigProvider.ConfigProvider, provider),
+      );
+
+      assert.equal(layerConfig.analyticsUrl, "https://analytics.env.test/log");
+    }),
+  );
 
   it("builds ergonomic OData filters for documented operators and functions", () => {
     const date = DateTime.toDateUtc(
@@ -122,316 +235,335 @@ describe("client", () => {
     );
   });
 
-  it("sends the expected token body and decodes JSON responses", async () => {
-    const calls: Array<{ url: string; init?: RequestInit }> = [];
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      calls.push({ url, init });
+  it.effect("sends the expected token body and decodes JSON responses", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ url: string; init: MockRequestOptions }> = [];
+      const httpHandler = httpHandlerFrom((input, init) => {
+        const url = String(input);
+        calls.push({ url, init });
 
-      if (url === "https://identity.test/connect/token") {
-        assert.equal(init?.method, "POST");
-        assert.equal(init?.body instanceof URLSearchParams, true);
-        assert.equal(
-          (init?.body as URLSearchParams).get("grant_type"),
-          "client_credentials",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("client_id"),
-          "client-id",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("client_secret"),
-          "client-secret",
-        );
-        assert.equal(
-          (init?.body as URLSearchParams).get("scope"),
-          "DDFApi_Read",
-        );
-        return tokenResponse("token-123");
-      }
+        if (url === "https://identity.test/connect/token") {
+          assert.equal(init?.method, "POST");
+          assert.equal(init?.body instanceof URLSearchParams, true);
+          assert.equal(
+            (init?.body as URLSearchParams).get("grant_type"),
+            "client_credentials",
+          );
+          assert.equal(
+            (init?.body as URLSearchParams).get("client_id"),
+            "client-id",
+          );
+          assert.equal(
+            (init?.body as URLSearchParams).get("client_secret"),
+            "client-secret",
+          );
+          assert.equal(
+            (init?.body as URLSearchParams).get("scope"),
+            "DDFApi_Read",
+          );
+          return tokenResponse("token-123");
+        }
 
-      assert.equal(
-        url,
-        "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
-      );
-      return Response.json({ value: [{ ListingKey: "listing-1" }] });
-    }) as typeof fetch;
+        assert.equal(
+          url,
+          "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1",
+        );
+        return Response.json({ value: [{ ListingKey: "listing-1" }] });
+      });
 
-    const result = await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      const result = yield* withClient(httpHandler, (http) =>
         http.listOData("/odata/v1/Property", {
           select: ["ListingKey"],
           top: 1,
         }),
-      ),
-    );
+      );
 
-    assert.deepEqual(result, { value: [{ ListingKey: "listing-1" }] });
-    assert.equal(calls.length, 2);
-  });
+      assert.deepEqual(result, { value: [{ ListingKey: "listing-1" }] });
+      assert.equal(calls.length, 2);
+    }),
+  );
 
-  it("caches a valid token across API requests", async () => {
-    let tokenCalls = 0;
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        tokenCalls += 1;
-        return tokenResponse("cached-token");
-      }
+  it.effect("caches a valid token across API requests", () =>
+    Effect.gen(function* () {
+      let tokenCalls = 0;
+      let apiCalls = 0;
+      const httpHandler = httpHandlerFrom((input) => {
+        if (String(input) === "https://identity.test/connect/token") {
+          tokenCalls += 1;
+          return tokenResponse("cached-token");
+        }
 
-      apiCalls += 1;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+        apiCalls += 1;
+        return Response.json({ ok: true });
+      });
 
-    await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      yield* withClient(httpHandler, (http) =>
         Effect.gen(function* () {
           yield* http.requestJson("/odata/v1/Property");
           yield* http.requestJson("/odata/v1/Member");
         }),
-      ),
-    );
+      );
 
-    assert.equal(tokenCalls, 1);
-    assert.equal(apiCalls, 2);
-  });
+      assert.equal(tokenCalls, 1);
+      assert.equal(apiCalls, 2);
+    }),
+  );
 
-  it("fails token requests before caching non-ok or malformed responses", async () => {
-    const tokenStatuses: Array<number> = [];
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        if (tokenStatuses.length === 0) {
-          tokenStatuses.push(500);
-          return new Response(
-            JSON.stringify({ error: "temporarily unavailable" }),
-            { status: 500 },
-          );
-        }
+  it.effect(
+    "fails token requests before caching non-ok or malformed responses",
+    () =>
+      Effect.gen(function* () {
+        const tokenStatuses: Array<number> = [];
+        let apiCalls = 0;
+        const httpHandler = httpHandlerFrom((input) => {
+          if (String(input) === "https://identity.test/connect/token") {
+            if (tokenStatuses.length === 0) {
+              tokenStatuses.push(500);
+              return new Response(
+                JSON.stringify({ error: "temporarily unavailable" }),
+                { status: 500 },
+              );
+            }
 
-        tokenStatuses.push(200);
-        return tokenResponse("fresh-token");
-      }
+            tokenStatuses.push(200);
+            return tokenResponse("fresh-token");
+          }
 
-      apiCalls += 1;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+          apiCalls += 1;
+          return Response.json({ ok: true });
+        });
 
-    const result = await Effect.runPromise(
-      withClient(fetchMock, (http) =>
-        Effect.gen(function* () {
-          const first = yield* Effect.exit(
-            http.requestJson("/odata/v1/Property"),
-          );
-          const second = yield* http.requestJson("/odata/v1/Property");
-          return { first, second };
-        }),
-      ),
-    );
+        const result = yield* withClient(httpHandler, (http) =>
+          Effect.gen(function* () {
+            const first = yield* Effect.exit(
+              http.requestJson("/odata/v1/Property"),
+            );
+            const second = yield* http.requestJson("/odata/v1/Property");
+            return { first, second };
+          }),
+        );
 
-    assert.equal(Exit.isFailure(result.first), true);
-    assert.deepEqual(tokenStatuses, [500, 200]);
-    assert.equal(apiCalls, 1);
+        assert.equal(Exit.isFailure(result.first), true);
+        assert.deepEqual(tokenStatuses, [500, 200]);
+        assert.equal(apiCalls, 1);
 
-    const malformedFetch = (async () =>
-      Response.json({ access_token: "", expires_in: 3600 })) as typeof fetch;
-    await assert.rejects(
-      Effect.runPromise(
-        withClient(malformedFetch, (http) =>
-          http.requestJson("/odata/v1/Property"),
-        ),
-      ),
-      /Token response is missing required fields/,
-    );
-  });
+        const malformedHandler = httpHandlerFrom(() =>
+          Response.json({
+            access_token: "",
+            expires_in: 3600,
+          }),
+        );
+        yield* Effect.promise(() =>
+          expect(
+            Effect.runPromise(
+              withClient(malformedHandler, (http) =>
+                http.requestJson("/odata/v1/Property"),
+              ),
+            ),
+          ).rejects.toThrow(/Token response is missing required fields/),
+        );
+      }),
+  );
 
-  it("adds JSON accept and authorization headers to API requests", async () => {
-    let apiHeaders: Headers | undefined;
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
+  it.effect("adds JSON accept and authorization headers to API requests", () =>
+    Effect.gen(function* () {
+      let apiHeaders: Headers | undefined;
+      const httpHandler = httpHandlerFrom((input, init) => {
+        if (String(input) === "https://identity.test/connect/token")
+          return tokenResponse("token-123");
 
-      apiHeaders = init?.headers as Headers;
-      return Response.json({ ok: true });
-    }) as typeof fetch;
+        apiHeaders = init?.headers as Headers;
+        return Response.json({ ok: true });
+      });
 
-    await Effect.runPromise(
-      withClient(fetchMock, (http) =>
+      yield* withClient(httpHandler, (http) =>
         http.requestJson("/v1/Lead/CreateLead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ListingKey: "listing-1" }),
         }),
-      ),
-    );
-
-    assert.equal(apiHeaders?.get("Accept"), "application/json");
-    assert.equal(apiHeaders?.get("Authorization"), "Bearer token-123");
-    assert.equal(apiHeaders?.get("Content-Type"), "application/json");
-  });
-
-  it("refreshes auth once after a 401 response", async () => {
-    let tokenCalls = 0;
-    const apiAuthorizations: Array<string | null> = [];
-    const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input) === "https://identity.test/connect/token") {
-        tokenCalls += 1;
-        return tokenResponse(`token-${tokenCalls}`);
-      }
-
-      apiAuthorizations.push((init?.headers as Headers).get("Authorization"));
-      if (apiAuthorizations.length === 1) {
-        return new Response(JSON.stringify({ error: "expired" }), {
-          status: 401,
-        });
-      }
-
-      return Response.json({ value: [] });
-    }) as typeof fetch;
-
-    await Effect.runPromise(
-      withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
-    );
-
-    assert.equal(tokenCalls, 2);
-    assert.deepEqual(apiAuthorizations, ["Bearer token-1", "Bearer token-2"]);
-  });
-
-  it("maps common HTTP statuses to typed API errors with response bodies", async () => {
-    const statuses = new Map([
-      [400, "DdfApiBadRequestQueryError"],
-      [401, "DdfApiUnauthorizedAfterRefreshError"],
-      [403, "DdfApiForbiddenError"],
-      [404, "DdfApiNotFoundError"],
-      [408, "DdfApiTimeoutError"],
-      [415, "DdfApiUnsupportedMediaTypeError"],
-      [500, "DdfApiInternalServerError"],
-      [503, "DdfApiRetryableServiceUnavailableError"],
-    ]);
-
-    for (const [status, tag] of statuses) {
-      const fetchMock = (async (input: RequestInfo | URL) => {
-        if (String(input) === "https://identity.test/connect/token")
-          return tokenResponse("token-123");
-        return new Response("body text", { status, statusText: "Nope" });
-      }) as typeof fetch;
-
-      const exit = await Effect.runPromiseExit(
-        withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
       );
-      assert.equal(Exit.isFailure(exit), true);
-      if (Exit.isFailure(exit)) {
-        const cause = String(exit.cause);
-        assert.match(cause, new RegExp(tag));
-        assert.match(cause, /body text|Nope|DDF API/);
-      }
-    }
-  });
 
-  it("honors custom retry policy and emits retry logger calls without waiting", async () => {
-    const events: Array<DdfLogEvent> = [];
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
+      assert.equal(apiHeaders?.get("Accept"), "application/json");
+      assert.equal(apiHeaders?.get("Authorization"), "Bearer token-123");
+      assert.equal(apiHeaders?.get("Content-Type"), "application/json");
+    }),
+  );
 
-      apiCalls += 1;
-      if (apiCalls === 1) return new Response(null, { status: 500 });
-      return Response.json({ ok: true });
-    }) as typeof fetch;
-
-    const result = await Effect.runPromise(
-      Effect.gen(function* () {
-        const http = yield* DdfHttp;
-        return yield* http.requestJson("/odata/v1/Property");
-      }).pipe(
-        Effect.provide(
-          makeDdfLayer({
-            ...configFor(fetchMock),
-            retryPolicy: {
-              maxRetries: 1,
-              baseDelayMillis: 0,
-              retryableStatuses: [500],
-            },
-            logger: {
-              debug: (event) => events.push(event),
-              warn: (event) => events.push(event),
-            },
-          }),
-        ),
-      ),
-    );
-
-    assert.deepEqual(result, { ok: true });
-    assert.equal(apiCalls, 2);
-    assert.deepEqual(
-      events.filter((event) => event.type === "api_retry"),
-      [
-        {
-          type: "api_retry",
-          url: "https://ddf.test/odata/v1/Property",
-          status: 500,
-          attempt: 1,
-          delayMillis: 0,
-        },
-      ],
-    );
-  });
-
-  it("does not retry statuses omitted from a custom retry policy", async () => {
-    let apiCalls = 0;
-    const fetchMock = (async (input: RequestInfo | URL) => {
-      if (String(input) === "https://identity.test/connect/token")
-        return tokenResponse("token-123");
-
-      apiCalls += 1;
-      return new Response("no retry", { status: 503 });
-    }) as typeof fetch;
-
-    const exit = await Effect.runPromiseExit(
-      Effect.gen(function* () {
-        const http = yield* DdfHttp;
-        return yield* http.requestJson("/odata/v1/Property");
-      }).pipe(
-        Effect.provide(
-          makeDdfLayer({
-            ...configFor(fetchMock),
-            retryPolicy: {
-              maxRetries: 3,
-              baseDelayMillis: 0,
-              retryableStatuses: [408],
-            },
-          }),
-        ),
-      ),
-    );
-
-    assert.equal(Exit.isFailure(exit), true);
-    assert.equal(apiCalls, 1);
-  });
-
-  it("retries bounded 408 and 503 responses", async () => {
-    for (const status of [408, 503]) {
+  it.effect("refreshes auth once after a 401 response", () =>
+    Effect.gen(function* () {
       let tokenCalls = 0;
-      let apiCalls = 0;
-      const fetchMock = (async (input: RequestInfo | URL) => {
+      const apiAuthorizations: Array<string | null> = [];
+      const httpHandler = httpHandlerFrom((input, init) => {
         if (String(input) === "https://identity.test/connect/token") {
           tokenCalls += 1;
-          return tokenResponse("token-123");
+          return tokenResponse(`token-${tokenCalls}`);
         }
 
-        apiCalls += 1;
-        if (apiCalls < 3) return new Response(null, { status });
-        return Response.json({ ok: true, status });
-      }) as typeof fetch;
+        apiAuthorizations.push((init?.headers as Headers).get("Authorization"));
+        if (apiAuthorizations.length === 1) {
+          return new Response(JSON.stringify({ error: "expired" }), {
+            status: 401,
+          });
+        }
 
-      const result = await Effect.runPromise(
-        withClient(fetchMock, (http) => http.requestJson("/odata/v1/Property")),
+        return Response.json({ value: [] });
+      });
+
+      yield* withClient(httpHandler, (http) =>
+        http.requestJson("/odata/v1/Property"),
       );
 
-      assert.deepEqual(result, { ok: true, status });
-      assert.equal(tokenCalls, 1);
-      assert.equal(apiCalls, 3);
-    }
-  });
+      assert.equal(tokenCalls, 2);
+      assert.deepEqual(apiAuthorizations, ["Bearer token-1", "Bearer token-2"]);
+    }),
+  );
+
+  it.effect(
+    "maps common HTTP statuses to typed API errors with response bodies",
+    () =>
+      Effect.gen(function* () {
+        const statuses = new Map([
+          [400, "DdfApiBadRequestQueryError"],
+          [401, "DdfApiUnauthorizedAfterRefreshError"],
+          [403, "DdfApiForbiddenError"],
+          [404, "DdfApiNotFoundError"],
+          [408, "DdfApiTimeoutError"],
+          [415, "DdfApiUnsupportedMediaTypeError"],
+          [500, "DdfApiInternalServerError"],
+          [503, "DdfApiRetryableServiceUnavailableError"],
+        ]);
+
+        for (const [status, tag] of statuses) {
+          const httpHandler = httpHandlerFrom((input) => {
+            if (String(input) === "https://identity.test/connect/token")
+              return tokenResponse("token-123");
+            return new Response("body text", { status, statusText: "Nope" });
+          });
+
+          const exit = yield* Effect.exit(
+            withClient(httpHandler, (http) =>
+              http.requestJson("/odata/v1/Property"),
+            ),
+          );
+          assert.equal(Exit.isFailure(exit), true);
+          if (Exit.isFailure(exit)) {
+            const cause = String(exit.cause);
+            assert.match(cause, new RegExp(tag));
+            assert.match(cause, /body text|Nope|DDF API/);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "honors custom retry policy and emits retry logger calls without waiting",
+    () =>
+      Effect.gen(function* () {
+        const events: Array<DdfLogEvent> = [];
+        let apiCalls = 0;
+        const httpHandler = httpHandlerFrom((input) => {
+          if (String(input) === "https://identity.test/connect/token")
+            return tokenResponse("token-123");
+
+          apiCalls += 1;
+          if (apiCalls === 1) return new Response(null, { status: 500 });
+          return Response.json({ ok: true });
+        });
+
+        const result = yield* Effect.gen(function* () {
+          const http = yield* DdfHttp;
+          return yield* http.requestJson("/odata/v1/Property");
+        }).pipe(
+          Effect.provide(
+            layerFor(httpHandler, {
+              retryPolicy: {
+                maxRetries: 1,
+                baseDelayMillis: 0,
+                retryableStatuses: [500],
+              },
+              logger: {
+                debug: (event) => events.push(event),
+                warn: (event) => events.push(event),
+              },
+            }),
+          ),
+        );
+
+        assert.deepEqual(result, { ok: true });
+        assert.equal(apiCalls, 2);
+        assert.deepEqual(
+          events.filter((event) => event.type === "api_retry"),
+          [
+            {
+              type: "api_retry",
+              url: "https://ddf.test/odata/v1/Property",
+              status: 500,
+              attempt: 1,
+              delayMillis: 0,
+            },
+          ],
+        );
+      }),
+  );
+
+  it.effect("does not retry statuses omitted from a custom retry policy", () =>
+    Effect.gen(function* () {
+      let apiCalls = 0;
+      const httpHandler = httpHandlerFrom((input) => {
+        if (String(input) === "https://identity.test/connect/token")
+          return tokenResponse("token-123");
+
+        apiCalls += 1;
+        return new Response("no retry", { status: 503 });
+      });
+
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const http = yield* DdfHttp;
+          return yield* http.requestJson("/odata/v1/Property");
+        }).pipe(
+          Effect.provide(
+            layerFor(httpHandler, {
+              retryPolicy: {
+                maxRetries: 3,
+                baseDelayMillis: 0,
+                retryableStatuses: [408],
+              },
+            }),
+          ),
+        ),
+      );
+
+      assert.equal(Exit.isFailure(exit), true);
+      assert.equal(apiCalls, 1);
+    }),
+  );
+
+  it.effect("retries bounded 408 and 503 responses", () =>
+    Effect.gen(function* () {
+      for (const status of [408, 503]) {
+        let tokenCalls = 0;
+        let apiCalls = 0;
+        const httpHandler = httpHandlerFrom((input) => {
+          if (String(input) === "https://identity.test/connect/token") {
+            tokenCalls += 1;
+            return tokenResponse("token-123");
+          }
+
+          apiCalls += 1;
+          if (apiCalls < 3) return new Response(null, { status });
+          return Response.json({ ok: true, status });
+        });
+
+        const result = yield* withClient(httpHandler, (http) =>
+          http.requestJson("/odata/v1/Property"),
+        );
+
+        assert.deepEqual(result, { ok: true, status });
+        assert.equal(tokenCalls, 1);
+        assert.equal(apiCalls, 3);
+      }
+    }),
+  );
 });

@@ -38,9 +38,6 @@ const unsupportedODataParameter = (option: string) =>
 const validateODataQuery = (
   query?: DdfODataListQuery | DdfODataGetQuery | DdfReplicationQuery,
 ) => {
-  if (query !== undefined && "count" in query && query.count !== undefined) {
-    throw unsupportedODataParameter("$count");
-  }
   if (query !== undefined && "top" in query) {
     const top = query.top;
     if (top !== undefined) {
@@ -98,6 +95,8 @@ export const filters = {
   in: (field: string, values: ReadonlyArray<ODataPrimitive>) =>
     `${field} in (${values.map(odataValueLiteral).join(",")})`,
   has: (field: string, value: string) => `${field} has ${value}`,
+  modifiedAfter: (field: string, dateOrString: Date | string) =>
+    `${field} gt ${dateOrString instanceof Date ? dateOrString.toISOString() : dateOrString}`,
   not: (clause: string) => `not (${clause})`,
   any: (
     collection: string,
@@ -130,6 +129,8 @@ export const encodeODataQuery = (
     query.select.length > 0
   )
     p.set("$select", query.select.join(","));
+  if ("count" in query && query.count !== undefined)
+    p.set("$count", String(query.count));
   if (
     "filter" in query &&
     query.filter !== undefined &&
