@@ -136,6 +136,50 @@ describe("syncProperties", () => {
   );
 
   it.effect(
+    "uses atomic property graph sink when provided",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({
+                value: [
+                  {
+                    ListingKey: "listing-1",
+                    ModificationTimestamp: "2024-01-02T00:00:00.000Z",
+                  },
+                ],
+              });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) =>
+            response<T>(propertyFor(String(key))),
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            sink: {
+              upsertPropertyGraph: (graph) =>
+                Effect.sync(() => calls.push(`graph:${graph.property.ListingKey}:${graph.rooms.length}:${graph.media.length}`)),
+              upsertProperty: (property) =>
+                Effect.sync(() => calls.push(`property:${property.ListingKey}`)),
+              upsertRoom: (room) =>
+                Effect.sync(() => calls.push(`room:${room.ListingKey}`)),
+              upsertMedia: (media) =>
+                Effect.sync(() => calls.push(`media:${media.MediaKey}`)),
+            },
+          }),
+          http,
+        );
+
+        assert.equal(result.nextWatermark, "2024-01-02T00:00:00.000Z");
+        assert.deepEqual(calls, ["graph:listing-1:1:1"]);
+      }),
+  );
+
+  it.effect(
     "paginates replication next links and calls property persistence sinks",
     () =>
       Effect.gen(function* () {
