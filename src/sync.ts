@@ -264,7 +264,7 @@ const highestWatermark = (timestamps: ReadonlyArray<unknown>) => {
 
   for (const timestamp of timestamps) {
     const watermark = timestampToWatermark(timestamp);
-    if (!watermark) continue;
+    if (watermark === null) continue;
 
     const millis = Date.parse(watermark);
     if (Number.isFinite(millis) && millis >= highestMillis) {
@@ -286,7 +286,7 @@ const safeHighestWatermark = (
   let earliestFailedMillis = Number.POSITIVE_INFINITY;
   for (const timestamp of failedTimestamps) {
     const watermark = timestampToWatermark(timestamp);
-    if (!watermark) return null;
+    if (watermark === null) return null;
 
     const millis = Date.parse(watermark);
     if (!Number.isFinite(millis)) return null;
@@ -296,7 +296,7 @@ const safeHighestWatermark = (
   return highestWatermark(
     successfulTimestamps.filter((timestamp) => {
       const watermark = timestampToWatermark(timestamp);
-      if (!watermark) return false;
+      if (watermark === null) return false;
 
       const millis = Date.parse(watermark);
       return Number.isFinite(millis) && millis < earliestFailedMillis;
@@ -306,12 +306,12 @@ const safeHighestWatermark = (
 
 const incrementalQuery = (options: BaseSyncOptions | undefined) => {
   const query = options?.query ?? {};
-  if (options?.mode !== "incremental" || !options.since) return query;
+  if (options?.mode !== "incremental" || options.since === undefined) return query;
 
   const sinceFilter = `ModificationTimestamp gt ${options.since}`;
   return {
     ...query,
-    filter: query.filter ? `(${query.filter}) and ${sinceFilter}` : sinceFilter,
+    filter: query.filter !== undefined ? `(${query.filter}) and ${sinceFilter}` : sinceFilter,
   };
 };
 
@@ -401,7 +401,7 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
     records.push(...firstExit.value.value);
     let next = firstExit.value["@odata.nextLink"] ?? null;
 
-    while (next) {
+    while (next !== null) {
       const pageKey = `page:${next}`;
       const pageExit = yield* Effect.exit(
         http.requestJson<typeof firstExit.value>(
@@ -539,10 +539,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           yield* options.sink.upsertPropertyGraph(graph);
           return;
         }
-        if (options?.sink?.upsertProperty) {
+        if (options?.sink?.upsertProperty !== undefined) {
           yield* options.sink.upsertProperty(graph.property);
         }
-        if (options?.sink?.upsertRoom) {
+        if (options?.sink?.upsertRoom !== undefined) {
           yield* Effect.forEach(
             graph.rooms,
             (room) =>
@@ -550,7 +550,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
             { discard: true },
           );
         }
-        if (options?.sink?.upsertMedia) {
+        if (options?.sink?.upsertMedia !== undefined) {
           yield* Effect.forEach(
             graph.media,
             (media) =>
@@ -563,7 +563,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         }
       });
       const persistError = yield* runPersist("Property", propertyKey, persist);
-      if (persistError) {
+      if (persistError !== null) {
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
@@ -576,15 +576,15 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       successfulWatermarks,
       failedWatermarks,
     );
-    if (nextWatermark) {
+    if (nextWatermark !== null) {
       yield* saveWatermarkToService("Property", nextWatermark);
-      if (options?.sink?.saveWatermark) {
+      if (options?.sink?.saveWatermark !== undefined) {
         const persistError = yield* runPersist(
           "Property",
           "watermark",
           options.sink.saveWatermark("Property", nextWatermark),
         );
-        if (persistError) errors.push(persistError);
+        if (persistError !== null) errors.push(persistError);
       }
     }
 
@@ -648,7 +648,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
-    if (result.error) {
+    if (result.error !== null) {
       errors.push(result.error);
       failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
@@ -656,18 +656,19 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     if (result.record === null) continue;
     records.push(result.record);
     const memberKey = String(result.record.MemberKey ?? "");
-    const memberMedia = (Array.isArray((result.record as Record<string, unknown>).Media)
-      ? ((result.record as Record<string, unknown>).Media as MediaType)
-      : []
+    const memberMedia = (
+      Array.isArray((result.record as Record<string, unknown>).Media)
+        ? ((result.record as Record<string, unknown>).Media as MediaType)
+        : []
     ).map((media) => normalizeMedia("Member", memberKey, media));
     const persist = Effect.gen(function* () {
       if (options?.sink?.upsertMemberWithMedia !== undefined) {
         yield* options.sink.upsertMemberWithMedia(result.record, memberMedia);
         return;
       }
-      if (options?.sink?.upsertMember)
+      if (options?.sink?.upsertMember !== undefined)
         yield* options.sink.upsertMember(result.record);
-      if (options?.sink?.upsertMedia) {
+      if (options?.sink?.upsertMedia !== undefined) {
         yield* Effect.forEach(
           memberMedia,
           (media) =>
@@ -680,7 +681,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
       }
     });
     const persistError = yield* runPersist("Member", memberKey, persist);
-    if (persistError) {
+    if (persistError !== null) {
       errors.push(persistError);
       failedWatermarks.push(identifier.ModificationTimestamp);
     } else {
@@ -695,13 +696,13 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   );
   if (nextWatermark !== null) {
     yield* saveWatermarkToService("Member", nextWatermark);
-    if (options?.sink?.saveWatermark) {
+    if (options?.sink?.saveWatermark !== undefined) {
       const persistError = yield* runPersist(
         "Member",
         "watermark",
         options.sink.saveWatermark("Member", nextWatermark),
       );
-      if (persistError) errors.push(persistError);
+      if (persistError !== null) errors.push(persistError);
     }
   }
 
@@ -764,7 +765,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   for (const { identifier, result } of hydrated) {
-    if (result.error) {
+    if (result.error !== null) {
       errors.push(result.error);
       failedWatermarks.push(identifier.ModificationTimestamp);
       continue;
@@ -773,17 +774,17 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     records.push(result.record);
     const office = result.record as Record<string, unknown>;
     const officeKey = String(office.OfficeKey ?? "");
-    const officeMedia = (Array.isArray(office.Media) ? (office.Media as MediaType) : []).map(
-      (media) => normalizeMedia("Office", officeKey, media),
-    );
+    const officeMedia = (
+      Array.isArray(office.Media) ? (office.Media as MediaType) : []
+    ).map((media) => normalizeMedia("Office", officeKey, media));
     const persist = Effect.gen(function* () {
       if (options?.sink?.upsertOfficeWithMedia !== undefined) {
         yield* options.sink.upsertOfficeWithMedia(result.record, officeMedia);
         return;
       }
-      if (options?.sink?.upsertOffice)
+      if (options?.sink?.upsertOffice !== undefined)
         yield* options.sink.upsertOffice(result.record);
-      if (options?.sink?.upsertMedia) {
+      if (options?.sink?.upsertMedia !== undefined) {
         yield* Effect.forEach(
           officeMedia,
           (media) =>
@@ -796,7 +797,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
       }
     });
     const persistError = yield* runPersist("Office", officeKey, persist);
-    if (persistError) {
+    if (persistError !== null) {
       errors.push(persistError);
       failedWatermarks.push(identifier.ModificationTimestamp);
     } else {
@@ -809,15 +810,15 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     successfulWatermarks,
     failedWatermarks,
   );
-  if (nextWatermark) {
+  if (nextWatermark !== null) {
     yield* saveWatermarkToService("Office", nextWatermark);
-    if (options?.sink?.saveWatermark) {
+    if (options?.sink?.saveWatermark !== undefined) {
       const persistError = yield* runPersist(
         "Office",
         "watermark",
         options.sink.saveWatermark("Office", nextWatermark),
       );
-      if (persistError) errors.push(persistError);
+      if (persistError !== null) errors.push(persistError);
     }
   }
 
@@ -861,7 +862,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           const timestamp = (openHouse as Record<string, unknown>)[
             watermarkField
           ];
-          if (!options?.sink?.upsertOpenHouse) {
+          if (options?.sink?.upsertOpenHouse === undefined) {
             successfulWatermarks.push(timestamp);
             return;
           }
@@ -870,7 +871,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             key,
             options.sink.upsertOpenHouse(openHouse),
           );
-          if (persistError) {
+          if (persistError !== null) {
             errors.push(persistError);
             failedWatermarks.push(timestamp);
           } else {
@@ -885,15 +886,15 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       successfulWatermarks,
       failedWatermarks,
     );
-    if (nextWatermark) {
+    if (nextWatermark !== null) {
       yield* saveWatermarkToService("OpenHouse", nextWatermark);
-      if (options?.sink?.saveWatermark) {
+      if (options?.sink?.saveWatermark !== undefined) {
         const persistError = yield* runPersist(
           "OpenHouse",
           "watermark",
           options.sink.saveWatermark("OpenHouse", nextWatermark),
         );
-        if (persistError) errors.push(persistError);
+        if (persistError !== null) errors.push(persistError);
       }
     }
 
@@ -956,7 +957,7 @@ export const pruneMissingProperties = Effect.fn(
 
   if (
     diff.missingLocalKeys.length > 0 &&
-    options?.sink?.markMissingPropertiesInactive
+    options?.sink?.markMissingPropertiesInactive !== undefined
   ) {
     yield* options.sink.markMissingPropertiesInactive(diff.missingLocalKeys);
   }
@@ -1010,7 +1011,7 @@ export const pruneMissingMembers = Effect.fn(
 
   if (
     diff.missingLocalKeys.length > 0 &&
-    options?.sink?.markMissingMembersInactive
+    options?.sink?.markMissingMembersInactive !== undefined
   ) {
     yield* options.sink.markMissingMembersInactive(diff.missingLocalKeys);
   }
@@ -1032,7 +1033,7 @@ export const pruneMissingOffices = Effect.fn(
 
   if (
     diff.missingLocalKeys.length > 0 &&
-    options?.sink?.markMissingOfficesInactive
+    options?.sink?.markMissingOfficesInactive !== undefined
   ) {
     yield* options.sink.markMissingOfficesInactive(diff.missingLocalKeys);
   }

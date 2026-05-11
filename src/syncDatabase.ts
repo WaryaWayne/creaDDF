@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { DateTime, Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import type {
   MemberSyncOptions,
@@ -182,7 +182,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     }
 
     const runId = `ddf-sync-${randomUUID()}`;
-    const startedAt = new Date();
+    const startedAt = yield* DateTime.nowAsDate;
     const sink = yield* dependencies.makeSink({ runId });
 
     const [propertyWatermark, memberWatermark, officeWatermark, openHouseWatermark] =
@@ -238,7 +238,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       { discard: true },
     );
 
-    const completedAt = new Date();
+    const completedAt = yield* DateTime.nowAsDate;
     const hasErrors =
       property.errors.length +
         member.errors.length +

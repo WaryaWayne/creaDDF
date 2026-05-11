@@ -876,7 +876,7 @@ describe("syncOpenHouses", () => {
             const payload = {
               value: [{ OpenHouseKey: 123, OpenHouseDate: "not-a-date" }],
             };
-            return schema
+            return schema !== undefined
               ? (Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<
                   T,
                   never
@@ -927,7 +927,7 @@ describe("syncOpenHouses", () => {
             schema?: DdfResponseSchema<T>,
           ) => {
             const payload = { value: [{ OpenHouseKey: 456 }] };
-            return schema
+            return schema !== undefined
               ? (Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<
                   T,
                   never
@@ -982,7 +982,7 @@ describe("syncOpenHouses", () => {
           ) => {
             paths.push(path);
             const payload = { value: [{ OpenHouseKey: "open-selected-2" }] };
-            return schema
+            return schema !== undefined
               ? (Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<
                   T,
                   never

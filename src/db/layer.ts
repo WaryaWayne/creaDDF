@@ -10,7 +10,7 @@ export interface DdfDatabaseConfig {
 export type DdfDrizzleDatabase = EffectPgDatabase & { readonly $client: PgClient.PgClient };
 
 export class DdfDatabase extends Context.Service<DdfDatabase>()(
-  "crea-ddf-effect-sdk/db/DdfDatabase",
+  "crea-ddf-effect-sdk/db/layer/DdfDatabase",
   {
     make: Effect.gen(function* () {
       const db = yield* PgDrizzle.makeWithDefaults();
