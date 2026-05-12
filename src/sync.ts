@@ -250,6 +250,56 @@ export interface MasterListDiff {
 const boundedConcurrency = (concurrency: number | undefined) =>
   Math.max(1, Math.floor(concurrency ?? 5));
 
+const progressLogInterval = (total: number) => {
+  if (total >= 1_000) return 250;
+  if (total >= 100) return 50;
+  if (total >= 20) return 10;
+  return 0;
+};
+
+const shouldLogProgress = (
+  completed: number,
+  total: number,
+  interval: number,
+) =>
+  total > 0 &&
+  (completed === total || (interval > 0 && completed % interval === 0));
+
+const shouldLogPageProgress = (pageCount: number, hasNextPage: boolean) =>
+  pageCount === 1 || pageCount % 10 === 0 || !hasNextPage;
+
+const queryLogDetails = (query?: {
+  readonly filter?: string;
+  readonly select?: ReadonlyArray<string>;
+  readonly top?: number;
+  readonly count?: boolean;
+}) => ({
+  hasFilter: query?.filter !== undefined,
+  selectFields: query?.select?.length ?? 0,
+  top: query?.top ?? null,
+  count: query?.count ?? null,
+});
+
+const baseSyncLogDetails = (
+  options: BaseSyncOptions | undefined,
+  concurrency: number,
+  query: BaseSyncOptions["query"],
+) => ({
+  mode: options?.mode ?? "initial",
+  since: options?.since ?? null,
+  destinationId: options?.destinationId ?? null,
+  concurrency,
+  ...queryLogDetails(query),
+});
+
+const countsLogDetails = (counts: SyncCounts, nextWatermark: string | null) => ({
+  identifiers: counts.identifiers,
+  hydrated: counts.hydrated,
+  persisted: counts.persisted,
+  failed: counts.failed,
+  nextWatermark,
+});
+
 const timestampToWatermark = (timestamp: unknown): string | null => {
   if (timestamp instanceof Date) return timestamp.toISOString();
   if (DateTime.isDateTime(timestamp)) return DateTime.formatIso(timestamp);
@@ -365,6 +415,14 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   const identifiers: Array<Identifier> = [...first.value];
   const errors: Array<SyncRecordError> = [];
   let next = first["@odata.nextLink"] ?? null;
+  let pageCount = 1;
+
+  yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
+    pages: pageCount,
+    identifiers: identifiers.length,
+    pageSize: first.value.length,
+    hasNextPage: next !== null,
+  });
 
   while (next !== null) {
     const pageKey = `page:${next}`;
@@ -372,13 +430,27 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
       http.requestJson(next, undefined, schema),
     );
     if (Exit.isFailure(pageExit)) {
+      yield* Effect.logWarning(`${resource} sync: failed to collect identifier page`, {
+        nextPage: pageCount + 1,
+        identifiers: identifiers.length,
+      });
       errors.push(
         makeRecordError(resource, pageKey, "hydrate", pageExit.cause),
       );
       break;
     }
+    pageCount += 1;
+    const pageSize = pageExit.value.value.length;
     identifiers.push(...pageExit.value.value);
     next = pageExit.value["@odata.nextLink"] ?? null;
+    if (shouldLogPageProgress(pageCount, next !== null)) {
+      yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
+        pages: pageCount,
+        identifiers: identifiers.length,
+        pageSize,
+        hasNextPage: next !== null,
+      });
+    }
   }
 
   return { identifiers, errors };
@@ -392,6 +464,7 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
     const firstExit = yield* Effect.exit(listOpenHouses(query));
 
     if (Exit.isFailure(firstExit)) {
+      yield* Effect.logWarning("OpenHouse sync: failed to collect first page");
       errors.push(
         makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
       );
@@ -400,6 +473,14 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
 
     records.push(...firstExit.value.value);
     let next = firstExit.value["@odata.nextLink"] ?? null;
+    let pageCount = 1;
+
+    yield* Effect.logInfo("OpenHouse sync: collected page", {
+      pages: pageCount,
+      records: records.length,
+      pageSize: firstExit.value.value.length,
+      hasNextPage: next !== null,
+    });
 
     while (next !== null) {
       const pageKey = `page:${next}`;
@@ -415,14 +496,28 @@ const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
       );
 
       if (Exit.isFailure(pageExit)) {
+        yield* Effect.logWarning("OpenHouse sync: failed to collect page", {
+          nextPage: pageCount + 1,
+          records: records.length,
+        });
         errors.push(
           makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
         );
         break;
       }
 
+      pageCount += 1;
+      const pageSize = pageExit.value.value.length;
       records.push(...pageExit.value.value);
       next = pageExit.value["@odata.nextLink"] ?? null;
+      if (shouldLogPageProgress(pageCount, next !== null)) {
+        yield* Effect.logInfo("OpenHouse sync: collected page", {
+          pages: pageCount,
+          records: records.length,
+          pageSize,
+          hasNextPage: next !== null,
+        });
+      }
     }
 
     return { records, errors };
@@ -483,12 +578,18 @@ const trackSyncMetrics = (counts: SyncCounts) =>
 
 export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
   function* (options?: PropertySyncOptions) {
+    const concurrency = boundedConcurrency(options?.concurrency);
+    const query = incrementalQuery(options);
+    yield* Effect.logInfo(
+      "Property sync: requesting replication identifiers",
+      baseSyncLogDetails(options, concurrency, query),
+    );
     const first =
       options?.destinationId === undefined
-        ? yield* replicateProperties(incrementalQuery(options))
+        ? yield* replicateProperties(query)
         : yield* replicatePropertiesForDestination(
             options.destinationId,
-            incrementalQuery(options),
+            query,
           );
     const collected = yield* collectPagedIdentifiersWithErrors(
       "Property",
@@ -496,6 +597,16 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       PropertyReplicationIdentifierResponseSchema,
     );
     const identifiers = collected.identifiers;
+    yield* Effect.logInfo("Property sync: collected identifiers", {
+      identifiers: identifiers.length,
+      pageErrors: collected.errors.length,
+    });
+    yield* Effect.logInfo("Property sync: hydrating records", {
+      identifiers: identifiers.length,
+      concurrency,
+    });
+    const hydrateProgressEvery = progressLogInterval(identifiers.length);
+    let hydratedRecords = 0;
     const hydrated = yield* Effect.forEach(
       identifiers,
       (identifier) =>
@@ -505,9 +616,22 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
             identifier.ListingKey,
             (key) => getProperty(key),
           );
+          hydratedRecords += 1;
+          if (
+            shouldLogProgress(
+              hydratedRecords,
+              identifiers.length,
+              hydrateProgressEvery,
+            )
+          ) {
+            yield* Effect.logInfo("Property sync: hydrate progress", {
+              completed: hydratedRecords,
+              total: identifiers.length,
+            });
+          }
           return { identifier, result };
         }),
-      { concurrency: boundedConcurrency(options?.concurrency) },
+      { concurrency },
     );
 
     const records: Array<PropertyGraph> = [];
@@ -522,13 +646,33 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       options?.sink?.upsertRoom !== undefined ||
       options?.sink?.upsertMedia !== undefined;
 
+    yield* Effect.logInfo("Property sync: normalizing and persisting records", {
+      hydrated: hydrated.length,
+    });
+    const persistProgressEvery = progressLogInterval(hydrated.length);
+    let processedRecords = 0;
+    const logPersistProgress = (completed: number) =>
+      shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+        ? Effect.logInfo("Property sync: persist progress", {
+            completed,
+            total: hydrated.length,
+            persisted: persistedRecords,
+            failed: errors.length,
+          })
+        : Effect.void;
+
     for (const { identifier, result } of hydrated) {
+      processedRecords += 1;
       if (result.error !== null) {
         errors.push(result.error);
         failedWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
         continue;
       }
-      if (result.record === null) continue;
+      if (result.record === null) {
+        yield* logPersistProgress(processedRecords);
+        continue;
+      }
 
       const graph: PropertyGraph = yield* normalizePropertyGraph(result.record);
       records.push(graph);
@@ -570,6 +714,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         if (hasRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
+      yield* logPersistProgress(processedRecords);
     }
 
     const nextWatermark = safeHighestWatermark(
@@ -595,6 +740,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       errors,
     );
     yield* trackSyncMetrics(counts);
+    yield* Effect.logInfo(
+      "Property sync: complete",
+      countsLogDetails(counts, nextWatermark),
+    );
 
     return {
       resource: "Property",
@@ -610,12 +759,18 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
 export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   options?: MemberSyncOptions,
 ) {
+  const concurrency = boundedConcurrency(options?.concurrency);
+  const query = incrementalQuery(options);
+  yield* Effect.logInfo(
+    "Member sync: requesting replication identifiers",
+    baseSyncLogDetails(options, concurrency, query),
+  );
   const first =
     options?.destinationId === undefined
-      ? yield* replicateMembers(incrementalQuery(options))
+      ? yield* replicateMembers(query)
       : yield* replicateMembersForDestination(
           options.destinationId,
-          incrementalQuery(options),
+          query,
         );
   const collected = yield* collectPagedIdentifiersWithErrors(
     "Member",
@@ -623,6 +778,16 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     MemberReplicationIdentifierResponseSchema,
   );
   const identifiers = collected.identifiers;
+  yield* Effect.logInfo("Member sync: collected identifiers", {
+    identifiers: identifiers.length,
+    pageErrors: collected.errors.length,
+  });
+  yield* Effect.logInfo("Member sync: hydrating records", {
+    identifiers: identifiers.length,
+    concurrency,
+  });
+  const hydrateProgressEvery = progressLogInterval(identifiers.length);
+  let hydratedRecords = 0;
   const hydrated = yield* Effect.forEach(
     identifiers,
     (identifier) =>
@@ -632,9 +797,22 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
           identifier.MemberKey,
           getMember,
         );
+        hydratedRecords += 1;
+        if (
+          shouldLogProgress(
+            hydratedRecords,
+            identifiers.length,
+            hydrateProgressEvery,
+          )
+        ) {
+          yield* Effect.logInfo("Member sync: hydrate progress", {
+            completed: hydratedRecords,
+            total: identifiers.length,
+          });
+        }
         return { identifier, result };
       }),
-    { concurrency: boundedConcurrency(options?.concurrency) },
+    { concurrency },
   );
   const records: Array<MemberRecord> = [];
   const errors: Array<SyncRecordError> = [...collected.errors];
@@ -647,13 +825,33 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     options?.sink?.upsertMember !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
+  yield* Effect.logInfo("Member sync: normalizing and persisting records", {
+    hydrated: hydrated.length,
+  });
+  const persistProgressEvery = progressLogInterval(hydrated.length);
+  let processedRecords = 0;
+  const logPersistProgress = (completed: number) =>
+    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+      ? Effect.logInfo("Member sync: persist progress", {
+          completed,
+          total: hydrated.length,
+          persisted: persistedRecords,
+          failed: errors.length,
+        })
+      : Effect.void;
+
   for (const { identifier, result } of hydrated) {
+    processedRecords += 1;
     if (result.error !== null) {
       errors.push(result.error);
       failedWatermarks.push(identifier.ModificationTimestamp);
+      yield* logPersistProgress(processedRecords);
       continue;
     }
-    if (result.record === null) continue;
+    if (result.record === null) {
+      yield* logPersistProgress(processedRecords);
+      continue;
+    }
     records.push(result.record);
     const memberKey = String(result.record.MemberKey ?? "");
     const memberMedia = (
@@ -688,6 +886,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
       if (hasRecordSink) persistedRecords += 1;
       successfulWatermarks.push(identifier.ModificationTimestamp);
     }
+    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(
@@ -713,6 +912,10 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     errors,
   );
   yield* trackSyncMetrics(counts);
+  yield* Effect.logInfo(
+    "Member sync: complete",
+    countsLogDetails(counts, nextWatermark),
+  );
 
   return {
     resource: "Member",
@@ -727,12 +930,18 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
 export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   options?: OfficeSyncOptions,
 ) {
+  const concurrency = boundedConcurrency(options?.concurrency);
+  const query = incrementalQuery(options);
+  yield* Effect.logInfo(
+    "Office sync: requesting replication identifiers",
+    baseSyncLogDetails(options, concurrency, query),
+  );
   const first =
     options?.destinationId === undefined
-      ? yield* replicateOffices(incrementalQuery(options))
+      ? yield* replicateOffices(query)
       : yield* replicateOfficesForDestination(
           options.destinationId,
-          incrementalQuery(options),
+          query,
         );
   const collected = yield* collectPagedIdentifiersWithErrors(
     "Office",
@@ -740,6 +949,16 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     OfficeReplicationIdentifierResponseSchema,
   );
   const identifiers = collected.identifiers;
+  yield* Effect.logInfo("Office sync: collected identifiers", {
+    identifiers: identifiers.length,
+    pageErrors: collected.errors.length,
+  });
+  yield* Effect.logInfo("Office sync: hydrating records", {
+    identifiers: identifiers.length,
+    concurrency,
+  });
+  const hydrateProgressEvery = progressLogInterval(identifiers.length);
+  let hydratedRecords = 0;
   const hydrated = yield* Effect.forEach(
     identifiers,
     (identifier) =>
@@ -749,9 +968,22 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
           identifier.OfficeKey,
           getOffice,
         );
+        hydratedRecords += 1;
+        if (
+          shouldLogProgress(
+            hydratedRecords,
+            identifiers.length,
+            hydrateProgressEvery,
+          )
+        ) {
+          yield* Effect.logInfo("Office sync: hydrate progress", {
+            completed: hydratedRecords,
+            total: identifiers.length,
+          });
+        }
         return { identifier, result };
       }),
-    { concurrency: boundedConcurrency(options?.concurrency) },
+    { concurrency },
   );
   const records: Array<OfficeRecord> = [];
   const errors: Array<SyncRecordError> = [...collected.errors];
@@ -764,13 +996,33 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     options?.sink?.upsertOffice !== undefined ||
     options?.sink?.upsertMedia !== undefined;
 
+  yield* Effect.logInfo("Office sync: normalizing and persisting records", {
+    hydrated: hydrated.length,
+  });
+  const persistProgressEvery = progressLogInterval(hydrated.length);
+  let processedRecords = 0;
+  const logPersistProgress = (completed: number) =>
+    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+      ? Effect.logInfo("Office sync: persist progress", {
+          completed,
+          total: hydrated.length,
+          persisted: persistedRecords,
+          failed: errors.length,
+        })
+      : Effect.void;
+
   for (const { identifier, result } of hydrated) {
+    processedRecords += 1;
     if (result.error !== null) {
       errors.push(result.error);
       failedWatermarks.push(identifier.ModificationTimestamp);
+      yield* logPersistProgress(processedRecords);
       continue;
     }
-    if (result.record === null) continue;
+    if (result.record === null) {
+      yield* logPersistProgress(processedRecords);
+      continue;
+    }
     records.push(result.record);
     const office = result.record as Record<string, unknown>;
     const officeKey = String(office.OfficeKey ?? "");
@@ -804,6 +1056,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
       if (hasRecordSink) persistedRecords += 1;
       successfulWatermarks.push(identifier.ModificationTimestamp);
     }
+    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(
@@ -829,6 +1082,10 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     errors,
   );
   yield* trackSyncMetrics(counts);
+  yield* Effect.logInfo(
+    "Office sync: complete",
+    countsLogDetails(counts, nextWatermark),
+  );
 
   return {
     resource: "Office",
@@ -842,8 +1099,17 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
 
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   function* (options?: OpenHouseSyncOptions) {
+    const concurrency = boundedConcurrency(options?.concurrency);
+    yield* Effect.logInfo("OpenHouse sync: collecting pages", {
+      concurrency,
+      ...queryLogDetails(options?.query),
+    });
     const collected = yield* collectOpenHousePages(options?.query);
     const records = collected.records;
+    yield* Effect.logInfo("OpenHouse sync: collected records", {
+      records: records.length,
+      pageErrors: collected.errors.length,
+    });
     const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
     const failedWatermarks: Array<unknown> = collected.errors.some(
@@ -853,6 +1119,22 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       : [];
     const watermarkField = options?.watermarkField ?? "OpenHouseDate";
     let persistedRecords = 0;
+    const persistProgressEvery = progressLogInterval(records.length);
+    let processedRecords = 0;
+    const logPersistProgress = (completed: number) =>
+      shouldLogProgress(completed, records.length, persistProgressEvery)
+        ? Effect.logInfo("OpenHouse sync: persist progress", {
+            completed,
+            total: records.length,
+            persisted: persistedRecords,
+            failed: errors.length,
+          })
+        : Effect.void;
+
+    yield* Effect.logInfo("OpenHouse sync: persisting records", {
+      records: records.length,
+      concurrency,
+    });
 
     yield* Effect.forEach(
       records,
@@ -864,6 +1146,8 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           ];
           if (options?.sink?.upsertOpenHouse === undefined) {
             successfulWatermarks.push(timestamp);
+            processedRecords += 1;
+            yield* logPersistProgress(processedRecords);
             return;
           }
           const persistError = yield* runPersist(
@@ -878,8 +1162,10 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             persistedRecords += 1;
             successfulWatermarks.push(timestamp);
           }
+          processedRecords += 1;
+          yield* logPersistProgress(processedRecords);
         }),
-      { concurrency: boundedConcurrency(options?.concurrency), discard: true },
+      { concurrency, discard: true },
     );
 
     const nextWatermark = safeHighestWatermark(
@@ -900,6 +1186,10 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
 
     const counts = syncCounts(0, records.length, persistedRecords, errors);
     yield* trackSyncMetrics(counts);
+    yield* Effect.logInfo(
+      "OpenHouse sync: complete",
+      countsLogDetails(counts, nextWatermark),
+    );
 
     return {
       resource: "OpenHouse",

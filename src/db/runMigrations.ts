@@ -1,11 +1,11 @@
-import { Config, Data, Effect } from "effect";
+import { Config, Data, Effect, FileSystem, Layer } from "effect";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { SqlClient } from "effect/unstable/sql/SqlClient";
-import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { DdfDatabase } from "./layer";
 import { splitSqlStatements } from "./migrationUtils";
 export { splitSqlStatements } from "./migrationUtils";
+
 
 export class DdfDatabaseMigrationLoadError extends Data.TaggedError(
   "DdfDatabaseMigrationLoadError",
@@ -28,10 +28,18 @@ const defaultMigrationsDirectory = () =>
 const loadDdfDatabaseMigrations = Effect.fn(
   "DdfDatabaseMigrations.load",
 )(function* (directory: string) {
-  const files = yield* Effect.tryPromise({
-    try: () => readdir(directory),
-    catch: (cause) => new Migrator.MigrationError({ kind: "Failed", message: `Failed to load DDF database migrations from ${directory}`, cause }),
-  });
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  const files = yield* fileSystem.readDirectory(directory).pipe(
+    Effect.mapError(
+      (cause) =>
+        new Migrator.MigrationError({
+          kind: "Failed",
+          message: `Failed to load DDF database migrations from ${directory}`,
+          cause,
+        }),
+    ),
+  );
 
   const migrationFiles = files
     .filter((file) => /^\d+_.+/.test(file))
@@ -39,6 +47,7 @@ const loadDdfDatabaseMigrations = Effect.fn(
 
   return yield* Effect.forEach(migrationFiles.map((file, index) => ({ file, id: index + 1 })), ({ file, id }) =>
     Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
       const match = /^(\d+)_(.+?)(?:\.sql)?$/.exec(file);
       if (match === null) {
         return yield* new Migrator.MigrationError({
@@ -49,11 +58,17 @@ const loadDdfDatabaseMigrations = Effect.fn(
       const sqlPath = file.endsWith(".sql")
         ? `${directory}/${file}`
         : `${directory}/${file}/migration.sql`;
-      const content = yield* Effect.tryPromise({
-        try: () => readFile(sqlPath, "utf8"),
-        catch: (cause) =>
-          new Migrator.MigrationError({ kind: "Failed", message: `Failed to load DDF database migrations from ${directory}`, cause }),
-      });
+
+      const content = yield* fileSystem.readFileString(sqlPath).pipe(
+        Effect.mapError(
+          (cause) =>
+            new Migrator.MigrationError({
+              kind: "Failed",
+              message: `Failed to read DDF database migration file: ${sqlPath}`,
+              cause,
+            }),
+        ),
+      );
       const name = match[2] ?? "migration";
       return [
         id,
@@ -85,13 +100,22 @@ export const runDdfDatabaseMigrations = Effect.fn(
   });
 });
 
+
 const cli = Effect.gen(function* () {
   const databaseUrl = yield* Config.redacted("DATABASE_URL");
+  const { BunFileSystem } = yield* Effect.promise(() =>
+    import("@effect/platform-bun"),
+  );
+  const mergedLayer = Layer.merge(
+    DdfDatabase.layerFromUrl(databaseUrl),
+    BunFileSystem.layer,
+  );
   return yield* runDdfDatabaseMigrations().pipe(
-    Effect.provide(DdfDatabase.layerFromUrl(databaseUrl)),
+    Effect.provide(mergedLayer),
   );
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  Effect.runPromise(cli);
+  const { BunRuntime } = await import("@effect/platform-bun");
+  BunRuntime.runMain(cli);
 }

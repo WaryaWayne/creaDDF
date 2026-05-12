@@ -19,8 +19,9 @@
     "prepare": "effect-language-service patch",
     "test:live": "node --env-file-if-exists=.env --import tsx --test src/live.integration.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/runMigrations.ts",
-    "db:push": "drizzle-kit push"
+    "db:migrate": "bun src/db/runMigrations.ts",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "keywords": [],
   "author": "",
