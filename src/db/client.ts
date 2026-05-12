@@ -324,7 +324,7 @@ const withoutHiddenRaw = <Row extends DbRow>(row: Row, includeRaw?: boolean): Db
 };
 
 const appendGroup = (rows: DbRows, property: string, grouped: Map<string, DbRows>, key = "listingKey") =>
-  rows.map((row) => ({ ...withoutHiddenRaw(row), [property]: typeof row[key] === "string" ? grouped.get(row[key]) ?? [] : [] }));
+  rows.map((row) => ({ ...row, [property]: typeof row[key] === "string" ? grouped.get(row[key]) ?? [] : [] }));
 
 export type RelatedSelect<Field extends string> = BaseOptions<Field>;
 export type PropertyInclude = {
@@ -370,17 +370,17 @@ const pickVirtual = <Field extends string>(
   return selected;
 };
 
-const memberLanguageRowsFromRaw = (memberKey: string, raw: unknown) =>
+export const memberLanguageRowsFromRaw = (memberKey: string, raw: unknown) =>
   asArray(fieldOf(raw, "MemberLanguages"))
     .filter((language): language is string => typeof language === "string")
     .map((language) => ({ memberKey, language }));
 
-const memberDesignationRowsFromRaw = (memberKey: string, raw: unknown) =>
+export const memberDesignationRowsFromRaw = (memberKey: string, raw: unknown) =>
   asArray(fieldOf(raw, "MemberDesignation"))
     .filter((designation): designation is string => typeof designation === "string")
     .map((designation) => ({ memberKey, designation }));
 
-const socialRowsFromRaw = (resource: "Member" | "Office", resourceKey: string, raw: unknown) => {
+export const socialRowsFromRaw = (resource: "Member" | "Office", resourceKey: string, raw: unknown) => {
   const field = resource === "Member" ? "MemberSocialMedia" : "OfficeSocialMedia";
   return asArray(fieldOf(raw, field)).map((entry) => {
     const socialMediaKey = fieldOf(entry, "SocialMediaKey");
@@ -398,6 +398,28 @@ const socialRowsFromRaw = (resource: "Member" | "Office", resourceKey: string, r
     };
   });
 };
+
+const coListAgentFields = ["CoListAgentKey", "CoListAgentKey2", "CoListAgentKey3"] as const;
+const coListOfficeFields = ["CoListOfficeKey", "CoListOfficeKey2", "CoListOfficeKey3"] as const;
+
+const uniqueStringFields = (raw: unknown, fields: ReadonlyArray<string>) => {
+  const values = new Set<string>();
+  for (const field of fields) {
+    const value = fieldOf(raw, field);
+    if (typeof value === "string" && value.length > 0) values.add(value);
+  }
+  return Array.from(values);
+};
+
+export const coListAgentKeysFromRaw = (raw: unknown) => uniqueStringFields(raw, coListAgentFields);
+
+export const coListOfficeKeysFromRaw = (raw: unknown) => uniqueStringFields(raw, coListOfficeFields);
+
+const valuesForKeys = (keys: ReadonlyArray<string>, rowsByKey: Map<DbValue, DbRow>) =>
+  keys.flatMap((key) => {
+    const row = rowsByKey.get(key);
+    return row === undefined ? [] : [row];
+  });
 
 const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
   const { db } = yield* DdfDatabase;
@@ -422,8 +444,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
   });
 
   const withPropertyIncludes = Effect.fn("DdfDbClient.properties.include")(function* (rows: DbRows, include?: PropertyInclude, includeRaw?: boolean) {
-    let result = rows.map((row) => withoutHiddenRaw(row, includeRaw));
-    if (rows.length === 0 || include === undefined) return result;
+    let result = rows;
+    if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const listingKeys = stringValues(rows, "listingKey");
     if (include.media !== undefined && listingKeys.length > 0) {
       const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Property"), inArray(ddfMedia.resourceKey, listingKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("properties.media")));
@@ -449,12 +471,24 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       const byKey = new Map(offices.map((office) => [office.officeKey, office]));
       result = result.map((row) => ({ ...row, listOffice: typeof row.listOfficeKey === "string" ? byKey.get(row.listOfficeKey) ?? null : null }));
     }
-    return result;
+    if (include.coListAgents !== undefined) {
+      const agentKeys = Array.from(new Set(rows.flatMap((row) => coListAgentKeysFromRaw(row.raw))));
+      const agents = agentKeys.length === 0 ? [] : yield* db.select(selectionFor(memberColumns, memberFieldPresets.card, include.coListAgents, ["memberKey"])).from(ddfMembers).where(inArray(ddfMembers.memberKey, agentKeys)).pipe(Effect.mapError(mapClientError("properties.coListAgents")));
+      const byKey = new Map(agents.map((agent) => [agent.memberKey, agent]));
+      result = result.map((row) => ({ ...row, coListAgents: valuesForKeys(coListAgentKeysFromRaw(row.raw), byKey) }));
+    }
+    if (include.coListOffices !== undefined) {
+      const officeKeys = Array.from(new Set(rows.flatMap((row) => coListOfficeKeysFromRaw(row.raw))));
+      const offices = officeKeys.length === 0 ? [] : yield* db.select(selectionFor(officeColumns, officeFieldPresets.card, include.coListOffices, ["officeKey"])).from(ddfOffices).where(inArray(ddfOffices.officeKey, officeKeys)).pipe(Effect.mapError(mapClientError("properties.coListOffices")));
+      const byKey = new Map(offices.map((office) => [office.officeKey, office]));
+      result = result.map((row) => ({ ...row, coListOffices: valuesForKeys(coListOfficeKeysFromRaw(row.raw), byKey) }));
+    }
+    return result.map((row) => withoutHiddenRaw(row, includeRaw));
   });
 
   const withMemberIncludes = Effect.fn("DdfDbClient.members.include")(function* (rows: DbRows, include?: MemberInclude, includeRaw?: boolean) {
-    let result = rows.map((row) => withoutHiddenRaw(row, includeRaw));
-    if (rows.length === 0 || include === undefined) return result;
+    let result = rows;
+    if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const memberKeys = stringValues(rows, "memberKey");
     if (include.media !== undefined && memberKeys.length > 0) {
       const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Member"), inArray(ddfMedia.resourceKey, memberKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("members.media")));
@@ -479,8 +513,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
   });
 
   const withOfficeIncludes = Effect.fn("DdfDbClient.offices.include")(function* (rows: DbRows, include?: OfficeInclude, includeRaw?: boolean) {
-    let result = rows.map((row) => withoutHiddenRaw(row, includeRaw));
-    if (rows.length === 0 || include === undefined) return result;
+    let result = rows;
+    if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const officeKeys = stringValues(rows, "officeKey");
     if (include.media !== undefined && officeKeys.length > 0) {
       const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Office"), inArray(ddfMedia.resourceKey, officeKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("offices.media")));
@@ -501,8 +535,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
   });
 
   const withOpenHouseIncludes = Effect.fn("DdfDbClient.openHouses.include")(function* (rows: DbRows, include?: OpenHouseInclude, includeRaw?: boolean) {
-    let result = rows.map((row) => withoutHiddenRaw(row, includeRaw));
-    if (rows.length === 0 || include?.property === undefined) return result;
+    let result = rows;
+    if (rows.length === 0 || include?.property === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const listingKeys = stringValues(rows, "listingKey");
     const propertyRows = listingKeys.length === 0 ? [] : yield* db.select(selectionFor(propertyColumns, propertyFieldPresets.card, include.property, ["listingKey"])).from(ddfProperties).where(inArray(ddfProperties.listingKey, listingKeys)).pipe(Effect.mapError(mapClientError("openHouses.property")));
     const byKey = new Map(propertyRows.map((property) => [property.listingKey, property]));
