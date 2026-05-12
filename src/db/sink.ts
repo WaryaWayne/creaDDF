@@ -121,7 +121,7 @@ export const propertyRowFromRecord = (property: unknown) => {
     standardStatus: stringField(record, "StandardStatus"),
     propertySubType: stringField(record, "PropertySubType"),
     businessType: jsonField(record, "BusinessType"),
-    propertyType: stringField(record, "PropertyType"),
+    propertyType: stringField(record, "PropertySubType"),
     publicRemarks: stringField(record, "PublicRemarks"),
     listPrice: numberField(record, "ListPrice"),
     leaseAmount: numberField(record, "LeaseAmount"),

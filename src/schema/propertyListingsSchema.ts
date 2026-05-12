@@ -1098,7 +1098,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
   AvailabilityDate: Schema.Union([
     Schema.Null,
-    Schema.DateTimeUtcFromString,
+    Schema.DateFromString,
   ]).annotate({
     message: "Value is invalid for AvailabilityDate.",
     description:
@@ -1106,9 +1106,9 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Availability Date",
     identifier: "AvailabilityDate",
     examples: [
-      DateTime.makeUnsafe("2025-10-28T00:34:46.690Z"),
-      DateTime.makeUnsafe("2025-12-01T16:55:25.400Z"),
-      DateTime.makeUnsafe("2025-10-28T00:34:48.550Z"),
+      DateTime.toDateUtc(DateTime.makeUnsafe("2025-10-28T00:00:00.000Z")),
+      DateTime.toDateUtc(DateTime.makeUnsafe("2025-12-01T00:00:00.000Z")),
+      DateTime.toDateUtc(DateTime.makeUnsafe("2025-10-29T00:00:00.000Z")),
     ],
   }),
   ListingId: Schema.Union([Schema.String, Schema.Null]).annotate({

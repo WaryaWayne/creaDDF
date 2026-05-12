@@ -2,15 +2,26 @@ import { Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 
 const NullableString = Schema.NullOr(Schema.String);
-const NullableDateTime = Schema.NullOr(Schema.DateFromString);
+const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString);
 const NullableDestinationType = Schema.NullOr(
-  Schema.Union([
-    Schema.Literals([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]),
-    Schema.String,
+  Schema.Literals([
+    "National Shared Pool",
+    "National Franchisor Pool",
+    "Member Website Feed - My Listings",
+    "Private IDX",
+    "Third Party",
+    "Member Website Feed - One or More Offices",
+    "CREA",
+    "Real Estate Advertising Website",
+    "Technology Provider",
+    "Franchisor Direct Feed",
+    "Board Association Websites",
+    "CREA Partner Sites",
+    "Sample Data",
   ]),
 );
 const NullableDestinationStatus = Schema.NullOr(
-  Schema.Union([Schema.Literals([1, 2, 3]), Schema.String]),
+  Schema.Literals(["Active", "Inactive", "Suspended"]),
 );
 
 export const DestinationSchema = Schema.Struct({

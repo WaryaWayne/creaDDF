@@ -182,7 +182,7 @@ const officeRecord = {
   ],
   ModificationTimestamp: "2024-01-25T00:00:00.000Z",
   OriginalEntryTimestamp: "2024-01-01T00:00:00.000Z",
-  OfficeType: "Real Estate",
+  OfficeType: "Firm",
   OfficeStateOrProvince: "Ontario",
   OfficeAOR: "Toronto",
   OfficeStatus: "Active",
@@ -257,13 +257,14 @@ describe("selected resource decoding", () => {
 
           if (
             url ===
-            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp%2CAvailabilityDate&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
           ) {
             return Response.json({
               value: [
                 {
                   ListingKey: "listing-1",
                   ModificationTimestamp: "2024-01-25T00:00:00.000Z",
+                  AvailabilityDate: "2025-03-10",
                 },
               ],
             });
@@ -280,7 +281,7 @@ describe("selected resource decoding", () => {
 
         const result = yield* Effect.gen(function* () {
           const properties = yield* listProperties({
-            select: ["ListingKey", "ModificationTimestamp"],
+            select: ["ListingKey", "ModificationTimestamp", "AvailabilityDate"],
             top: 1,
           });
           const offices = yield* listOffices({ select: ["OfficeKey"], top: 1 });
@@ -294,6 +295,9 @@ describe("selected resource decoding", () => {
           DateTime.isDateTime(timestamp) && DateTime.isUtc(timestamp),
           true,
         );
+        const availabilityDate = result.properties.value[0]?.AvailabilityDate;
+        assert.equal(availabilityDate instanceof Date, true);
+        assert.equal(availabilityDate?.toISOString(), "2025-03-10T00:00:00.000Z");
       }),
   );
 
@@ -421,8 +425,8 @@ describe("selected resource decoding", () => {
         DestinationId: 123,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: 9,
-        DestinationStatus: 1,
+        DestinationType: "Technology Provider",
+        DestinationStatus: "Active",
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
         MemberKey: "member-1",
@@ -455,12 +459,12 @@ describe("selected resource decoding", () => {
         "Website Feed",
       );
       assert.equal(result.destination.MemberKey, "member-1");
-      assert.equal(result.destination.DestinationType, 9);
-      assert.equal(result.destination.DestinationStatus, 1);
-      assert.equal(
-        result.destination.ModificationTimestamp instanceof Date,
-        true,
-      );
+      assert.equal(result.destination.DestinationType, "Technology Provider");
+      assert.equal(result.destination.DestinationStatus, "Active");
+      const destinationTimestamp = result.destination.ModificationTimestamp;
+      if (!DateTime.isDateTime(destinationTimestamp) || !DateTime.isUtc(destinationTimestamp)) {
+        assert.fail("expected destination ModificationTimestamp to decode as Effect DateTime.Utc");
+      }
     }),
   );
 
@@ -470,7 +474,7 @@ describe("selected resource decoding", () => {
         DestinationId: 456,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: "Website",
+        DestinationType: "Technology Provider",
         DestinationStatus: "Active",
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
@@ -492,7 +496,7 @@ describe("selected resource decoding", () => {
         Effect.provide(layerFor(httpHandler)),
       );
 
-      assert.equal(destination.DestinationType, "Website");
+      assert.equal(destination.DestinationType, "Technology Provider");
       assert.equal(destination.DestinationStatus, "Active");
     }),
   );

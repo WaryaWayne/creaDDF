@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
+import { ResourceNameSchema, SocialMediaTypeSchema } from "./officeSchema";
 
 export const MemberSchema = Schema.Struct({
   MemberKey: Schema.String,
@@ -572,27 +573,9 @@ export const MemberSchema = Schema.Struct({
       Schema.Struct({
         SocialMediaKey: Schema.String,
         ResourceRecordKey: Schema.String,
-        SocialMediaType: Schema.Union([
-          Schema.Literals([
-            "Website",
-            "FaceBook",
-            "LinkedIn",
-            "Twitter",
-            "Instagram",
-            "About Us Video",
-            "About Me Video",
-            "YouTube Channel",
-          ]),
-          Schema.Null,
-        ]),
-        ModificationTimestamp: Schema.Union([
-          Schema.Null,
-          Schema.DateTimeUtcFromString,
-        ]),
-        ResourceName: Schema.Union([
-          Schema.Literals(["Office", "Member", "Property"]),
-          Schema.Null,
-        ]),
+        SocialMediaType: Schema.NullOr(SocialMediaTypeSchema),
+        ModificationTimestamp: Schema.DateTimeUtcFromString,
+        ResourceName: Schema.NullOr(ResourceNameSchema),
         SocialMediaUrlOrId: Schema.String,
       }),
     ),
