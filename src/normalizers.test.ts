@@ -9,6 +9,7 @@ import { MediaSchema, type MediaType } from "./schema/mediaSchema";
 import { MemberSchema } from "./schema/memberSchema";
 import { OfficeSchema } from "./schema/officeSchema";
 import { PropertyListingSchema } from "./schema/propertyListingsSchema";
+import { RoomsSchema } from "./schema/roomsSchema";
 
 const media = (
   overrides: Partial<MediaType[number]> = {},
@@ -177,6 +178,46 @@ describe("normalizers", () => {
 
       assert.strictEqual(member.MemberSocialMedia, null);
       assert.strictEqual(office.OfficeSocialMedia, null);
+    }),
+  );
+
+  it.effect("decodes nullable child keys before fallback row key derivation", () =>
+    Effect.gen(function* () {
+      const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
+      const decodeRooms = Schema.decodeUnknownEffect(RoomsSchema);
+
+      const decodedMedia = yield* decodeMedia([
+        media({
+          MediaKey: null,
+          MediaURL: "https://example.test/fallback.jpg",
+          Order: 1,
+        }),
+      ]);
+      const decodedRooms = yield* decodeRooms([
+        {
+          RoomKey: null,
+          ListingId: null,
+          ListingKey: null,
+          ModificationTimestamp: "2026-05-12T00:00:00.000Z",
+          RoomDescription: null,
+          RoomDimensions: null,
+          RoomLength: null,
+          RoomLevel: "Main level",
+          RoomWidth: null,
+          RoomLengthWidthUnits: null,
+          RoomType: "Kitchen",
+        },
+      ]);
+
+      assert.strictEqual(decodedMedia[0]?.MediaKey, null);
+      assert.strictEqual(decodedRooms[0]?.RoomKey, null);
+
+      const normalizedRooms = yield* normalizePropertyRooms({
+        ListingKey: "listing-1",
+        Rooms: decodedRooms,
+      });
+
+      assert.strictEqual(normalizedRooms[0]?.ListingKey, "listing-1");
     }),
   );
 

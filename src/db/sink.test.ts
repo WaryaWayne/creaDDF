@@ -70,6 +70,21 @@ describe("database sync sink row mapping", () => {
     });
   });
 
+  it("derives fallback room and media keys when DDF omits child keys", () => {
+    const property = { ListingKey: "listing-1" };
+    const room = { RoomKey: null, RoomType: "Kitchen", RoomLevel: "Main level" };
+    const media = { MediaKey: null, MediaURL: "https://example.test/a.jpg", Order: 2 };
+
+    assert.equal(
+      roomRowFromRecord(room, property).roomKey,
+      "listing-1:Kitchen:Main level",
+    );
+    assert.equal(
+      mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }).mediaKey,
+      "Property:listing-1:https://example.test/a.jpg:2",
+    );
+  });
+
   it("persists Effect DateTime timestamp values", () => {
     const timestamp = DateTime.makeUnsafe("2024-01-02T03:04:05.000Z");
 

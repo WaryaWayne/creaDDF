@@ -2,7 +2,7 @@ import { DateTime, Schema } from "effect"
 
 export const MediaSchema = Schema.Array(
   Schema.Struct({
-    MediaKey: Schema.String.annotate({
+    MediaKey: Schema.Union([Schema.String, Schema.Null]).annotate({
       message: "Value is invalid for MediaKey.",
       description:
         "A unique identifier for this record from the immediate source. This may be a number, or string that can include URI or other forms. This is the system you are connecting to and not necessarily the original source of the record.",
