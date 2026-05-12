@@ -247,7 +247,7 @@ describe("odata resource paths", () => {
 
 describe("selected resource decoding", () => {
   it.effect(
-    "decodes selected property and office list rows as partial resources",
+    "decodes selected property, member, and office list rows as partial resources",
     () =>
       Effect.gen(function* () {
         const httpHandler = httpHandlerFrom((input) => {
@@ -257,7 +257,7 @@ describe("selected resource decoding", () => {
 
           if (
             url ===
-            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp%2CAvailabilityDate&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+            "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CModificationTimestamp%2CAvailabilityDate%2CLotFeatures%2CAppliances%2CHeating%2CCooling&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
           ) {
             return Response.json({
               value: [
@@ -265,6 +265,23 @@ describe("selected resource decoding", () => {
                   ListingKey: "listing-1",
                   ModificationTimestamp: "2024-01-25T00:00:00.000Z",
                   AvailabilityDate: "2025-03-10",
+                  LotFeatures: ["Generator"],
+                  Appliances: ["Range - Induction"],
+                  Heating: ["Geothermal"],
+                  Cooling: ["Geothermal"],
+                },
+              ],
+            });
+          }
+          if (
+            url ===
+            "https://ddf.test/odata/v1/Member?%24select=MemberKey%2CMemberDesignation&%24top=1&%24orderby=ModificationTimestamp%20desc%2CMemberKey%20asc"
+          ) {
+            return Response.json({
+              value: [
+                {
+                  MemberKey: "member-1",
+                  MemberDesignation: ["Real Estate Sector Governance Designation"],
                 },
               ],
             });
@@ -281,14 +298,34 @@ describe("selected resource decoding", () => {
 
         const result = yield* Effect.gen(function* () {
           const properties = yield* listProperties({
-            select: ["ListingKey", "ModificationTimestamp", "AvailabilityDate"],
+            select: [
+              "ListingKey",
+              "ModificationTimestamp",
+              "AvailabilityDate",
+              "LotFeatures",
+              "Appliances",
+              "Heating",
+              "Cooling",
+            ],
+            top: 1,
+          });
+          const members = yield* listMembers({
+            select: ["MemberKey", "MemberDesignation"],
             top: 1,
           });
           const offices = yield* listOffices({ select: ["OfficeKey"], top: 1 });
-          return { properties, offices };
+          return { properties, members, offices };
         }).pipe(Effect.provide(layerFor(httpHandler)));
 
         assert.equal(result.properties.value[0]?.ListingKey, "listing-1");
+        assert.deepEqual(result.properties.value[0]?.LotFeatures, ["Generator"]);
+        assert.deepEqual(result.properties.value[0]?.Appliances, ["Range - Induction"]);
+        assert.deepEqual(result.properties.value[0]?.Heating, ["Geothermal"]);
+        assert.deepEqual(result.properties.value[0]?.Cooling, ["Geothermal"]);
+        assert.equal(result.members.value[0]?.MemberKey, "member-1");
+        assert.deepEqual(result.members.value[0]?.MemberDesignation, [
+          "Real Estate Sector Governance Designation",
+        ]);
         assert.equal(result.offices.value[0]?.OfficeKey, "office-1");
         const timestamp = result.properties.value[0]?.ModificationTimestamp;
         assert.equal(

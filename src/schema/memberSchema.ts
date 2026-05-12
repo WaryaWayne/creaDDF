@@ -448,6 +448,7 @@ export const MemberSchema = Schema.Struct({
         "Certified Buyer Agent Expert",
         "Accredited Commercial Manager",
         "Canadian Certified Green Representative (CCGR)",
+        "Real Estate Sector Governance Designation",
       ]),
     ),
     Schema.Null,
