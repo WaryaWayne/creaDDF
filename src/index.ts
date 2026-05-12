@@ -16,6 +16,7 @@ export * from "./metrics";
 export * from "./telemetry";
 export * from "./watermark";
 export * from "./db/layer";
+export * from "./db/client";
 export * from "./db/runMigrations";
 export * from "./db/schema";
 export * from "./db/sink";
