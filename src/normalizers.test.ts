@@ -8,7 +8,7 @@ import {
 import { MediaSchema, type MediaType } from "./schema/mediaSchema";
 
 const media = (
-  overrides: Record<string, unknown> = {},
+  overrides: Partial<MediaType[number]> = {},
 ): MediaType[number] => ({
   MediaKey: "media-1",
   LongDescription: null,
@@ -17,11 +17,11 @@ const media = (
   Order: null,
   PreferredPhotoYN: null,
   ResourceRecordId: null,
-  ResourceRecordKey: "resource-1",
+  ResourceRecordKey: null,
   ResourceName: null,
   MediaCategory: null,
   ...overrides,
-}) as MediaType[number];
+});
 
 describe("normalizers", () => {
   it.effect(

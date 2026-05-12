@@ -220,6 +220,16 @@ export interface OpenHouseSyncSink {
   ) => Effect.Effect<void, unknown>;
 }
 
+export interface OpenHouseListingScope {
+  readonly listingKey: string;
+  readonly listingId: string | null;
+}
+
+export interface OpenHouseDateWindow {
+  readonly startDate: string;
+  readonly endDate?: string;
+}
+
 export interface PropertySyncOptions extends BaseSyncOptions {
   readonly sink?: PropertySyncSink;
 }
@@ -236,6 +246,9 @@ export interface OpenHouseSyncOptions {
   readonly query?: ODataListQuery;
   readonly concurrency?: number;
   readonly sink?: OpenHouseSyncSink;
+  readonly listingScopes?: ReadonlyArray<OpenHouseListingScope>;
+  readonly dateWindow?: OpenHouseDateWindow;
+  readonly listingChunkSize?: number;
 }
 
 export interface MasterListDiff {
@@ -1062,11 +1075,60 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   };
 });
 
+const escapeODataString = (value: string) => value.replaceAll("'", "''");
+
+const combineODataFilters = (filters: ReadonlyArray<string | undefined>) => {
+  const present = filters.filter(
+    (filter): filter is string => filter !== undefined && filter.length > 0,
+  );
+  return present.length === 1
+    ? present[0]
+    : present.map((filter) => `(${filter})`).join(" and ");
+};
+
+const listingScopeFilter = (scope: OpenHouseListingScope) => {
+  const listingKey = `ListingKey eq '${escapeODataString(scope.listingKey)}'`;
+  return scope.listingId === null
+    ? listingKey
+    : `(${listingKey} or ListingId eq '${escapeODataString(scope.listingId)}')`;
+};
+
+const openHouseDateWindowFilter = (window: OpenHouseDateWindow | undefined) => {
+  if (window === undefined) return undefined;
+  const start = `OpenHouseDate ge ${window.startDate}`;
+  return window.endDate === undefined
+    ? start
+    : `${start} and OpenHouseDate le ${window.endDate}`;
+};
+
+const openHouseQueriesForOptions = (options: OpenHouseSyncOptions | undefined) => {
+  const baseQuery = options?.query ?? {};
+  const dateFilter = openHouseDateWindowFilter(options?.dateWindow);
+  if (options?.listingScopes === undefined) {
+    const filter = combineODataFilters([baseQuery.filter, dateFilter]);
+    return [{ ...baseQuery, filter: filter.length > 0 ? filter : undefined }];
+  }
+
+  if (options.listingScopes.length === 0) return [];
+
+  const chunkSize = Math.max(1, Math.floor(options.listingChunkSize ?? 25));
+  return Array.from(batched(options.listingScopes, chunkSize), (chunk) => {
+    const scopeFilter = chunk.map(listingScopeFilter).join(" or ");
+    const filter = combineODataFilters([baseQuery.filter, scopeFilter, dateFilter]);
+    return { ...baseQuery, filter: filter.length > 0 ? filter : undefined };
+  });
+};
+
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   function* (options?: OpenHouseSyncOptions) {
     const concurrency = boundedConcurrency(options?.concurrency);
+    const queries = openHouseQueriesForOptions(options);
     yield* Effect.logInfo("OpenHouse sync: collecting and persisting pages", {
       concurrency,
+      queryCount: queries.length,
+      listingScopes: options?.listingScopes?.length ?? null,
+      dateWindowStart: options?.dateWindow?.startDate ?? null,
+      dateWindowEnd: options?.dateWindow?.endDate ?? null,
       ...queryLogDetails(options?.query),
     });
 
@@ -1114,56 +1176,77 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
         { concurrency, discard: true },
       );
 
-    const firstExit = yield* Effect.exit(listOpenHouses(options?.query));
-    if (Exit.isFailure(firstExit)) {
-      yield* Effect.logWarning("OpenHouse sync: failed to collect first page");
-      errors.push(
-        makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
-      );
-    } else {
-      const http = yield* DdfHttp;
-      let page = firstExit.value;
-      let next: string | null = null;
-      while (true) {
-        pageCount += 1;
-        next = page["@odata.nextLink"] ?? null;
-        yield* Effect.logInfo("OpenHouse sync: collected page", {
-          pages: pageCount,
-          records: processedRecords + page.value.length,
-          pageSize: page.value.length,
-          hasNextPage: next !== null,
-        });
-        yield* persistPage(page.value);
-        yield* logPersistProgress(page.value.length, next !== null);
-
-        if (next === null) break;
-
-        const pageKey = `page:${next}`;
-        const pageExit = yield* Effect.exit(
-          http.requestJson<typeof firstExit.value>(
-            next,
-            undefined,
-            openHousePageSchema(options?.query) as Schema.Decoder<
-              typeof firstExit.value,
-              never
-            >,
-          ),
-        );
-        if (Exit.isFailure(pageExit)) {
-          yield* Effect.logWarning("OpenHouse sync: failed to collect page", {
-            nextPage: pageCount + 1,
-            records: processedRecords,
+    const collectQuery = (query: ODataListQuery, queryIndex: number) =>
+      Effect.gen(function* () {
+        const firstExit = yield* Effect.exit(listOpenHouses(query));
+        if (Exit.isFailure(firstExit)) {
+          yield* Effect.logWarning("OpenHouse sync: failed to collect first page", {
+            queryIndex,
           });
           errors.push(
-            makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
+            makeRecordError(
+              "OpenHouse",
+              queries.length === 1 ? "page:first" : `query:${queryIndex}:page:first`,
+              "hydrate",
+              firstExit.cause,
+            ),
           );
-          break;
+          return;
         }
-        page = pageExit.value;
-      }
-    }
 
-    const nextWatermark: string | null = null;
+        const http = yield* DdfHttp;
+        let page = firstExit.value;
+        let next: string | null = null;
+        while (true) {
+          pageCount += 1;
+          next = page["@odata.nextLink"] ?? null;
+          yield* Effect.logInfo("OpenHouse sync: collected page", {
+            queryIndex,
+            pages: pageCount,
+            records: processedRecords + page.value.length,
+            pageSize: page.value.length,
+            hasNextPage: next !== null,
+          });
+          yield* persistPage(page.value);
+          yield* logPersistProgress(page.value.length, next !== null);
+
+          if (next === null) break;
+
+          const pageKey = queries.length === 1
+            ? `page:${next}`
+            : `query:${queryIndex}:page:${next}`;
+          const pageExit = yield* Effect.exit(
+            http.requestJson<typeof firstExit.value>(
+              next,
+              undefined,
+              openHousePageSchema(query) as Schema.Decoder<
+                typeof firstExit.value,
+                never
+              >,
+            ),
+          );
+          if (Exit.isFailure(pageExit)) {
+            yield* Effect.logWarning("OpenHouse sync: failed to collect page", {
+              queryIndex,
+              nextPage: pageCount + 1,
+              records: processedRecords,
+            });
+            errors.push(
+              makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
+            );
+            break;
+          }
+          page = pageExit.value;
+        }
+      });
+
+    yield* Effect.forEach(
+      queries,
+      (query, index) => collectQuery(query, index + 1),
+      { discard: true },
+    );
+
+    const nextWatermark = options?.dateWindow?.startDate ?? null;
 
     const counts = syncCounts(0, hydratedRecords, persistedRecords, errors);
     yield* trackSyncMetrics(counts);

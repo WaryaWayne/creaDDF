@@ -26,7 +26,15 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.Union([Schema.String, Schema.Null]).annotate({
+  OpenHouseDate: Schema.Union([
+    Schema.String.check(
+      Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/, {
+        message: "Expected an Edm.Date string in YYYY-MM-DD format.",
+        identifier: "OpenHouseDate",
+      }),
+    ),
+    Schema.Null,
+  ]).annotate({
     message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",

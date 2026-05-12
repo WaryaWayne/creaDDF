@@ -68,7 +68,7 @@ export const MediaSchema = Schema.Array(
       examples: ["X9465222", "X9462522", "X9462414"],
     }),
 
-    ResourceRecordKey: Schema.String.annotate({
+    ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]).annotate({
       message: "Value is invalid for ResourceRecordKey.",
       description:
         "The primary key of the related record from the source resource. For example the ListingKey, MemberKey, OfficeKey, etc. This is a foreign key from the resource selected in the ResourceName field.",

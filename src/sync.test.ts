@@ -829,7 +829,7 @@ describe("syncOpenHouses", () => {
                 {
                   OpenHouseKey: "open-1",
                   ListingKey: "listing-1",
-                  OpenHouseDate: "2024-04-01T00:00:00.000Z",
+                  OpenHouseDate: "2024-04-01",
                 },
               ],
             });
@@ -841,7 +841,7 @@ describe("syncOpenHouses", () => {
                 {
                   OpenHouseKey: "open-2",
                   ListingKey: "listing-2",
-                  OpenHouseDate: "2024-04-03T00:00:00.000Z",
+                  OpenHouseDate: "2024-04-03",
                 },
               ],
             });
@@ -885,6 +885,39 @@ describe("syncOpenHouses", () => {
   );
 
   it.effect(
+    "queries OpenHouse by listing scope chunks inside a rolling date window",
+    () =>
+      Effect.gen(function* () {
+        const filters: Array<string | undefined> = [];
+        const http = emptyHttp({
+          listOData: <T = unknown>(_path: string, query?: { readonly filter?: string }) => {
+            filters.push(query?.filter);
+            return response<T>({ value: [] });
+          },
+        });
+
+        const result = yield* runWithHttp(
+          syncOpenHouses({
+            query: { filter: "OpenHouseStatus eq 'Active'" },
+            listingChunkSize: 1,
+            listingScopes: [
+              { listingKey: "listing-1", listingId: "X1" },
+              { listingKey: "listing-2", listingId: null },
+            ],
+            dateWindow: { startDate: "2026-05-12", endDate: "2026-06-11" },
+          }),
+          http,
+        );
+
+        assert.equal(result.nextWatermark, "2026-05-12");
+        assert.deepEqual(filters, [
+          "(OpenHouseStatus eq 'Active') and ((ListingKey eq 'listing-1' or ListingId eq 'X1')) and (OpenHouseDate ge 2026-05-12 and OpenHouseDate le 2026-06-11)",
+          "(OpenHouseStatus eq 'Active') and (ListingKey eq 'listing-2') and (OpenHouseDate ge 2026-05-12 and OpenHouseDate le 2026-06-11)",
+        ]);
+      }),
+  );
+
+  it.effect(
     "does not save a global OpenHouse watermark from event dates",
     () =>
       Effect.gen(function* () {
@@ -895,15 +928,15 @@ describe("syncOpenHouses", () => {
               value: [
                 {
                   OpenHouseKey: "open-before",
-                  OpenHouseDate: "2024-09-01T00:00:00.000Z",
+                  OpenHouseDate: "2024-09-01",
                 },
                 {
                   OpenHouseKey: "open-fail",
-                  OpenHouseDate: "2024-09-02T00:00:00.000Z",
+                  OpenHouseDate: "2024-09-02",
                 },
                 {
                   OpenHouseKey: "open-after",
-                  OpenHouseDate: "2024-09-03T00:00:00.000Z",
+                  OpenHouseDate: "2024-09-03",
                 },
               ],
             }),
@@ -941,7 +974,18 @@ describe("syncOpenHouses", () => {
             schema?: DdfResponseSchema<T>,
           ) => {
             const payload = {
-              value: [{ OpenHouseKey: 123, OpenHouseDate: "not-a-date" }],
+              value: [{
+                OpenHouseKey: "open-invalid-date",
+                ListingKey: null,
+                ListingId: null,
+                OpenHouseDate: "not-a-date",
+                OpenHouseStartTime: null,
+                OpenHouseEndTime: null,
+                OpenHouseRemarks: null,
+                OpenHouseType: null,
+                OpenHouseStatus: null,
+                LivestreamOpenHouseURL: null,
+              }],
             };
             return schema !== undefined
               ? (Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<
@@ -984,7 +1028,7 @@ describe("syncOpenHouses", () => {
               value: [
                 {
                   OpenHouseKey: "open-1",
-                  OpenHouseDate: "2024-11-01T00:00:00.000Z",
+                  OpenHouseDate: "2024-11-01",
                 },
               ],
             }),
