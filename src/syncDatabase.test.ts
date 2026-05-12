@@ -17,6 +17,6 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.equal(options.member.since, "2024-01-02T00:00:00.000Z");
     assert.equal(options.office.since, "2024-01-03T00:00:00.000Z");
     assert.equal(options.property.destinationId, 7);
-    assert.equal(options.openHouse.query?.filter, "(ListingKey ne null) and OpenHouseDate ge 2024-01-04T00:00:00.000Z");
+    assert.equal(options.openHouse.query?.filter, "ListingKey ne null");
   });
 });

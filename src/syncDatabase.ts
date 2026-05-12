@@ -85,17 +85,8 @@ const syncResultLogDetails = (result: {
 
 const openHouseQueryWithSince = (
   query: OpenHouseSyncOptions["query"],
-  since: string | null,
-): OpenHouseSyncOptions["query"] =>
-  since === null
-    ? query
-    : {
-        ...query,
-        filter:
-          query?.filter === undefined
-            ? `OpenHouseDate ge ${since}`
-            : `(${query.filter}) and OpenHouseDate ge ${since}`,
-      };
+  _since: string | null,
+): OpenHouseSyncOptions["query"] => query;
 
 
 export interface DatabaseSyncWatermarks {
@@ -320,12 +311,6 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       "DDF database sync: open houses complete",
       syncResultLogDetails(openHouse),
     );
-    yield* saveIfAdvanced(
-      dependencies.saveWatermark,
-      "OpenHouse",
-      openHouse.nextWatermark,
-    );
-
     const syncErrors = [
       ...property.errors,
       ...member.errors,

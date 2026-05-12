@@ -236,7 +236,6 @@ export interface OpenHouseSyncOptions {
   readonly query?: ODataListQuery;
   readonly concurrency?: number;
   readonly sink?: OpenHouseSyncSink;
-  readonly watermarkField?: "OpenHouseDate";
 }
 
 export interface MasterListDiff {
@@ -1066,15 +1065,12 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   function* (options?: OpenHouseSyncOptions) {
     const concurrency = boundedConcurrency(options?.concurrency);
-    const watermarkField = options?.watermarkField ?? "OpenHouseDate";
     yield* Effect.logInfo("OpenHouse sync: collecting and persisting pages", {
       concurrency,
       ...queryLogDetails(options?.query),
     });
 
     const errors: Array<SyncRecordError> = [];
-    const successfulWatermarks: Array<unknown> = [];
-    const failedWatermarks: Array<unknown> = [];
     let hydratedRecords = 0;
     let persistedRecords = 0;
     let processedRecords = 0;
@@ -1099,11 +1095,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           Effect.gen(function* () {
             hydratedRecords += 1;
             const key = String(openHouse.OpenHouseKey ?? "");
-            const timestamp = (openHouse as Record<string, unknown>)[
-              watermarkField
-            ];
             if (options?.sink?.upsertOpenHouse === undefined) {
-              successfulWatermarks.push(timestamp);
               processedRecords += 1;
               return;
             }
@@ -1114,10 +1106,8 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             );
             if (persistError !== null) {
               errors.push(persistError);
-              failedWatermarks.push(timestamp);
             } else {
               persistedRecords += 1;
-              successfulWatermarks.push(timestamp);
             }
             processedRecords += 1;
           }),
@@ -1130,7 +1120,6 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       errors.push(
         makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
       );
-      failedWatermarks.push(null);
     } else {
       const http = yield* DdfHttp;
       let page = firstExit.value;
@@ -1168,28 +1157,13 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           errors.push(
             makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
           );
-          failedWatermarks.push(null);
           break;
         }
         page = pageExit.value;
       }
     }
 
-    const nextWatermark = safeHighestWatermark(
-      successfulWatermarks,
-      failedWatermarks,
-    );
-    if (nextWatermark !== null) {
-      yield* saveWatermarkToService("OpenHouse", nextWatermark);
-      if (options?.sink?.saveWatermark !== undefined) {
-        const persistError = yield* runPersist(
-          "OpenHouse",
-          "watermark",
-          options.sink.saveWatermark("OpenHouse", nextWatermark),
-        );
-        if (persistError !== null) errors.push(persistError);
-      }
-    }
+    const nextWatermark: string | null = null;
 
     const counts = syncCounts(0, hydratedRecords, persistedRecords, errors);
     yield* trackSyncMetrics(counts);

@@ -2,7 +2,7 @@ import { DateTime, Schema } from "effect";
 
 export const RoomsSchema = Schema.Array(
   Schema.Struct({
-    RoomKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    RoomKey: Schema.String.annotate({
       message: "Value is invalid for RoomKey.",
       description: "A unique identifier for this record.",
       title: "Room Key",
@@ -17,7 +17,7 @@ export const RoomsSchema = Schema.Array(
       identifier: "ListingId",
       examples: ["X9465223", "SK015977", "X12348197"],
     }),
-    ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+    ListingKey: Schema.String.annotate({
       message: "Value is invalid for ListingKey.",
       description:
         "This is the foreign key relating to the property resource. A unique identifier for this record from the immediate source.",
@@ -25,10 +25,7 @@ export const RoomsSchema = Schema.Array(
       identifier: "ListingKey",
       examples: ["26034183", "26507412", "26935822"],
     }),
-    ModificationTimestamp: Schema.Union([
-      Schema.Null,
-      Schema.DateTimeUtcFromString,
-    ]).annotate({
+    ModificationTimestamp: Schema.DateTimeUtcFromString.annotate({
       message: "Value is invalid for ModificationTimestamp.",
       description:
         "Date/time this record was last modified (in Zulu time (UTC)).",

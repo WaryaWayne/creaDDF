@@ -12,11 +12,14 @@ import type {
 import { DdfDatabase } from "./layer";
 import {
   ddfMedia,
+  ddfMemberDesignations,
+  ddfMemberLanguages,
   ddfMembers,
   ddfOffices,
   ddfOpenHouses,
   ddfProperties,
   ddfPropertyRooms,
+  ddfSocialMedia,
   ddfSyncErrors,
   touchUpdatedAt,
 } from "./schema";
@@ -52,6 +55,33 @@ const booleanField = (record: JsonRecord, field: string): boolean | null => {
   return typeof value === "boolean" ? value : null;
 };
 
+const arrayField = (record: JsonRecord, field: string): ReadonlyArray<unknown> | null => {
+  const value = record[field];
+  return Array.isArray(value) ? value : null;
+};
+
+const jsonField = (record: JsonRecord, field: string): unknown =>
+  record[field] ?? null;
+
+const dateField = (record: JsonRecord, field: string): string | null => {
+  const value = record[field];
+  const iso = value instanceof Date
+    ? value.toISOString()
+    : DateTime.isDateTime(value)
+      ? DateTime.formatIso(value)
+      : typeof value === "string"
+        ? value
+        : null;
+  return iso === null ? null : iso.slice(0, 10);
+};
+
+const timeField = (record: JsonRecord, field: string): string | null => {
+  const value = stringField(record, field);
+  if (value === null) return null;
+  const match = /^(\d{2}:\d{2}:\d{2})(?:\.\d+)?$/.exec(value);
+  return match?.[1] ?? null;
+};
+
 const timestampField = (record: JsonRecord, field: string): Date | null => {
   const value = record[field];
 
@@ -82,16 +112,140 @@ export const propertyRowFromRecord = (property: unknown) => {
   const record = asRecord(property);
   return {
     listingKey: stringField(record, "ListingKey"),
+    listingId: stringField(record, "ListingId"),
     modificationTimestamp: timestampField(record, "ModificationTimestamp"),
-    listOfficeKey: stringField(record, "ListOfficeKey"),
-    listAgentKey: stringField(record, "ListAgentKey"),
+    originalEntryTimestamp: timestampField(record, "OriginalEntryTimestamp"),
+    availabilityDate: dateField(record, "AvailabilityDate"),
+    statusChangeTimestamp: timestampField(record, "StatusChangeTimestamp"),
+    photosChangeTimestamp: timestampField(record, "PhotosChangeTimestamp"),
     standardStatus: stringField(record, "StandardStatus"),
+    propertySubType: stringField(record, "PropertySubType"),
+    businessType: jsonField(record, "BusinessType"),
     propertyType: stringField(record, "PropertyType"),
-    city: stringField(record, "City"),
+    publicRemarks: stringField(record, "PublicRemarks"),
+    listPrice: numberField(record, "ListPrice"),
+    leaseAmount: numberField(record, "LeaseAmount"),
+    leaseAmountFrequency: stringField(record, "LeaseAmountFrequency"),
+    leasePerUnit: stringField(record, "LeasePerUnit"),
+    pricePerUnit: numberField(record, "PricePerUnit"),
+    associationFee: numberField(record, "AssociationFee"),
+    associationFeeFrequency: stringField(record, "AssociationFeeFrequency"),
+    associationName: stringField(record, "AssociationName"),
+    associationFeeIncludes: jsonField(record, "AssociationFeeIncludes"),
+    totalActualRent: numberField(record, "TotalActualRent"),
+    existingLeaseType: jsonField(record, "ExistingLeaseType"),
+    listOfficeKey: stringField(record, "ListOfficeKey"),
+    coListOfficeKey: stringField(record, "CoListOfficeKey"),
+    coListOfficeKey2: stringField(record, "CoListOfficeKey2"),
+    coListOfficeKey3: stringField(record, "CoListOfficeKey3"),
+    listAgentKey: stringField(record, "ListAgentKey"),
+    coListAgentKey: stringField(record, "CoListAgentKey"),
+    coListAgentKey2: stringField(record, "CoListAgentKey2"),
+    coListAgentKey3: stringField(record, "CoListAgentKey3"),
+    listingUrl: stringField(record, "ListingURL"),
+    originatingSystemName: stringField(record, "OriginatingSystemName"),
+    photosCount: numberField(record, "PhotosCount"),
+    commonInterest: stringField(record, "CommonInterest"),
+    listAor: stringField(record, "ListAOR"),
+    listAorKey: stringField(record, "ListAORKey"),
+    unparsedAddress: stringField(record, "UnparsedAddress"),
+    postalCode: stringField(record, "PostalCode"),
+    subdivisionName: stringField(record, "SubdivisionName"),
     province: stringField(record, "StateOrProvince"),
-    latitude: stringField(record, "Latitude") ?? numberField(record, "Latitude")?.toString() ?? null,
-    longitude:
-      stringField(record, "Longitude") ?? numberField(record, "Longitude")?.toString() ?? null,
+    streetDirPrefix: stringField(record, "StreetDirPrefix"),
+    streetDirSuffix: stringField(record, "StreetDirSuffix"),
+    streetName: stringField(record, "StreetName"),
+    streetNumber: stringField(record, "StreetNumber"),
+    streetSuffix: stringField(record, "StreetSuffix"),
+    unitNumber: stringField(record, "UnitNumber"),
+    country: stringField(record, "Country"),
+    city: stringField(record, "City"),
+    directions: stringField(record, "Directions"),
+    cityRegion: stringField(record, "CityRegion"),
+    latitude: numberField(record, "Latitude"),
+    longitude: numberField(record, "Longitude"),
+    mapCoordinateVerified: booleanField(record, "MapCoordinateVerifiedYN"),
+    geocodeManual: booleanField(record, "GeocodeManualYN"),
+    parkingTotal: numberField(record, "ParkingTotal"),
+    parkingFeatures: jsonField(record, "ParkingFeatures"),
+    yearBuilt: numberField(record, "YearBuilt"),
+    bathroomsPartial: numberField(record, "BathroomsPartial"),
+    bathroomsTotalInteger: numberField(record, "BathroomsTotalInteger"),
+    bedroomsTotal: numberField(record, "BedroomsTotal"),
+    bedroomsAboveGrade: numberField(record, "BedroomsAboveGrade"),
+    bedroomsBelowGrade: numberField(record, "BedroomsBelowGrade"),
+    buildingAreaTotal: numberField(record, "BuildingAreaTotal"),
+    buildingAreaUnits: stringField(record, "BuildingAreaUnits"),
+    buildingFeatures: jsonField(record, "BuildingFeatures"),
+    aboveGradeFinishedArea: numberField(record, "AboveGradeFinishedArea"),
+    aboveGradeFinishedAreaUnits: stringField(record, "AboveGradeFinishedAreaUnits"),
+    aboveGradeFinishedAreaSource: stringField(record, "AboveGradeFinishedAreaSource"),
+    aboveGradeFinishedAreaMinimum: numberField(record, "AboveGradeFinishedAreaMinimum"),
+    aboveGradeFinishedAreaMaximum: numberField(record, "AboveGradeFinishedAreaMaximum"),
+    belowGradeFinishedArea: numberField(record, "BelowGradeFinishedArea"),
+    belowGradeFinishedAreaUnits: stringField(record, "BelowGradeFinishedAreaUnits"),
+    belowGradeFinishedAreaSource: stringField(record, "BelowGradeFinishedAreaSource"),
+    belowGradeFinishedAreaMinimum: numberField(record, "BelowGradeFinishedAreaMinimum"),
+    belowGradeFinishedAreaMaximum: numberField(record, "BelowGradeFinishedAreaMaximum"),
+    livingArea: numberField(record, "LivingArea"),
+    livingAreaUnits: stringField(record, "LivingAreaUnits"),
+    livingAreaSource: stringField(record, "LivingAreaSource"),
+    livingAreaMinimum: numberField(record, "LivingAreaMinimum"),
+    livingAreaMaximum: numberField(record, "LivingAreaMaximum"),
+    firePlacesTotal: numberField(record, "FireplacesTotal"),
+    fireplace: booleanField(record, "FireplaceYN"),
+    fireplaceFeatures: jsonField(record, "FireplaceFeatures"),
+    architecturalStyle: jsonField(record, "ArchitecturalStyle"),
+    heating: jsonField(record, "Heating"),
+    foundationDetails: jsonField(record, "FoundationDetails"),
+    basement: jsonField(record, "Basement"),
+    exteriorFeatures: jsonField(record, "ExteriorFeatures"),
+    flooring: jsonField(record, "Flooring"),
+    cooling: jsonField(record, "Cooling"),
+    propertyCondition: jsonField(record, "PropertyCondition"),
+    roof: jsonField(record, "Roof"),
+    constructionMaterials: jsonField(record, "ConstructionMaterials"),
+    stories: numberField(record, "Stories"),
+    propertyAttached: booleanField(record, "PropertyAttachedYN"),
+    accessibilityFeatures: jsonField(record, "AccessibilityFeatures"),
+    zoning: stringField(record, "Zoning"),
+    zoningDescription: stringField(record, "ZoningDescription"),
+    taxAnnualAmount: numberField(record, "TaxAnnualAmount"),
+    taxBlock: stringField(record, "TaxBlock"),
+    taxLot: stringField(record, "TaxLot"),
+    taxYear: numberField(record, "TaxYear"),
+    structureType: jsonField(record, "StructureType"),
+    parcelNumber: stringField(record, "ParcelNumber"),
+    utilities: jsonField(record, "Utilities"),
+    irrigationSource: jsonField(record, "IrrigationSource"),
+    waterSource: jsonField(record, "WaterSource"),
+    sewer: jsonField(record, "Sewer"),
+    electric: jsonField(record, "Electric"),
+    documentsAvailable: jsonField(record, "DocumentsAvailable"),
+    waterBodyName: stringField(record, "WaterBodyName"),
+    view: jsonField(record, "View"),
+    numberOfBuildings: numberField(record, "NumberOfBuildings"),
+    numberOfUnitsTotal: numberField(record, "NumberOfUnitsTotal"),
+    lotFeatures: jsonField(record, "LotFeatures"),
+    lotSizeArea: numberField(record, "LotSizeArea"),
+    lotSizeDimensions: stringField(record, "LotSizeDimensions"),
+    lotSizeUnits: stringField(record, "LotSizeUnits"),
+    poolFeatures: jsonField(record, "PoolFeatures"),
+    roadSurfaceType: jsonField(record, "RoadSurfaceType"),
+    currentUse: jsonField(record, "CurrentUse"),
+    possibleUse: jsonField(record, "PossibleUse"),
+    anchorsCoTenants: stringField(record, "AnchorsCoTenants"),
+    waterfrontFeatures: jsonField(record, "WaterfrontFeatures"),
+    communityFeatures: jsonField(record, "CommunityFeatures"),
+    frontageLengthNumeric: numberField(record, "FrontageLengthNumeric"),
+    frontageLengthNumericUnits: stringField(record, "FrontageLengthNumericUnits"),
+    fencing: jsonField(record, "Fencing"),
+    appliances: jsonField(record, "Appliances"),
+    otherEquipment: jsonField(record, "OtherEquipment"),
+    securityFeatures: jsonField(record, "SecurityFeatures"),
+    inclusions: stringField(record, "Inclusions"),
+    internetEntireListingDisplay: booleanField(record, "InternetEntireListingDisplayYN"),
+    internetAddressDisplay: booleanField(record, "InternetAddressDisplayYN"),
     active: true,
     raw: property,
   };
@@ -104,13 +258,20 @@ export const roomRowFromRecord = (room: unknown, property: unknown) => {
     stringField(roomRecord, "ListingKey") ?? stringField(propertyRecord, "ListingKey");
   return {
     listingKey,
+    listingId: stringField(roomRecord, "ListingId") ?? stringField(propertyRecord, "ListingId"),
     roomKey:
       stringField(roomRecord, "RoomKey") ??
       [listingKey, stringField(roomRecord, "RoomType"), stringField(roomRecord, "RoomLevel")]
         .filter((part): part is string => part !== null)
         .join(":"),
-    roomType: stringField(roomRecord, "RoomType"),
+    modificationTimestamp: timestampField(roomRecord, "ModificationTimestamp"),
+    roomDescription: stringField(roomRecord, "RoomDescription"),
+    roomDimensions: stringField(roomRecord, "RoomDimensions"),
+    roomLength: numberField(roomRecord, "RoomLength"),
     roomLevel: stringField(roomRecord, "RoomLevel"),
+    roomWidth: numberField(roomRecord, "RoomWidth"),
+    roomLengthWidthUnits: stringField(roomRecord, "RoomLengthWidthUnits"),
+    roomType: stringField(roomRecord, "RoomType"),
     raw: room,
   };
 };
@@ -125,9 +286,13 @@ export const mediaRowFromRecord = (media: unknown, owner: SyncOwner) => {
         .join(":"),
     resource: owner.resource,
     resourceKey: owner.key,
+    resourceRecordId: stringField(record, "ResourceRecordId"),
+    resourceRecordKey: stringField(record, "ResourceRecordKey"),
+    resourceName: stringField(record, "ResourceName"),
     modificationTimestamp: timestampField(record, "ModificationTimestamp"),
     mediaUrl: stringField(record, "MediaURL"),
     mediaCategory: stringField(record, "MediaCategory"),
+    longDescription: stringField(record, "LongDescription"),
     preferredPhoto: booleanField(record, "PreferredPhotoYN"),
     sortOrder: numberField(record, "Order"),
     raw: media,
@@ -138,24 +303,106 @@ export const memberRowFromRecord = (member: unknown) => {
   const record = asRecord(member);
   return {
     memberKey: stringField(record, "MemberKey"),
+    memberMlsId: stringField(record, "MemberMlsId"),
     modificationTimestamp: timestampField(record, "ModificationTimestamp"),
+    originalEntryTimestamp: timestampField(record, "OriginalEntryTimestamp"),
     officeKey: stringField(record, "OfficeKey"),
+    officeNationalAssociationId: stringField(record, "OfficeNationalAssociationId"),
+    jobTitle: stringField(record, "JobTitle"),
+    memberAorKey: stringField(record, "MemberAORKey"),
+    memberAor: stringField(record, "MemberAOR"),
+    address1: stringField(record, "MemberAddress1"),
+    address2: stringField(record, "MemberAddress2"),
+    city: stringField(record, "MemberCity"),
+    province: stringField(record, "MemberStateOrProvince"),
+    country: stringField(record, "MemberCountry"),
+    postalCode: stringField(record, "MemberPostalCode"),
+    fax: stringField(record, "MemberFax"),
     firstName: stringField(record, "MemberFirstName"),
     lastName: stringField(record, "MemberLastName"),
+    middleName: stringField(record, "MemberMiddleName"),
+    namePrefix: stringField(record, "MemberNamePrefix"),
+    nameSuffix: stringField(record, "MemberNameSuffix"),
+    nationalAssociationId: stringField(record, "MemberNationalAssociationId"),
+    nickname: stringField(record, "MemberNickname"),
+    officePhone: stringField(record, "MemberOfficePhone"),
+    officePhoneExt: stringField(record, "MemberOfficePhoneExt"),
+    pager: stringField(record, "MemberPager"),
+    tollFreePhone: stringField(record, "MemberTollFreePhone"),
+    status: stringField(record, "MemberStatus"),
+    type: stringField(record, "MemberType"),
     email: stringField(record, "MemberEmail"),
+    emailYn: booleanField(record, "MemberEmailYN"),
     active: true,
     raw: member,
   };
 };
 
+export const memberLanguageRowsFromRecord = (member: unknown, memberKey: string) => {
+  const rows = arrayField(asRecord(member), "MemberLanguages") ?? [];
+  return rows.filter((language): language is string => typeof language === "string").map((language) => ({
+    memberKey,
+    language,
+  }));
+};
+
+export const memberDesignationRowsFromRecord = (member: unknown, memberKey: string) => {
+  const rows = arrayField(asRecord(member), "MemberDesignation") ?? [];
+  return rows.filter((designation): designation is string => typeof designation === "string").map((designation) => ({
+    memberKey,
+    designation,
+  }));
+};
+
+export const socialMediaRowFromRecord = (socialMedia: unknown, owner: SyncOwner) => {
+  const record = asRecord(socialMedia);
+  return {
+    socialMediaKey:
+      stringField(record, "SocialMediaKey") ??
+      [owner.resource, owner.key, stringField(record, "SocialMediaType"), stringField(record, "SocialMediaUrlOrId")]
+        .filter((part): part is string => part !== null)
+        .join(":"),
+    resource: owner.resource,
+    resourceKey: owner.key,
+    resourceRecordKey: stringField(record, "ResourceRecordKey"),
+    socialMediaType: stringField(record, "SocialMediaType"),
+    modificationTimestamp: timestampField(record, "ModificationTimestamp"),
+    resourceName: stringField(record, "ResourceName"),
+    socialMediaUrlOrId: stringField(record, "SocialMediaUrlOrId"),
+    raw: socialMedia,
+  };
+};
+
+export const socialMediaRowsFromRecord = (
+  record: unknown,
+  owner: SyncOwner,
+  field: "MemberSocialMedia" | "OfficeSocialMedia",
+) => (arrayField(asRecord(record), field) ?? []).map((socialMedia) => socialMediaRowFromRecord(socialMedia, owner));
+
 export const officeRowFromRecord = (office: unknown) => {
   const record = asRecord(office);
   return {
     officeKey: stringField(record, "OfficeKey"),
+    officeMlsId: stringField(record, "OfficeMlsId"),
     modificationTimestamp: timestampField(record, "ModificationTimestamp"),
+    originalEntryTimestamp: timestampField(record, "OriginalEntryTimestamp"),
     officeName: stringField(record, "OfficeName"),
+    officeAorKey: stringField(record, "OfficeAORKey"),
+    officeAor: stringField(record, "OfficeAOR"),
+    officeNationalAssociationId: stringField(record, "OfficeNationalAssociationId"),
+    franchiseNationalAssociationId: stringField(record, "FranchiseNationalAssociationId"),
+    officeBrokerNationalAssociationId: stringField(record, "OfficeBrokerNationalAssociationId"),
+    address1: stringField(record, "OfficeAddress1"),
+    address2: stringField(record, "OfficeAddress2"),
     city: stringField(record, "OfficeCity"),
     province: stringField(record, "OfficeStateOrProvince"),
+    country: stringField(record, "OfficeCountry"),
+    fax: stringField(record, "OfficeFax"),
+    phone: stringField(record, "OfficePhone"),
+    phoneExt: stringField(record, "OfficePhoneExt"),
+    postalCode: stringField(record, "OfficePostalCode"),
+    officeType: stringField(record, "OfficeType"),
+    officeStatus: stringField(record, "OfficeStatus"),
     active: true,
     raw: office,
   };
@@ -166,7 +413,14 @@ export const openHouseRowFromRecord = (openHouse: unknown) => {
   return {
     openHouseKey: stringField(record, "OpenHouseKey"),
     listingKey: stringField(record, "ListingKey"),
-    openHouseDate: timestampField(record, "OpenHouseDate"),
+    listingId: stringField(record, "ListingId"),
+    openHouseDate: dateField(record, "OpenHouseDate"),
+    openHouseStartTime: timeField(record, "OpenHouseStartTime"),
+    openHouseEndTime: timeField(record, "OpenHouseEndTime"),
+    openHouseType: stringField(record, "OpenHouseType"),
+    openHouseStatus: stringField(record, "OpenHouseStatus"),
+    openHouseRemarks: stringField(record, "OpenHouseRemarks"),
+    livestreamOpenHouseUrl: stringField(record, "LivestreamOpenHouseURL"),
     raw: openHouse,
   };
 };
@@ -340,6 +594,45 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                 .where(
                   and(eq(ddfMedia.resource, "Member"), eq(ddfMedia.resourceKey, memberKey)),
                 );
+              yield* tx
+                .delete(ddfSocialMedia)
+                .where(
+                  and(eq(ddfSocialMedia.resource, "Member"), eq(ddfSocialMedia.resourceKey, memberKey)),
+                );
+              yield* tx
+                .delete(ddfMemberLanguages)
+                .where(eq(ddfMemberLanguages.memberKey, memberKey));
+              yield* tx
+                .delete(ddfMemberDesignations)
+                .where(eq(ddfMemberDesignations.memberKey, memberKey));
+              yield* Effect.forEach(
+                memberLanguageRowsFromRecord(member, memberKey),
+                (languageRow) => tx.insert(ddfMemberLanguages).values(languageRow),
+                { discard: true },
+              );
+              yield* Effect.forEach(
+                memberDesignationRowsFromRecord(member, memberKey),
+                (designationRow) => tx.insert(ddfMemberDesignations).values(designationRow),
+                { discard: true },
+              );
+              yield* Effect.forEach(
+                socialMediaRowsFromRecord(member, { resource: "Member", key: memberKey }, "MemberSocialMedia"),
+                (socialMediaRow) =>
+                  Effect.gen(function* () {
+                    const socialMediaKey = yield* requireKey(
+                      "upsertMemberWithMedia.socialMediaKey",
+                      socialMediaRow.socialMediaKey.length > 0 ? socialMediaRow.socialMediaKey : null,
+                    );
+                    yield* tx
+                      .insert(ddfSocialMedia)
+                      .values({ ...socialMediaRow, socialMediaKey })
+                      .onConflictDoUpdate({
+                        target: ddfSocialMedia.socialMediaKey,
+                        set: { ...socialMediaRow, socialMediaKey, ...touchUpdatedAt },
+                      });
+                  }),
+                { discard: true },
+              );
               yield* Effect.forEach(
                 media,
                 (mediaRecord) =>
@@ -384,6 +677,29 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                 .where(
                   and(eq(ddfMedia.resource, "Office"), eq(ddfMedia.resourceKey, officeKey)),
                 );
+              yield* tx
+                .delete(ddfSocialMedia)
+                .where(
+                  and(eq(ddfSocialMedia.resource, "Office"), eq(ddfSocialMedia.resourceKey, officeKey)),
+                );
+              yield* Effect.forEach(
+                socialMediaRowsFromRecord(office, { resource: "Office", key: officeKey }, "OfficeSocialMedia"),
+                (socialMediaRow) =>
+                  Effect.gen(function* () {
+                    const socialMediaKey = yield* requireKey(
+                      "upsertOfficeWithMedia.socialMediaKey",
+                      socialMediaRow.socialMediaKey.length > 0 ? socialMediaRow.socialMediaKey : null,
+                    );
+                    yield* tx
+                      .insert(ddfSocialMedia)
+                      .values({ ...socialMediaRow, socialMediaKey })
+                      .onConflictDoUpdate({
+                        target: ddfSocialMedia.socialMediaKey,
+                        set: { ...socialMediaRow, socialMediaKey, ...touchUpdatedAt },
+                      });
+                  }),
+                { discard: true },
+              );
               yield* Effect.forEach(
                 media,
                 (mediaRecord) =>

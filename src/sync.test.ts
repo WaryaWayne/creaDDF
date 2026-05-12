@@ -876,17 +876,16 @@ describe("syncOpenHouses", () => {
           persisted: 2,
           failed: 0,
         });
-        assert.equal(result.nextWatermark, "2024-04-03T00:00:00.000Z");
+        assert.equal(result.nextWatermark, null);
         assert.deepEqual(calls, [
           "open:open-1",
           "open:open-2",
-          "watermark:2024-04-03T00:00:00.000Z",
         ]);
       }),
   );
 
   it.effect(
-    "does not save an OpenHouse watermark past a persistence failure",
+    "does not save a global OpenHouse watermark from event dates",
     () =>
       Effect.gen(function* () {
         const calls: Array<string> = [];
@@ -926,8 +925,8 @@ describe("syncOpenHouses", () => {
           http,
         );
 
-        assert.equal(result.nextWatermark, "2024-09-01T00:00:00.000Z");
-        assert.deepEqual(calls, ["watermark:2024-09-01T00:00:00.000Z"]);
+        assert.equal(result.nextWatermark, null);
+        assert.deepEqual(calls, []);
       }),
   );
 

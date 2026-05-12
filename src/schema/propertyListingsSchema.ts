@@ -4,7 +4,7 @@ import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
 
 export const PropertyListingSchema = Schema.Struct({
-  ListingKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+  ListingKey: Schema.String.annotate({
     message: "Value is invalid for ListingKey.",
     description: "A unique identifier for this record.",
     title: "Listing Key",
@@ -346,7 +346,7 @@ export const PropertyListingSchema = Schema.Struct({
         "Broadloom Upgraded",
         "Closet Organizers",
         "Dance Floor",
-        "Exterior Walls- 2x6",
+        "Exterior Walls- 2x6\"",
         "No Animal Home",
         "No Smoking Home",
         "Drapery Rods",
@@ -390,7 +390,7 @@ export const PropertyListingSchema = Schema.Struct({
         "Passenger elevator",
         "Paved yard",
         "Pole sign",
-        "Pylon sign",
+        "Pylon  sign",
         "Rail",
         "Rear loading",
         "Signs allowed",
@@ -1229,7 +1229,7 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Co List Agent National Association Id 3",
     identifier: "CoListAgentNationalAssociationId3",
   }),
-  ListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+  ListOfficeKey: Schema.String.annotate({
     message: "Value is invalid for ListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
@@ -1237,7 +1237,7 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "ListOfficeKey",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+  CoListOfficeKey: Schema.String.annotate({
     message: "Value is invalid for CoListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
@@ -2500,7 +2500,7 @@ export const PropertyListingSchema = Schema.Struct({
         "Double-sided",
         "Heatilator/Fan",
         "Marble fac", // TODO: Might be a typo here in mls
-        "Marble face",
+        "Marble fac",
         "Other - See remarks",
         "Roughed in",
         "Stone",
@@ -2517,7 +2517,7 @@ export const PropertyListingSchema = Schema.Struct({
       "A list of features or description of the fireplace(s) included in the sale/lease.",
     title: "Fireplace Features",
     identifier: "FireplaceFeatures",
-    examples: [["Free Standing Metal", "Marble face", "Glass Door"]],
+    examples: [["Free Standing Metal", "Marble fac", "Glass Door"]],
   }),
   ArchitecturalStyle: Schema.Union([
     Schema.Array(
@@ -2764,7 +2764,7 @@ export const PropertyListingSchema = Schema.Struct({
         "Siding",
         "Composite Siding",
         "Colour Loc", // TODO: might be typo
-        "Colour Lock",
+        "Colour Loc",
         "Concrete Block",
         "Concrete Siding",
         "Insul Brick",
@@ -3375,7 +3375,7 @@ export const PropertyListingSchema = Schema.Struct({
       "A collection of types of rooms and details/features about the given room.",
     message: "Expected an array of Room objects.",
   }),
-  Media: Schema.NullOr(MediaSchema).annotate({
+  Media: MediaSchema.annotate({
     identifier: "Media",
     title: "Media Collection",
     description:
