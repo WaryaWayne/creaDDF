@@ -6,6 +6,7 @@ import {
   normalizePropertyRooms,
 } from "./normalizers";
 import { MediaSchema, type MediaType } from "./schema/mediaSchema";
+import { PropertyListingSchema } from "./schema/propertyListingsSchema";
 
 const media = (
   overrides: Partial<MediaType[number]> = {},
@@ -94,6 +95,44 @@ describe("normalizers", () => {
         assert.strictEqual(existingParent.ResourceName, "Member");
         assert.strictEqual(existingParent.ResourceRecordKey, "member-1");
       }),
+  );
+
+  it.effect(
+    "decodes nullable parent keys before normalization fills them",
+    () =>
+      Effect.gen(function* () {
+        const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
+        const decodedMedia = yield* decodeMedia([
+          media({
+            MediaKey: "media-null-parent",
+            ResourceName: null,
+            ResourceRecordKey: null,
+          }),
+        ]);
+
+        const decoded = decodedMedia[0];
+        assert.notStrictEqual(decoded, undefined);
+        if (decoded === undefined) return;
+
+        const normalized = normalizeMedia("Property", "listing-1", decoded);
+
+        assert.strictEqual(normalized.ResourceName, "Property");
+        assert.strictEqual(normalized.ResourceRecordKey, "listing-1");
+      }),
+  );
+
+  it.effect("decodes nullable CoListOfficeKey values", () =>
+    Effect.gen(function* () {
+      const decodeCoListOfficeKey = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          CoListOfficeKey: PropertyListingSchema.fields.CoListOfficeKey,
+        }),
+      );
+
+      const decoded = yield* decodeCoListOfficeKey({ CoListOfficeKey: null });
+
+      assert.strictEqual(decoded.CoListOfficeKey, null);
+    }),
   );
 
   it.effect("decodes media records and reports invalid enum values", () =>

@@ -1237,7 +1237,7 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "ListOfficeKey",
     examples: ["279633", "279341", "279545"],
   }),
-  CoListOfficeKey: Schema.String.annotate({
+  CoListOfficeKey: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for CoListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
