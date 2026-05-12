@@ -3375,7 +3375,7 @@ export const PropertyListingSchema = Schema.Struct({
       "A collection of types of rooms and details/features about the given room.",
     message: "Expected an array of Room objects.",
   }),
-  Media: MediaSchema.annotate({
+  Media: Schema.NullOr(MediaSchema).annotate({
     identifier: "Media",
     title: "Media Collection",
     description:

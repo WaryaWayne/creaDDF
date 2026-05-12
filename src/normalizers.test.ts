@@ -6,6 +6,8 @@ import {
   normalizePropertyRooms,
 } from "./normalizers";
 import { MediaSchema, type MediaType } from "./schema/mediaSchema";
+import { MemberSchema } from "./schema/memberSchema";
+import { OfficeSchema } from "./schema/officeSchema";
 import { PropertyListingSchema } from "./schema/propertyListingsSchema";
 
 const media = (
@@ -132,6 +134,49 @@ describe("normalizers", () => {
       const decoded = yield* decodeCoListOfficeKey({ CoListOfficeKey: null });
 
       assert.strictEqual(decoded.CoListOfficeKey, null);
+    }),
+  );
+
+  it.effect("decodes nullable Media collections", () =>
+    Effect.gen(function* () {
+      const decodePropertyMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: PropertyListingSchema.fields.Media }),
+      );
+      const decodeMemberMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: MemberSchema.fields.Media }),
+      );
+      const decodeOfficeMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: OfficeSchema.fields.Media }),
+      );
+
+      const property = yield* decodePropertyMedia({ Media: null });
+      const member = yield* decodeMemberMedia({ Media: null });
+      const office = yield* decodeOfficeMedia({ Media: null });
+
+      assert.strictEqual(property.Media, null);
+      assert.strictEqual(member.Media, null);
+      assert.strictEqual(office.Media, null);
+    }),
+  );
+
+  it.effect("decodes nullable social media collections", () =>
+    Effect.gen(function* () {
+      const decodeMemberSocial = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          MemberSocialMedia: MemberSchema.fields.MemberSocialMedia,
+        }),
+      );
+      const decodeOfficeSocial = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          OfficeSocialMedia: OfficeSchema.fields.OfficeSocialMedia,
+        }),
+      );
+
+      const member = yield* decodeMemberSocial({ MemberSocialMedia: null });
+      const office = yield* decodeOfficeSocial({ OfficeSocialMedia: null });
+
+      assert.strictEqual(member.MemberSocialMedia, null);
+      assert.strictEqual(office.OfficeSocialMedia, null);
     }),
   );
 

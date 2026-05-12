@@ -567,7 +567,8 @@ export const MemberSchema = Schema.Struct({
     ),
     Schema.Null,
   ]),
-  MemberSocialMedia: Schema.Array(
+  MemberSocialMedia: Schema.Union([
+    Schema.Array(
       Schema.Struct({
         SocialMediaKey: Schema.String,
         ResourceRecordKey: Schema.String,
@@ -595,7 +596,9 @@ export const MemberSchema = Schema.Struct({
         SocialMediaUrlOrId: Schema.String,
       }),
     ),
-  Media: MediaSchema,
+    Schema.Null,
+  ]),
+  Media: Schema.NullOr(MediaSchema),
   MemberStateOrProvince: Schema.Union([
     Schema.Literals([
       "Alberta",

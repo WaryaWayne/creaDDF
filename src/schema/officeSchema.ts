@@ -29,8 +29,11 @@ export const OfficeSchema = Schema.Struct({
   OfficePhone: Schema.Union([Schema.String, Schema.Null]),
   OfficePhoneExt: Schema.Union([Schema.String, Schema.Null]),
   OfficePostalCode: Schema.Union([Schema.String, Schema.Null]),
-  Media: MediaSchema,
-  OfficeSocialMedia: Schema.Array(SocialMediaSchema),
+  Media: Schema.NullOr(MediaSchema),
+  OfficeSocialMedia: Schema.Union([
+    Schema.Array(SocialMediaSchema),
+    Schema.Null,
+  ]),
   ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateTimeUtcFromString]),
   OriginalEntryTimestamp: Schema.Union([Schema.Null, Schema.DateTimeUtcFromString]),
   OfficeType: Schema.Union([Schema.String, Schema.Null]),

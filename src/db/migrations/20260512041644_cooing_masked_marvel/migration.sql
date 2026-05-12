@@ -210,7 +210,7 @@ ALTER TABLE "ddf_property_rooms" ADD COLUMN "room_dimensions" text;--> statement
 ALTER TABLE "ddf_property_rooms" ADD COLUMN "room_length" double precision;--> statement-breakpoint
 ALTER TABLE "ddf_property_rooms" ADD COLUMN "room_width" double precision;--> statement-breakpoint
 ALTER TABLE "ddf_property_rooms" ADD COLUMN "room_length_width_units" text;--> statement-breakpoint
-ALTER TABLE "ddf_open_houses" ALTER COLUMN "open_house_date" SET DATA TYPE date USING "open_house_date"::date;--> statement-breakpoint
+ALTER TABLE "ddf_open_houses" ALTER COLUMN "open_house_date" SET DATA TYPE date USING ("open_house_date" AT TIME ZONE 'UTC')::date;--> statement-breakpoint
 ALTER TABLE "ddf_properties" ALTER COLUMN "latitude" SET DATA TYPE double precision USING "latitude"::double precision;--> statement-breakpoint
 ALTER TABLE "ddf_properties" ALTER COLUMN "longitude" SET DATA TYPE double precision USING "longitude"::double precision;--> statement-breakpoint
 CREATE INDEX "ddf_member_designations_member_idx" ON "ddf_member_designations" ("member_key");--> statement-breakpoint
