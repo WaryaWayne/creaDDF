@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, DateTime } from "effect";
 import {
+  destinationRowFromRecord,
   mediaRowFromRecord,
   memberRowFromRecord,
   officeRowFromRecord,
@@ -24,6 +25,15 @@ describe("database sync sink row mapping", () => {
       StateOrProvince: "ON",
       Latitude: 45.42,
       Longitude: -75.69,
+      PricePerUnit: "square feet",
+      ListAgentNationalAssociationId: "LANA-1",
+      CoListAgentNationalAssociationId: "CLANA-1",
+      CoListAgentNationalAssociationId2: "CLANA-2",
+      CoListAgentNationalAssociationId3: "CLANA-3",
+      ListOfficeNationalAssociationId: "LONA-1",
+      CoListOfficeNationalAssociationId: "CLONA-1",
+      CoListOfficeNationalAssociationId2: "CLONA-2",
+      CoListOfficeNationalAssociationId3: "CLONA-3",
     };
 
     const row = propertyRowFromRecord(property);
@@ -35,6 +45,11 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.propertyType, "legacy-property-type");
     assert.equal(row.latitude, 45.42);
     assert.equal(row.longitude, -75.69);
+    assert.equal(row.pricePerUnit, "square feet");
+    assert.equal(row.listAgentNationalAssociationId, "LANA-1");
+    assert.equal(row.coListAgentNationalAssociationId3, "CLANA-3");
+    assert.equal(row.listOfficeNationalAssociationId, "LONA-1");
+    assert.equal(row.coListOfficeNationalAssociationId3, "CLONA-3");
     assert.equal(row.raw, property);
   });
 
@@ -163,12 +178,33 @@ describe("database sync sink row mapping", () => {
     assert.equal(memberRowFromRecord(member).memberMlsId, "M123");
     assert.equal(memberRowFromRecord(member).jobTitle, "Broker");
     assert.equal(memberRowFromRecord(member).nationalAssociationId, "NAT-1");
-    assert.equal(memberRowFromRecord(member).emailYn, true);
+    const memberRow = memberRowFromRecord(member);
+    assert.equal(memberRow.emailYn, true);
+    assert.equal("email" in memberRow, false);
     assert.equal(openHouseRowFromRecord(openHouse).listingId, "X123");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseDate, "2027-06-07");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseStartTime, "12:00:00");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseEndTime, "15:30:00");
     assert.equal(openHouseRowFromRecord(openHouse).livestreamOpenHouseUrl, "https://example.test/live");
+  });
+
+  it("maps destination rows for the DB query surface", () => {
+    const destination = {
+      DestinationId: 123,
+      DestinationName: "Website Feed",
+      DestinationUrl: "https://example.test",
+      DestinationType: "Technology Provider",
+      DestinationStatus: "Active",
+    };
+
+    assert.deepEqual(destinationRowFromRecord(destination), {
+      destinationId: 123,
+      destinationName: "Website Feed",
+      destinationUrl: "https://example.test",
+      destinationType: "Technology Provider",
+      destinationStatus: "Active",
+      raw: destination,
+    });
   });
 
   it("serializes sync error causes into stable JSON DTOs", () => {

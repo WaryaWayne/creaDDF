@@ -2,14 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import {
   DdfDbClientValidationError,
-  coListAgentKeysFromRaw,
-  coListOfficeKeysFromRaw,
+  coListAgentKeysFromRow,
+  coListOfficeKeysFromRow,
   groupRowsBy,
-  memberDesignationRowsFromRaw,
-  memberLanguageRowsFromRaw,
   projectionPlan,
   propertyFieldPresets,
-  socialRowsFromRaw,
   validateListOptions,
 } from "./client";
 
@@ -64,71 +61,18 @@ describe("database read client helpers", () => {
     assert.equal(grouped.has("ignored"), false);
   });
 
-  it("parses member embedded include rows from the raw payload", () => {
-    const raw = {
-      MemberSocialMedia: [
-        {
-          SocialMediaKey: "social-1",
-          SocialMediaType: "Website",
-          SocialMediaUrlOrId: "https://agent.example",
-        },
-      ],
-      MemberLanguages: ["English", "French"],
-      MemberDesignation: ["Broker"],
+  it("reads property co-list keys from typed row columns", () => {
+    const propertyRow = {
+      coListAgentKey: "agent-2",
+      coListAgentKey2: "agent-3",
+      coListAgentKey3: "agent-2",
+      coListOfficeKey: "office-2",
+      coListOfficeKey2: "office-3",
+      coListOfficeKey3: null,
     };
 
-    assert.deepEqual(socialRowsFromRaw("Member", "member-1", raw), [
-      {
-        socialMediaKey: "social-1",
-        resource: "Member",
-        resourceKey: "member-1",
-        socialMediaType: "Website",
-        socialMediaUrlOrId: "https://agent.example",
-        modificationTimestamp: null,
-        raw: raw.MemberSocialMedia[0],
-      },
-    ]);
-    assert.deepEqual(memberLanguageRowsFromRaw("member-1", raw), [
-      { memberKey: "member-1", language: "English" },
-      { memberKey: "member-1", language: "French" },
-    ]);
-    assert.deepEqual(memberDesignationRowsFromRaw("member-1", raw), [
-      { memberKey: "member-1", designation: "Broker" },
-    ]);
-  });
-
-  it("parses office social media and property co-list keys from raw payloads", () => {
-    const officeRaw = {
-      OfficeSocialMedia: [
-        {
-          SocialMediaKey: "office-social-1",
-          SocialMediaType: "Facebook",
-          SocialMediaUrlOrId: "office-page",
-        },
-      ],
-    };
-    const propertyRaw = {
-      CoListAgentKey: "agent-2",
-      CoListAgentKey2: "agent-3",
-      CoListAgentKey3: "agent-2",
-      CoListOfficeKey: "office-2",
-      CoListOfficeKey2: "office-3",
-      CoListOfficeKey3: null,
-    };
-
-    assert.deepEqual(socialRowsFromRaw("Office", "office-1", officeRaw), [
-      {
-        socialMediaKey: "office-social-1",
-        resource: "Office",
-        resourceKey: "office-1",
-        socialMediaType: "Facebook",
-        socialMediaUrlOrId: "office-page",
-        modificationTimestamp: null,
-        raw: officeRaw.OfficeSocialMedia[0],
-      },
-    ]);
-    assert.deepEqual(coListAgentKeysFromRaw(propertyRaw), ["agent-2", "agent-3"]);
-    assert.deepEqual(coListOfficeKeysFromRaw(propertyRaw), ["office-2", "office-3"]);
+    assert.deepEqual(coListAgentKeysFromRow(propertyRow), ["agent-2", "agent-3"]);
+    assert.deepEqual(coListOfficeKeysFromRow(propertyRow), ["office-2", "office-3"]);
   });
 
   it.effect("validates pagination options as typed Effect failures", () =>

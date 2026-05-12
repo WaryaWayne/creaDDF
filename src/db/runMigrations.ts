@@ -25,7 +25,14 @@ export interface RunDdfDatabaseMigrationsOptions {
 const defaultMigrationsDirectory = () =>
   fileURLToPath(new URL("./migrations", import.meta.url));
 
-const loadDdfDatabaseMigrations = Effect.fn(
+export const migrationIdFromFile = (file: string): number | null => {
+  const match = /^(\d+)_/.exec(file);
+  if (match === null) return null;
+  const id = Number.parseInt(match[1] ?? "", 10);
+  return Number.isSafeInteger(id) ? id : null;
+};
+
+export const loadDdfDatabaseMigrations = Effect.fn(
   "DdfDatabaseMigrations.load",
 )(function* (directory: string) {
   const fileSystem = yield* FileSystem.FileSystem;
@@ -45,7 +52,7 @@ const loadDdfDatabaseMigrations = Effect.fn(
     .filter((file) => /^\d+_.+/.test(file))
     .sort((left, right) => left.localeCompare(right));
 
-  return yield* Effect.forEach(migrationFiles.map((file, index) => ({ file, id: index + 1 })), ({ file, id }) =>
+  return yield* Effect.forEach(migrationFiles, (file) =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const match = /^(\d+)_(.+?)(?:\.sql)?$/.exec(file);
@@ -53,6 +60,13 @@ const loadDdfDatabaseMigrations = Effect.fn(
         return yield* new Migrator.MigrationError({
           kind: "Failed",
           message: `Invalid migration filename: ${file}`,
+        });
+      }
+      const id = migrationIdFromFile(file);
+      if (id === null) {
+        return yield* new Migrator.MigrationError({
+          kind: "Failed",
+          message: `Invalid migration id in filename: ${file}`,
         });
       }
       const sqlPath = file.endsWith(".sql")

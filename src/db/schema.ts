@@ -37,7 +37,7 @@ export const ddfProperties = pgTable(
     leaseAmount: doublePrecision("lease_amount"),
     leaseAmountFrequency: text("lease_amount_frequency"),
     leasePerUnit: text("lease_per_unit"),
-    pricePerUnit: doublePrecision("price_per_unit"),
+    pricePerUnit: text("price_per_unit"),
     associationFee: doublePrecision("association_fee"),
     associationFeeFrequency: text("association_fee_frequency"),
     associationName: text("association_name"),
@@ -48,10 +48,18 @@ export const ddfProperties = pgTable(
     coListOfficeKey: text("co_list_office_key"),
     coListOfficeKey2: text("co_list_office_key2"),
     coListOfficeKey3: text("co_list_office_key3"),
+    listOfficeNationalAssociationId: text("list_office_national_association_id"),
+    coListOfficeNationalAssociationId: text("co_list_office_national_association_id"),
+    coListOfficeNationalAssociationId2: text("co_list_office_national_association_id2"),
+    coListOfficeNationalAssociationId3: text("co_list_office_national_association_id3"),
     listAgentKey: text("list_agent_key"),
     coListAgentKey: text("co_list_agent_key"),
     coListAgentKey2: text("co_list_agent_key2"),
     coListAgentKey3: text("co_list_agent_key3"),
+    listAgentNationalAssociationId: text("list_agent_national_association_id"),
+    coListAgentNationalAssociationId: text("co_list_agent_national_association_id"),
+    coListAgentNationalAssociationId2: text("co_list_agent_national_association_id2"),
+    coListAgentNationalAssociationId3: text("co_list_agent_national_association_id3"),
     listingUrl: text("listing_url"),
     originatingSystemName: text("originating_system_name"),
     photosCount: integer("photos_count"),
@@ -246,7 +254,6 @@ export const ddfMembers = pgTable(
     tollFreePhone: text("toll_free_phone"),
     status: text("status"),
     type: text("type"),
-    email: text("email"),
     emailYn: boolean("email_yn"),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<unknown>().notNull(),
@@ -355,6 +362,20 @@ export const ddfOpenHouses = pgTable(
     index("ddf_open_houses_listing_id_idx").on(table.listingId),
     index("ddf_open_houses_date_idx").on(table.openHouseDate),
   ],
+);
+
+export const ddfDestinations = pgTable(
+  "ddf_destinations",
+  {
+    destinationId: integer("destination_id").primaryKey(),
+    destinationName: text("destination_name"),
+    destinationUrl: text("destination_url"),
+    destinationType: text("destination_type"),
+    destinationStatus: text("destination_status"),
+    raw: jsonb("raw").$type<unknown>().notNull(),
+    ...timestamps,
+  },
+  (table) => [index("ddf_destinations_status_idx").on(table.destinationStatus)],
 );
 
 export const ddfWatermarks = pgTable("ddf_watermarks", {
