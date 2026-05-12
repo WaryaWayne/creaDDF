@@ -128,10 +128,9 @@ export interface SyncCounts {
   readonly failed: number;
 }
 
-export interface SyncResult<Record, Identifier = unknown> {
+export interface SyncResult<Identifier = unknown> {
   readonly resource: SyncResource;
   readonly identifiers: ReadonlyArray<Identifier>;
-  readonly records: ReadonlyArray<Record>;
   readonly errors: ReadonlyArray<SyncRecordError>;
   readonly counts: SyncCounts;
   readonly nextWatermark: string | null;
@@ -256,6 +255,18 @@ const progressLogInterval = (total: number) => {
   if (total >= 20) return 10;
   return 0;
 };
+
+const hydrationBatchSize = (concurrency: number) =>
+  Math.max(concurrency, concurrency * 10);
+
+function* batched<Item>(
+  items: ReadonlyArray<Item>,
+  size: number,
+): Iterable<ReadonlyArray<Item>> {
+  for (let index = 0; index < items.length; index += size) {
+    yield items.slice(index, index + size);
+  }
+}
 
 const shouldLogProgress = (
   completed: number,
@@ -456,74 +467,6 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   return { identifiers, errors };
 });
 
-const collectOpenHousePages = Effect.fn("DdfOpenHouseSync.collectPages")(
-  function* (query?: ODataListQuery) {
-    const http = yield* DdfHttp;
-    const records: Array<OpenHouseRecord> = [];
-    const errors: Array<SyncRecordError> = [];
-    const firstExit = yield* Effect.exit(listOpenHouses(query));
-
-    if (Exit.isFailure(firstExit)) {
-      yield* Effect.logWarning("OpenHouse sync: failed to collect first page");
-      errors.push(
-        makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
-      );
-      return { records, errors };
-    }
-
-    records.push(...firstExit.value.value);
-    let next = firstExit.value["@odata.nextLink"] ?? null;
-    let pageCount = 1;
-
-    yield* Effect.logInfo("OpenHouse sync: collected page", {
-      pages: pageCount,
-      records: records.length,
-      pageSize: firstExit.value.value.length,
-      hasNextPage: next !== null,
-    });
-
-    while (next !== null) {
-      const pageKey = `page:${next}`;
-      const pageExit = yield* Effect.exit(
-        http.requestJson<typeof firstExit.value>(
-          next,
-          undefined,
-          openHousePageSchema(query) as Schema.Decoder<
-            typeof firstExit.value,
-            never
-          >,
-        ),
-      );
-
-      if (Exit.isFailure(pageExit)) {
-        yield* Effect.logWarning("OpenHouse sync: failed to collect page", {
-          nextPage: pageCount + 1,
-          records: records.length,
-        });
-        errors.push(
-          makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
-        );
-        break;
-      }
-
-      pageCount += 1;
-      const pageSize = pageExit.value.value.length;
-      records.push(...pageExit.value.value);
-      next = pageExit.value["@odata.nextLink"] ?? null;
-      if (shouldLogPageProgress(pageCount, next !== null)) {
-        yield* Effect.logInfo("OpenHouse sync: collected page", {
-          pages: pageCount,
-          records: records.length,
-          pageSize,
-          hasNextPage: next !== null,
-        });
-      }
-    }
-
-    return { records, errors };
-  },
-);
-
 const runPersist = Effect.fn("DdfSync.runPersist")(function* (
   resource: SyncResource,
   key: string,
@@ -549,12 +492,12 @@ const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
 
 const syncCounts = (
   identifiers: number,
-  records: number,
+  hydrated: number,
   persisted: number,
   errors: ReadonlyArray<SyncRecordError>,
 ): SyncCounts => ({
   identifiers,
-  hydrated: records,
+  hydrated,
   persisted,
   failed: errors.length,
 });
@@ -601,40 +544,16 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       identifiers: identifiers.length,
       pageErrors: collected.errors.length,
     });
+    const batchSize = hydrationBatchSize(concurrency);
     yield* Effect.logInfo("Property sync: hydrating records", {
       identifiers: identifiers.length,
       concurrency,
+      batchSize,
     });
     const hydrateProgressEvery = progressLogInterval(identifiers.length);
     let hydratedRecords = 0;
-    const hydrated = yield* Effect.forEach(
-      identifiers,
-      (identifier) =>
-        Effect.gen(function* () {
-          const result = yield* hydrateOne(
-            "Property",
-            identifier.ListingKey,
-            (key) => getProperty(key),
-          );
-          hydratedRecords += 1;
-          if (
-            shouldLogProgress(
-              hydratedRecords,
-              identifiers.length,
-              hydrateProgressEvery,
-            )
-          ) {
-            yield* Effect.logInfo("Property sync: hydrate progress", {
-              completed: hydratedRecords,
-              total: identifiers.length,
-            });
-          }
-          return { identifier, result };
-        }),
-      { concurrency },
-    );
 
-    const records: Array<PropertyGraph> = [];
+    let hydratedSuccessRecords = 0;
     const errors: Array<SyncRecordError> = [...collected.errors];
     const successfulWatermarks: Array<unknown> = [];
     const failedWatermarks: Array<unknown> =
@@ -647,74 +566,106 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       options?.sink?.upsertMedia !== undefined;
 
     yield* Effect.logInfo("Property sync: normalizing and persisting records", {
-      hydrated: hydrated.length,
+      identifiers: identifiers.length,
+      batchSize,
     });
-    const persistProgressEvery = progressLogInterval(hydrated.length);
+    const persistProgressEvery = progressLogInterval(identifiers.length);
     let processedRecords = 0;
     const logPersistProgress = (completed: number) =>
-      shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+      shouldLogProgress(completed, identifiers.length, persistProgressEvery)
         ? Effect.logInfo("Property sync: persist progress", {
             completed,
-            total: hydrated.length,
+            total: identifiers.length,
             persisted: persistedRecords,
             failed: errors.length,
           })
         : Effect.void;
 
-    for (const { identifier, result } of hydrated) {
-      processedRecords += 1;
-      if (result.error !== null) {
-        errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
-        yield* logPersistProgress(processedRecords);
-        continue;
-      }
-      if (result.record === null) {
-        yield* logPersistProgress(processedRecords);
-        continue;
-      }
+    for (const batch of batched(identifiers, batchSize)) {
+      const hydrated = yield* Effect.forEach(
+        batch,
+        (identifier) =>
+          Effect.gen(function* () {
+            const result = yield* hydrateOne(
+              "Property",
+              identifier.ListingKey,
+              (key) => getProperty(key),
+            );
+            hydratedRecords += 1;
+            if (
+              shouldLogProgress(
+                hydratedRecords,
+                identifiers.length,
+                hydrateProgressEvery,
+              )
+            ) {
+              yield* Effect.logInfo("Property sync: hydrate progress", {
+                completed: hydratedRecords,
+                total: identifiers.length,
+              });
+            }
+            return { identifier, result };
+          }),
+        { concurrency },
+      );
 
-      const graph: PropertyGraph = yield* normalizePropertyGraph(result.record);
-      records.push(graph);
+      for (const { identifier, result } of hydrated) {
+        processedRecords += 1;
+        if (result.error !== null) {
+          errors.push(result.error);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
+        if (result.record === null) {
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
 
-      const propertyKey = String(graph.property.ListingKey ?? "");
-      const persist = Effect.gen(function* () {
-        if (options?.sink?.upsertPropertyGraph !== undefined) {
-          yield* options.sink.upsertPropertyGraph(graph);
-          return;
+        const graph: PropertyGraph = yield* normalizePropertyGraph(
+          result.record,
+        );
+        hydratedSuccessRecords += 1;
+
+        const propertyKey = String(graph.property.ListingKey ?? "");
+        const persist = Effect.gen(function* () {
+          if (options?.sink?.upsertPropertyGraph !== undefined) {
+            yield* options.sink.upsertPropertyGraph(graph);
+            return;
+          }
+          if (options?.sink?.upsertProperty !== undefined) {
+            yield* options.sink.upsertProperty(graph.property);
+          }
+          if (options?.sink?.upsertRoom !== undefined) {
+            yield* Effect.forEach(
+              graph.rooms,
+              (room) =>
+                options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
+              { discard: true },
+            );
+          }
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              graph.media,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Property",
+                  key: propertyKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
+        });
+        const persistError = yield* runPersist("Property", propertyKey, persist);
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          if (hasRecordSink) persistedRecords += 1;
+          successfulWatermarks.push(identifier.ModificationTimestamp);
         }
-        if (options?.sink?.upsertProperty !== undefined) {
-          yield* options.sink.upsertProperty(graph.property);
-        }
-        if (options?.sink?.upsertRoom !== undefined) {
-          yield* Effect.forEach(
-            graph.rooms,
-            (room) =>
-              options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
-            { discard: true },
-          );
-        }
-        if (options?.sink?.upsertMedia !== undefined) {
-          yield* Effect.forEach(
-            graph.media,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
-                resource: "Property",
-                key: propertyKey,
-              }) ?? Effect.void,
-            { discard: true },
-          );
-        }
-      });
-      const persistError = yield* runPersist("Property", propertyKey, persist);
-      if (persistError !== null) {
-        errors.push(persistError);
-        failedWatermarks.push(identifier.ModificationTimestamp);
-      } else {
-        if (hasRecordSink) persistedRecords += 1;
-        successfulWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
       }
-      yield* logPersistProgress(processedRecords);
     }
 
     const nextWatermark = safeHighestWatermark(
@@ -735,7 +686,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
 
     const counts = syncCounts(
       identifiers.length,
-      records.length,
+      hydratedSuccessRecords,
       persistedRecords,
       errors,
     );
@@ -748,7 +699,6 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     return {
       resource: "Property",
       identifiers,
-      records,
       errors,
       counts,
       nextWatermark,
@@ -782,39 +732,15 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     identifiers: identifiers.length,
     pageErrors: collected.errors.length,
   });
+  const batchSize = hydrationBatchSize(concurrency);
   yield* Effect.logInfo("Member sync: hydrating records", {
     identifiers: identifiers.length,
     concurrency,
+    batchSize,
   });
   const hydrateProgressEvery = progressLogInterval(identifiers.length);
   let hydratedRecords = 0;
-  const hydrated = yield* Effect.forEach(
-    identifiers,
-    (identifier) =>
-      Effect.gen(function* () {
-        const result = yield* hydrateOne(
-          "Member",
-          identifier.MemberKey,
-          getMember,
-        );
-        hydratedRecords += 1;
-        if (
-          shouldLogProgress(
-            hydratedRecords,
-            identifiers.length,
-            hydrateProgressEvery,
-          )
-        ) {
-          yield* Effect.logInfo("Member sync: hydrate progress", {
-            completed: hydratedRecords,
-            total: identifiers.length,
-          });
-        }
-        return { identifier, result };
-      }),
-    { concurrency },
-  );
-  const records: Array<MemberRecord> = [];
+  let hydratedSuccessRecords = 0;
   const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
   const failedWatermarks: Array<unknown> =
@@ -826,67 +752,100 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
-    hydrated: hydrated.length,
+    identifiers: identifiers.length,
+    batchSize,
   });
-  const persistProgressEvery = progressLogInterval(hydrated.length);
+  const persistProgressEvery = progressLogInterval(identifiers.length);
   let processedRecords = 0;
   const logPersistProgress = (completed: number) =>
-    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+    shouldLogProgress(completed, identifiers.length, persistProgressEvery)
       ? Effect.logInfo("Member sync: persist progress", {
           completed,
-          total: hydrated.length,
+          total: identifiers.length,
           persisted: persistedRecords,
           failed: errors.length,
         })
       : Effect.void;
 
-  for (const { identifier, result } of hydrated) {
-    processedRecords += 1;
-    if (result.error !== null) {
-      errors.push(result.error);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    if (result.record === null) {
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    records.push(result.record);
-    const memberKey = String(result.record.MemberKey ?? "");
-    const memberMedia = (
-      Array.isArray((result.record as Record<string, unknown>).Media)
-        ? ((result.record as Record<string, unknown>).Media as MediaType)
-        : []
-    ).map((media) => normalizeMedia("Member", memberKey, media));
-    const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertMemberWithMedia !== undefined) {
-        yield* options.sink.upsertMemberWithMedia(result.record, memberMedia);
-        return;
+  for (const batch of batched(identifiers, batchSize)) {
+    const hydrated = yield* Effect.forEach(
+      batch,
+      (identifier) =>
+        Effect.gen(function* () {
+          const result = yield* hydrateOne(
+            "Member",
+            identifier.MemberKey,
+            getMember,
+          );
+          hydratedRecords += 1;
+          if (
+            shouldLogProgress(
+              hydratedRecords,
+              identifiers.length,
+              hydrateProgressEvery,
+            )
+          ) {
+            yield* Effect.logInfo("Member sync: hydrate progress", {
+              completed: hydratedRecords,
+              total: identifiers.length,
+            });
+          }
+          return { identifier, result };
+        }),
+      { concurrency },
+    );
+
+    for (const { identifier, result } of hydrated) {
+      processedRecords += 1;
+      if (result.error !== null) {
+        errors.push(result.error);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-      if (options?.sink?.upsertMember !== undefined)
-        yield* options.sink.upsertMember(result.record);
-      if (options?.sink?.upsertMedia !== undefined) {
-        yield* Effect.forEach(
-          memberMedia,
-          (media) =>
-            options.sink?.upsertMedia?.(media, {
-              resource: "Member",
-              key: memberKey,
-            }) ?? Effect.void,
-          { discard: true },
-        );
+      if (result.record === null) {
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-    });
-    const persistError = yield* runPersist("Member", memberKey, persist);
-    if (persistError !== null) {
-      errors.push(persistError);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-    } else {
-      if (hasRecordSink) persistedRecords += 1;
-      successfulWatermarks.push(identifier.ModificationTimestamp);
+      const memberKey = String(result.record.MemberKey ?? "");
+      const memberMedia = (
+        Array.isArray((result.record as Record<string, unknown>).Media)
+          ? ((result.record as Record<string, unknown>).Media as MediaType)
+          : []
+      ).map((media) => normalizeMedia("Member", memberKey, media));
+      hydratedSuccessRecords += 1;
+      const persist = Effect.gen(function* () {
+        if (options?.sink?.upsertMemberWithMedia !== undefined) {
+          yield* options.sink.upsertMemberWithMedia(
+            result.record,
+            memberMedia,
+          );
+          return;
+        }
+        if (options?.sink?.upsertMember !== undefined)
+          yield* options.sink.upsertMember(result.record);
+        if (options?.sink?.upsertMedia !== undefined) {
+          yield* Effect.forEach(
+            memberMedia,
+            (media) =>
+              options.sink?.upsertMedia?.(media, {
+                resource: "Member",
+                key: memberKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+      });
+      const persistError = yield* runPersist("Member", memberKey, persist);
+      if (persistError !== null) {
+        errors.push(persistError);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+      } else {
+        if (hasRecordSink) persistedRecords += 1;
+        successfulWatermarks.push(identifier.ModificationTimestamp);
+      }
+      yield* logPersistProgress(processedRecords);
     }
-    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(
@@ -907,7 +866,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
 
   const counts = syncCounts(
     identifiers.length,
-    records.length,
+    hydratedSuccessRecords,
     persistedRecords,
     errors,
   );
@@ -920,7 +879,6 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   return {
     resource: "Member",
     identifiers,
-    records,
     errors,
     counts,
     nextWatermark,
@@ -953,39 +911,15 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     identifiers: identifiers.length,
     pageErrors: collected.errors.length,
   });
+  const batchSize = hydrationBatchSize(concurrency);
   yield* Effect.logInfo("Office sync: hydrating records", {
     identifiers: identifiers.length,
     concurrency,
+    batchSize,
   });
   const hydrateProgressEvery = progressLogInterval(identifiers.length);
   let hydratedRecords = 0;
-  const hydrated = yield* Effect.forEach(
-    identifiers,
-    (identifier) =>
-      Effect.gen(function* () {
-        const result = yield* hydrateOne(
-          "Office",
-          identifier.OfficeKey,
-          getOffice,
-        );
-        hydratedRecords += 1;
-        if (
-          shouldLogProgress(
-            hydratedRecords,
-            identifiers.length,
-            hydrateProgressEvery,
-          )
-        ) {
-          yield* Effect.logInfo("Office sync: hydrate progress", {
-            completed: hydratedRecords,
-            total: identifiers.length,
-          });
-        }
-        return { identifier, result };
-      }),
-    { concurrency },
-  );
-  const records: Array<OfficeRecord> = [];
+  let hydratedSuccessRecords = 0;
   const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
   const failedWatermarks: Array<unknown> =
@@ -997,66 +931,99 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
-    hydrated: hydrated.length,
+    identifiers: identifiers.length,
+    batchSize,
   });
-  const persistProgressEvery = progressLogInterval(hydrated.length);
+  const persistProgressEvery = progressLogInterval(identifiers.length);
   let processedRecords = 0;
   const logPersistProgress = (completed: number) =>
-    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+    shouldLogProgress(completed, identifiers.length, persistProgressEvery)
       ? Effect.logInfo("Office sync: persist progress", {
           completed,
-          total: hydrated.length,
+          total: identifiers.length,
           persisted: persistedRecords,
           failed: errors.length,
         })
       : Effect.void;
 
-  for (const { identifier, result } of hydrated) {
-    processedRecords += 1;
-    if (result.error !== null) {
-      errors.push(result.error);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    if (result.record === null) {
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    records.push(result.record);
-    const office = result.record as Record<string, unknown>;
-    const officeKey = String(office.OfficeKey ?? "");
-    const officeMedia = (
-      Array.isArray(office.Media) ? (office.Media as MediaType) : []
-    ).map((media) => normalizeMedia("Office", officeKey, media));
-    const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertOfficeWithMedia !== undefined) {
-        yield* options.sink.upsertOfficeWithMedia(result.record, officeMedia);
-        return;
+  for (const batch of batched(identifiers, batchSize)) {
+    const hydrated = yield* Effect.forEach(
+      batch,
+      (identifier) =>
+        Effect.gen(function* () {
+          const result = yield* hydrateOne(
+            "Office",
+            identifier.OfficeKey,
+            getOffice,
+          );
+          hydratedRecords += 1;
+          if (
+            shouldLogProgress(
+              hydratedRecords,
+              identifiers.length,
+              hydrateProgressEvery,
+            )
+          ) {
+            yield* Effect.logInfo("Office sync: hydrate progress", {
+              completed: hydratedRecords,
+              total: identifiers.length,
+            });
+          }
+          return { identifier, result };
+        }),
+      { concurrency },
+    );
+
+    for (const { identifier, result } of hydrated) {
+      processedRecords += 1;
+      if (result.error !== null) {
+        errors.push(result.error);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-      if (options?.sink?.upsertOffice !== undefined)
-        yield* options.sink.upsertOffice(result.record);
-      if (options?.sink?.upsertMedia !== undefined) {
-        yield* Effect.forEach(
-          officeMedia,
-          (media) =>
-            options.sink?.upsertMedia?.(media, {
-              resource: "Office",
-              key: officeKey,
-            }) ?? Effect.void,
-          { discard: true },
-        );
+      if (result.record === null) {
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-    });
-    const persistError = yield* runPersist("Office", officeKey, persist);
-    if (persistError !== null) {
-      errors.push(persistError);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-    } else {
-      if (hasRecordSink) persistedRecords += 1;
-      successfulWatermarks.push(identifier.ModificationTimestamp);
+      const office = result.record as Record<string, unknown>;
+      const officeKey = String(office.OfficeKey ?? "");
+      const officeMedia = (
+        Array.isArray(office.Media) ? (office.Media as MediaType) : []
+      ).map((media) => normalizeMedia("Office", officeKey, media));
+      hydratedSuccessRecords += 1;
+      const persist = Effect.gen(function* () {
+        if (options?.sink?.upsertOfficeWithMedia !== undefined) {
+          yield* options.sink.upsertOfficeWithMedia(
+            result.record,
+            officeMedia,
+          );
+          return;
+        }
+        if (options?.sink?.upsertOffice !== undefined)
+          yield* options.sink.upsertOffice(result.record);
+        if (options?.sink?.upsertMedia !== undefined) {
+          yield* Effect.forEach(
+            officeMedia,
+            (media) =>
+              options.sink?.upsertMedia?.(media, {
+                resource: "Office",
+                key: officeKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+      });
+      const persistError = yield* runPersist("Office", officeKey, persist);
+      if (persistError !== null) {
+        errors.push(persistError);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+      } else {
+        if (hasRecordSink) persistedRecords += 1;
+        successfulWatermarks.push(identifier.ModificationTimestamp);
+      }
+      yield* logPersistProgress(processedRecords);
     }
-    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(
@@ -1077,7 +1044,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
 
   const counts = syncCounts(
     identifiers.length,
-    records.length,
+    hydratedSuccessRecords,
     persistedRecords,
     errors,
   );
@@ -1090,7 +1057,6 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
   return {
     resource: "Office",
     identifiers,
-    records,
     errors,
     counts,
     nextWatermark,
@@ -1100,73 +1066,114 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
   function* (options?: OpenHouseSyncOptions) {
     const concurrency = boundedConcurrency(options?.concurrency);
-    yield* Effect.logInfo("OpenHouse sync: collecting pages", {
+    const watermarkField = options?.watermarkField ?? "OpenHouseDate";
+    yield* Effect.logInfo("OpenHouse sync: collecting and persisting pages", {
       concurrency,
       ...queryLogDetails(options?.query),
     });
-    const collected = yield* collectOpenHousePages(options?.query);
-    const records = collected.records;
-    yield* Effect.logInfo("OpenHouse sync: collected records", {
-      records: records.length,
-      pageErrors: collected.errors.length,
-    });
-    const errors: Array<SyncRecordError> = [...collected.errors];
+
+    const errors: Array<SyncRecordError> = [];
     const successfulWatermarks: Array<unknown> = [];
-    const failedWatermarks: Array<unknown> = collected.errors.some(
-      (error) => error.stage === "hydrate" && error.key.startsWith("page:"),
-    )
-      ? [null]
-      : [];
-    const watermarkField = options?.watermarkField ?? "OpenHouseDate";
+    const failedWatermarks: Array<unknown> = [];
+    let hydratedRecords = 0;
     let persistedRecords = 0;
-    const persistProgressEvery = progressLogInterval(records.length);
     let processedRecords = 0;
-    const logPersistProgress = (completed: number) =>
-      shouldLogProgress(completed, records.length, persistProgressEvery)
+    let pageCount = 0;
+
+    const logPersistProgress = (pageSize: number, hasNextPage: boolean) =>
+      shouldLogPageProgress(pageCount, hasNextPage)
         ? Effect.logInfo("OpenHouse sync: persist progress", {
-            completed,
-            total: records.length,
+            pages: pageCount,
+            processed: processedRecords,
+            pageSize,
             persisted: persistedRecords,
             failed: errors.length,
+            hasNextPage,
           })
         : Effect.void;
 
-    yield* Effect.logInfo("OpenHouse sync: persisting records", {
-      records: records.length,
-      concurrency,
-    });
-
-    yield* Effect.forEach(
-      records,
-      (openHouse) =>
-        Effect.gen(function* () {
-          const key = String(openHouse.OpenHouseKey ?? "");
-          const timestamp = (openHouse as Record<string, unknown>)[
-            watermarkField
-          ];
-          if (options?.sink?.upsertOpenHouse === undefined) {
-            successfulWatermarks.push(timestamp);
+    const persistPage = (records: ReadonlyArray<OpenHouseRecord>) =>
+      Effect.forEach(
+        records,
+        (openHouse) =>
+          Effect.gen(function* () {
+            hydratedRecords += 1;
+            const key = String(openHouse.OpenHouseKey ?? "");
+            const timestamp = (openHouse as Record<string, unknown>)[
+              watermarkField
+            ];
+            if (options?.sink?.upsertOpenHouse === undefined) {
+              successfulWatermarks.push(timestamp);
+              processedRecords += 1;
+              return;
+            }
+            const persistError = yield* runPersist(
+              "OpenHouse",
+              key,
+              options.sink.upsertOpenHouse(openHouse),
+            );
+            if (persistError !== null) {
+              errors.push(persistError);
+              failedWatermarks.push(timestamp);
+            } else {
+              persistedRecords += 1;
+              successfulWatermarks.push(timestamp);
+            }
             processedRecords += 1;
-            yield* logPersistProgress(processedRecords);
-            return;
-          }
-          const persistError = yield* runPersist(
-            "OpenHouse",
-            key,
-            options.sink.upsertOpenHouse(openHouse),
+          }),
+        { concurrency, discard: true },
+      );
+
+    const firstExit = yield* Effect.exit(listOpenHouses(options?.query));
+    if (Exit.isFailure(firstExit)) {
+      yield* Effect.logWarning("OpenHouse sync: failed to collect first page");
+      errors.push(
+        makeRecordError("OpenHouse", "page:first", "hydrate", firstExit.cause),
+      );
+      failedWatermarks.push(null);
+    } else {
+      const http = yield* DdfHttp;
+      let page = firstExit.value;
+      let next: string | null = null;
+      while (true) {
+        pageCount += 1;
+        next = page["@odata.nextLink"] ?? null;
+        yield* Effect.logInfo("OpenHouse sync: collected page", {
+          pages: pageCount,
+          records: processedRecords + page.value.length,
+          pageSize: page.value.length,
+          hasNextPage: next !== null,
+        });
+        yield* persistPage(page.value);
+        yield* logPersistProgress(page.value.length, next !== null);
+
+        if (next === null) break;
+
+        const pageKey = `page:${next}`;
+        const pageExit = yield* Effect.exit(
+          http.requestJson<typeof firstExit.value>(
+            next,
+            undefined,
+            openHousePageSchema(options?.query) as Schema.Decoder<
+              typeof firstExit.value,
+              never
+            >,
+          ),
+        );
+        if (Exit.isFailure(pageExit)) {
+          yield* Effect.logWarning("OpenHouse sync: failed to collect page", {
+            nextPage: pageCount + 1,
+            records: processedRecords,
+          });
+          errors.push(
+            makeRecordError("OpenHouse", pageKey, "hydrate", pageExit.cause),
           );
-          if (persistError !== null) {
-            errors.push(persistError);
-            failedWatermarks.push(timestamp);
-          } else {
-            persistedRecords += 1;
-            successfulWatermarks.push(timestamp);
-          }
-          processedRecords += 1;
-          yield* logPersistProgress(processedRecords);
-        }),
-      { concurrency, discard: true },
-    );
+          failedWatermarks.push(null);
+          break;
+        }
+        page = pageExit.value;
+      }
+    }
 
     const nextWatermark = safeHighestWatermark(
       successfulWatermarks,
@@ -1184,7 +1191,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
       }
     }
 
-    const counts = syncCounts(0, records.length, persistedRecords, errors);
+    const counts = syncCounts(0, hydratedRecords, persistedRecords, errors);
     yield* trackSyncMetrics(counts);
     yield* Effect.logInfo(
       "OpenHouse sync: complete",
@@ -1194,7 +1201,6 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
     return {
       resource: "OpenHouse",
       identifiers: [],
-      records,
       errors,
       counts,
       nextWatermark,
