@@ -69,7 +69,7 @@ const propertyFor = (key: string) => ({
 
 describe("syncProperties", () => {
   it.effect(
-    "hydrates property replication identifiers with bounded concurrency and normalized graph records",
+    "hydrates property replication identifiers with bounded concurrency and counts successes",
     () =>
       Effect.gen(function* () {
         const requestedKeys: Array<string> = [];
@@ -119,12 +119,7 @@ describe("syncProperties", () => {
           "listing-3",
         ]);
         assert.equal(maxActive, 2);
-        assert.equal(result.records.length, 3);
-        assert.equal(result.records[0]?.rooms[0]?.ListingKey, "listing-1");
-        assert.equal(
-          result.records[0]?.media[0]?.ResourceRecordKey,
-          "listing-1",
-        );
+        assert.equal("records" in result, false);
         assert.equal(result.nextWatermark, "2024-01-27T00:00:00.000Z");
         assert.deepEqual(result.counts, {
           identifiers: 3,
@@ -174,7 +169,8 @@ describe("syncProperties", () => {
           http,
         );
 
-        assert.equal(result.records.length, 25);
+        assert.equal("records" in result, false);
+        assert.equal(result.counts.hydrated, 25);
         assert.equal(result.counts.persisted, 25);
         assert.ok(
           events.indexOf("persist:listing-1") <
@@ -363,7 +359,8 @@ describe("syncProperties", () => {
           http,
         );
 
-        assert.equal(result.records.length, 1);
+        assert.equal("records" in result, false);
+        assert.equal(result.counts.hydrated, 1);
         assert.equal(result.errors.length, 3);
         assert.deepEqual(result.errors.map((error) => error.stage).sort(), [
           "hydrate",
@@ -426,7 +423,8 @@ describe("syncProperties", () => {
         http,
       );
 
-      assert.equal(result.records.length, 2);
+      assert.equal("records" in result, false);
+      assert.equal(result.counts.hydrated, 2);
       assert.equal(result.errors.length, 1);
       assert.equal(result.nextWatermark, "2024-05-01T00:00:00.000Z");
       assert.deepEqual(savedWatermarks, ["2024-05-01T00:00:00.000Z"]);
@@ -480,7 +478,8 @@ describe("syncProperties", () => {
           http,
         );
 
-        assert.equal(result.records.length, 3);
+        assert.equal("records" in result, false);
+        assert.equal(result.counts.hydrated, 3);
         assert.equal(result.errors.length, 1);
         assert.equal(result.nextWatermark, "2024-06-01T00:00:00.000Z");
         assert.equal(result.counts.persisted, 2);
@@ -521,7 +520,8 @@ describe("syncProperties", () => {
           http,
         );
 
-        assert.equal(result.records.length, 1);
+        assert.equal("records" in result, false);
+        assert.equal(result.counts.hydrated, 1);
         assert.equal(result.errors.length, 1);
         assert.equal(result.errors[0]?.key, "watermark");
         assert.deepEqual(result.counts, {
@@ -598,6 +598,20 @@ describe("syncMembers and syncOffices", () => {
           http,
         );
 
+        assert.equal("records" in members, false);
+        assert.equal("records" in offices, false);
+        assert.deepEqual(members.counts, {
+          identifiers: 1,
+          hydrated: 1,
+          persisted: 1,
+          failed: 0,
+        });
+        assert.deepEqual(offices.counts, {
+          identifiers: 1,
+          hydrated: 1,
+          persisted: 1,
+          failed: 0,
+        });
         assert.equal(members.nextWatermark, "2024-02-01T00:00:00.000Z");
         assert.equal(offices.nextWatermark, "2024-03-01T00:00:00.000Z");
         assert.deepEqual(calls, [
@@ -692,6 +706,12 @@ describe("syncMembers and syncOffices", () => {
         http,
       );
 
+      assert.equal("records" in members, false);
+      assert.equal("records" in offices, false);
+      assert.equal(members.counts.hydrated, 2);
+      assert.equal(members.counts.failed, 1);
+      assert.equal(offices.counts.hydrated, 3);
+      assert.equal(offices.counts.failed, 1);
       assert.equal(members.nextWatermark, "2024-07-01T00:00:00.000Z");
       assert.equal(offices.nextWatermark, "2024-08-01T00:00:00.000Z");
       assert.deepEqual(calls, [
@@ -849,7 +869,7 @@ describe("syncOpenHouses", () => {
           "/odata/v1/OpenHouse:OpenHouseStatus eq 'Active':OpenHouseDate asc",
           "https://ddf.test/openhouse-page-2",
         ]);
-        assert.equal(result.records.length, 2);
+        assert.equal("records" in result, false);
         assert.deepEqual(result.counts, {
           identifiers: 0,
           hydrated: 2,
@@ -935,7 +955,7 @@ describe("syncOpenHouses", () => {
 
         const result = yield* runWithHttp(syncOpenHouses(), http);
 
-        assert.equal(result.records.length, 0);
+        assert.equal("records" in result, false);
         assert.equal(result.errors.length, 1);
         assert.equal(result.errors[0]?.resource, "OpenHouse");
         assert.equal(result.errors[0]?.key, "page:first");
@@ -994,10 +1014,7 @@ describe("syncOpenHouses", () => {
           http,
         );
 
-        assert.deepEqual(
-          result.records.map((record) => record.OpenHouseKey),
-          ["open-1"],
-        );
+        assert.equal("records" in result, false);
         assert.equal(result.errors.length, 1);
         assert.equal(
           result.errors[0]?.key,
@@ -1048,10 +1065,8 @@ describe("syncOpenHouses", () => {
           "/odata/v1/OpenHouse",
           "https://ddf.test/openhouse-selected-page-2",
         ]);
-        assert.deepEqual(
-          result.records.map((record) => record.OpenHouseKey),
-          ["open-selected-1", "open-selected-2"],
-        );
+        assert.equal("records" in result, false);
+        assert.equal(result.counts.hydrated, 2);
       }),
   );
 });
