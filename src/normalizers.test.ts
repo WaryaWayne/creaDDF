@@ -6,6 +6,10 @@ import {
   normalizePropertyRooms,
 } from "./normalizers";
 import { MediaSchema, type MediaType } from "./schema/mediaSchema";
+import { MemberSchema } from "./schema/memberSchema";
+import { OfficeSchema } from "./schema/officeSchema";
+import { PropertyListingSchema } from "./schema/propertyListingsSchema";
+import { RoomsSchema } from "./schema/roomsSchema";
 
 const media = (
   overrides: Partial<MediaType[number]> = {},
@@ -94,6 +98,127 @@ describe("normalizers", () => {
         assert.strictEqual(existingParent.ResourceName, "Member");
         assert.strictEqual(existingParent.ResourceRecordKey, "member-1");
       }),
+  );
+
+  it.effect(
+    "decodes nullable parent keys before normalization fills them",
+    () =>
+      Effect.gen(function* () {
+        const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
+        const decodedMedia = yield* decodeMedia([
+          media({
+            MediaKey: "media-null-parent",
+            ResourceName: null,
+            ResourceRecordKey: null,
+          }),
+        ]);
+
+        const decoded = decodedMedia[0];
+        assert.notStrictEqual(decoded, undefined);
+        if (decoded === undefined) return;
+
+        const normalized = normalizeMedia("Property", "listing-1", decoded);
+
+        assert.strictEqual(normalized.ResourceName, "Property");
+        assert.strictEqual(normalized.ResourceRecordKey, "listing-1");
+      }),
+  );
+
+  it.effect("decodes nullable CoListOfficeKey values", () =>
+    Effect.gen(function* () {
+      const decodeCoListOfficeKey = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          CoListOfficeKey: PropertyListingSchema.fields.CoListOfficeKey,
+        }),
+      );
+
+      const decoded = yield* decodeCoListOfficeKey({ CoListOfficeKey: null });
+
+      assert.strictEqual(decoded.CoListOfficeKey, null);
+    }),
+  );
+
+  it.effect("decodes nullable Media collections", () =>
+    Effect.gen(function* () {
+      const decodePropertyMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: PropertyListingSchema.fields.Media }),
+      );
+      const decodeMemberMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: MemberSchema.fields.Media }),
+      );
+      const decodeOfficeMedia = Schema.decodeUnknownEffect(
+        Schema.Struct({ Media: OfficeSchema.fields.Media }),
+      );
+
+      const property = yield* decodePropertyMedia({ Media: null });
+      const member = yield* decodeMemberMedia({ Media: null });
+      const office = yield* decodeOfficeMedia({ Media: null });
+
+      assert.strictEqual(property.Media, null);
+      assert.strictEqual(member.Media, null);
+      assert.strictEqual(office.Media, null);
+    }),
+  );
+
+  it.effect("decodes nullable social media collections", () =>
+    Effect.gen(function* () {
+      const decodeMemberSocial = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          MemberSocialMedia: MemberSchema.fields.MemberSocialMedia,
+        }),
+      );
+      const decodeOfficeSocial = Schema.decodeUnknownEffect(
+        Schema.Struct({
+          OfficeSocialMedia: OfficeSchema.fields.OfficeSocialMedia,
+        }),
+      );
+
+      const member = yield* decodeMemberSocial({ MemberSocialMedia: null });
+      const office = yield* decodeOfficeSocial({ OfficeSocialMedia: null });
+
+      assert.strictEqual(member.MemberSocialMedia, null);
+      assert.strictEqual(office.OfficeSocialMedia, null);
+    }),
+  );
+
+  it.effect("decodes nullable child keys before fallback row key derivation", () =>
+    Effect.gen(function* () {
+      const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
+      const decodeRooms = Schema.decodeUnknownEffect(RoomsSchema);
+
+      const decodedMedia = yield* decodeMedia([
+        media({
+          MediaKey: null,
+          MediaURL: "https://example.test/fallback.jpg",
+          Order: 1,
+        }),
+      ]);
+      const decodedRooms = yield* decodeRooms([
+        {
+          RoomKey: null,
+          ListingId: null,
+          ListingKey: null,
+          ModificationTimestamp: "2026-05-12T00:00:00.000Z",
+          RoomDescription: null,
+          RoomDimensions: null,
+          RoomLength: null,
+          RoomLevel: "Main level",
+          RoomWidth: null,
+          RoomLengthWidthUnits: null,
+          RoomType: "Kitchen",
+        },
+      ]);
+
+      assert.strictEqual(decodedMedia[0]?.MediaKey, null);
+      assert.strictEqual(decodedRooms[0]?.RoomKey, null);
+
+      const normalizedRooms = yield* normalizePropertyRooms({
+        ListingKey: "listing-1",
+        Rooms: decodedRooms,
+      });
+
+      assert.strictEqual(normalizedRooms[0]?.ListingKey, "listing-1");
+    }),
   );
 
   it.effect("decodes media records and reports invalid enum values", () =>

@@ -25,10 +25,7 @@ export const RoomsSchema = Schema.Array(
       identifier: "ListingKey",
       examples: ["26034183", "26507412", "26935822"],
     }),
-    ModificationTimestamp: Schema.Union([
-      Schema.Null,
-      Schema.DateTimeUtcFromString,
-    ]).annotate({
+    ModificationTimestamp: Schema.DateTimeUtcFromString.annotate({
       message: "Value is invalid for ModificationTimestamp.",
       description:
         "Date/time this record was last modified (in Zulu time (UTC)).",

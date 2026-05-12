@@ -3,7 +3,7 @@ import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
 
 export const MemberSchema = Schema.Struct({
-  MemberKey: Schema.Union([Schema.Null, Schema.String]),
+  MemberKey: Schema.String,
   MemberMlsId: Schema.Union([Schema.Null, Schema.String]),
   OfficeKey: Schema.Union([Schema.Null, Schema.String]),
   OfficeNationalAssociationId: Schema.Union([Schema.Null, Schema.String]),
@@ -513,7 +513,7 @@ export const MemberSchema = Schema.Struct({
         "Azeri",
         "Bahasa Malaysia",
         "Belorussian",
-        "Belarusian",
+
         "Catalan",
         "Creole",
         "Estonian",
@@ -570,8 +570,8 @@ export const MemberSchema = Schema.Struct({
   MemberSocialMedia: Schema.Union([
     Schema.Array(
       Schema.Struct({
-        SocialMediaKey: Schema.Union([Schema.String, Schema.Null]),
-        ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]),
+        SocialMediaKey: Schema.String,
+        ResourceRecordKey: Schema.String,
         SocialMediaType: Schema.Union([
           Schema.Literals([
             "Website",
@@ -593,7 +593,7 @@ export const MemberSchema = Schema.Struct({
           Schema.Literals(["Office", "Member", "Property"]),
           Schema.Null,
         ]),
-        SocialMediaUrlOrId: Schema.Union([Schema.String, Schema.Null]),
+        SocialMediaUrlOrId: Schema.String,
       }),
     ),
     Schema.Null,

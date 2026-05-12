@@ -1,8 +1,10 @@
+import { eq } from "drizzle-orm";
 import { DateTime, Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import type {
   MemberSyncOptions,
   OfficeSyncOptions,
+  OpenHouseListingScope,
   OpenHouseSyncOptions,
   PropertySyncOptions,
   SyncRecordError,
@@ -18,7 +20,7 @@ import { DdfDatabase } from "./db/layer";
 import { runDdfDatabaseMigrations } from "./db/runMigrations";
 import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "./db/sink";
 import type { SerializedSyncRecordError } from "./db/sink";
-import { ddfSyncRuns } from "./db/schema";
+import { ddfProperties, ddfSyncRuns } from "./db/schema";
 import {
   loadDatabaseWatermark,
   saveDatabaseWatermark,
@@ -32,6 +34,8 @@ export interface SyncDdfDatabaseOnceOptions {
   readonly memberQuery?: MemberSyncOptions["query"];
   readonly officeQuery?: OfficeSyncOptions["query"];
   readonly openHouseQuery?: OpenHouseSyncOptions["query"];
+  readonly openHouseDateWindow?: OpenHouseSyncOptions["dateWindow"];
+  readonly openHouseListingChunkSize?: number;
   readonly dependencies?: Partial<SyncDdfDatabaseDependencies>;
 }
 
@@ -44,6 +48,7 @@ export interface SyncDdfDatabaseDependencies {
   readonly saveWatermark: typeof saveDatabaseWatermark;
   readonly runMigrations: typeof runDdfDatabaseMigrations;
   readonly makeSink: typeof makeDdfDatabaseSyncSink;
+  readonly loadOpenHouseListingScopes: () => Effect.Effect<ReadonlyArray<OpenHouseListingScope>, unknown, DdfDatabase>;
   readonly recordRun: (summary: SyncDdfDatabaseOnceSummary, destinationId?: number) => Effect.Effect<void, unknown, DdfDatabase>;
 }
 
@@ -83,20 +88,32 @@ const syncResultLogDetails = (result: {
   nextWatermark: result.nextWatermark,
 });
 
-const openHouseQueryWithSince = (
+const openHouseQueryForDatabaseSync = (
   query: OpenHouseSyncOptions["query"],
-  since: string | null,
-): OpenHouseSyncOptions["query"] =>
-  since === null
-    ? query
-    : {
-        ...query,
-        filter:
-          query?.filter === undefined
-            ? `OpenHouseDate ge ${since}`
-            : `(${query.filter}) and OpenHouseDate ge ${since}`,
-      };
+): OpenHouseSyncOptions["query"] => query;
 
+const defaultOpenHouseDateWindow = Effect.fn(
+  "DdfDatabaseSync.defaultOpenHouseDateWindow",
+)(function* () {
+  const today = yield* DateTime.now;
+  return {
+    startDate: DateTime.formatIsoDateUtc(today),
+    endDate: DateTime.formatIsoDateUtc(DateTime.add(today, { days: 30 })),
+  } satisfies NonNullable<OpenHouseSyncOptions["dateWindow"]>;
+});
+
+const loadOpenHouseListingScopes = Effect.fn(
+  "DdfDatabaseSync.loadOpenHouseListingScopes",
+)(function* () {
+  const { db } = yield* DdfDatabase;
+  return yield* db
+    .select({
+      listingKey: ddfProperties.listingKey,
+      listingId: ddfProperties.listingId,
+    })
+    .from(ddfProperties)
+    .where(eq(ddfProperties.active, true));
+});
 
 export interface DatabaseSyncWatermarks {
   readonly property: string | null;
@@ -115,6 +132,7 @@ export const databaseSyncOptionsFromWatermarks = (
     | "memberQuery"
     | "officeQuery"
     | "openHouseQuery"
+    | "openHouseListingChunkSize"
   >,
 ) => ({
   property: {
@@ -139,8 +157,9 @@ export const databaseSyncOptionsFromWatermarks = (
     query: options?.officeQuery,
   } satisfies Omit<OfficeSyncOptions, "sink">,
   openHouse: {
-    query: openHouseQueryWithSince(options?.openHouseQuery, watermarks.openHouse),
+    query: openHouseQueryForDatabaseSync(options?.openHouseQuery),
     concurrency: options?.concurrency,
+    listingChunkSize: options?.openHouseListingChunkSize,
   } satisfies Omit<OpenHouseSyncOptions, "sink">,
 });
 const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
@@ -193,6 +212,7 @@ const defaultDependencies: SyncDdfDatabaseDependencies = {
   saveWatermark: saveDatabaseWatermark,
   runMigrations: runDdfDatabaseMigrations,
   makeSink: makeDdfDatabaseSyncSink,
+  loadOpenHouseListingScopes,
   recordRun: recordRunSummary,
 };
 
@@ -230,33 +250,30 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     const sink = yield* dependencies.makeSink({ runId });
 
     yield* Effect.logInfo("DDF database sync: loading watermarks", { runId });
-    const [propertyWatermark, memberWatermark, officeWatermark, openHouseWatermark] =
+    const [propertyWatermark, memberWatermark, officeWatermark] =
       yield* Effect.all([
         dependencies.loadWatermark("Property"),
         dependencies.loadWatermark("Member"),
         dependencies.loadWatermark("Office"),
-        dependencies.loadWatermark("OpenHouse"),
       ]);
     yield* Effect.logInfo("DDF database sync: loaded watermarks", {
       runId,
       property: propertyWatermark,
       member: memberWatermark,
       office: officeWatermark,
-      openHouse: openHouseWatermark,
     });
 
     const syncOptions = databaseSyncOptionsFromWatermarks({
       property: propertyWatermark,
       member: memberWatermark,
       office: officeWatermark,
-      openHouse: openHouseWatermark,
+      openHouse: null,
     }, options);
     yield* Effect.logInfo("DDF database sync: sync plan ready", {
       runId,
       propertyMode: syncOptions.property.mode,
       memberMode: syncOptions.member.mode,
       officeMode: syncOptions.office.mode,
-      openHouseSince: openHouseWatermark,
     });
 
     yield* Effect.logInfo("DDF database sync: syncing properties", {
@@ -308,24 +325,24 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     );
     yield* saveIfAdvanced(dependencies.saveWatermark, "Office", office.nextWatermark);
 
+    const openHouseListingScopes = yield* dependencies.loadOpenHouseListingScopes();
+    const openHouseDateWindow = options?.openHouseDateWindow ?? (yield* defaultOpenHouseDateWindow());
     yield* Effect.logInfo("DDF database sync: syncing open houses", {
       runId,
-      since: openHouseWatermark,
+      listingScopes: openHouseListingScopes.length,
+      dateWindowStart: openHouseDateWindow.startDate,
+      dateWindowEnd: openHouseDateWindow.endDate ?? null,
     });
     const openHouse = yield* dependencies.syncOpenHouses({
       ...syncOptions.openHouse,
+      listingScopes: openHouseListingScopes,
+      dateWindow: openHouseDateWindow,
       sink,
     });
     yield* Effect.logInfo(
       "DDF database sync: open houses complete",
       syncResultLogDetails(openHouse),
     );
-    yield* saveIfAdvanced(
-      dependencies.saveWatermark,
-      "OpenHouse",
-      openHouse.nextWatermark,
-    );
-
     const syncErrors = [
       ...property.errors,
       ...member.errors,

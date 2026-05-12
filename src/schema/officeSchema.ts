@@ -3,20 +3,19 @@ import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
 
 export const SocialMediaSchema = Schema.Struct({
-  SocialMediaKey: Schema.Union([Schema.String, Schema.Null]),
-  ResourceRecordKey: Schema.Union([Schema.String, Schema.Null]),
+  SocialMediaKey: Schema.String,
+  ResourceRecordKey: Schema.String,
   SocialMediaType: Schema.Union([Schema.String, Schema.Null]),
   ModificationTimestamp: Schema.Union([Schema.Null, Schema.DateTimeUtcFromString]),
   ResourceName: Schema.Union([
     Schema.Literals(["Office", "Member", "Property"]),
     Schema.Null,
   ]),
-  SocialMediaUrlOrId: Schema.Union([Schema.String, Schema.Null]),
+  SocialMediaUrlOrId: Schema.String,
 });
 
 export const OfficeSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  OfficeKey: Schema.Union([Schema.String, Schema.Null]),
+  OfficeKey: Schema.String,
   OfficeMlsId: Schema.Union([Schema.String, Schema.Null]),
   OfficeAORKey: Schema.Union([Schema.String, Schema.Null]),
   OfficeNationalAssociationId: Schema.Union([Schema.String, Schema.Null]),

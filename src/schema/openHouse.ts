@@ -1,8 +1,8 @@
-import { DateTime, Schema } from "effect";
+import { Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 
 export const OpenHouseSchema = Schema.Struct({
-  OpenHouseKey: Schema.Union([Schema.String, Schema.Null]).annotate({
+  OpenHouseKey: Schema.String.annotate({
     message: "Value is invalid for OpenHouseKey.",
     description:
       "A unique identifier for this record from the immediate source.",
@@ -27,18 +27,19 @@ export const OpenHouseSchema = Schema.Struct({
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
   OpenHouseDate: Schema.Union([
-    Schema.DateTimeUtcFromString,
+    Schema.String.check(
+      Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/, {
+        message: "Expected an Edm.Date string in YYYY-MM-DD format.",
+        identifier: "OpenHouseDate",
+      }),
+    ),
     Schema.Null,
   ]).annotate({
     message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",
     identifier: "OpenHouseDate",
-    examples: [
-      DateTime.makeUnsafe("2025-07-15"),
-      DateTime.makeUnsafe("2025-12-12"),
-      DateTime.makeUnsafe("2026-09-12"),
-    ],
+    examples: ["2025-07-15", "2025-12-12", "2026-09-12"],
   }),
   OpenHouseStartTime: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for OpenHouseStartTime.",

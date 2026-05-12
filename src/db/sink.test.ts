@@ -29,8 +29,8 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.listingKey, "listing-1");
     assert.equal(row.listOfficeKey, "office-1");
     assert.equal(row.listAgentKey, "member-1");
-    assert.equal(row.latitude, "45.42");
-    assert.equal(row.longitude, "-75.69");
+    assert.equal(row.latitude, 45.42);
+    assert.equal(row.longitude, -75.69);
     assert.equal(row.raw, property);
   });
 
@@ -41,22 +41,48 @@ describe("database sync sink row mapping", () => {
 
     assert.deepEqual(roomRowFromRecord(room, property), {
       listingKey: "listing-1",
+      listingId: null,
       roomKey: "room-1",
+      modificationTimestamp: null,
+      roomDescription: null,
+      roomDimensions: null,
+      roomLength: null,
       roomType: "Kitchen",
       roomLevel: "Main",
+      roomWidth: null,
+      roomLengthWidthUnits: null,
       raw: room,
     });
     assert.deepEqual(mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }), {
       mediaKey: "media-1",
       resource: "Property",
       resourceKey: "listing-1",
+      resourceRecordId: null,
+      resourceRecordKey: null,
+      resourceName: null,
       modificationTimestamp: null,
       mediaUrl: "https://example.test/a.jpg",
       mediaCategory: null,
+      longDescription: null,
       preferredPhoto: null,
       sortOrder: 2,
       raw: media,
     });
+  });
+
+  it("derives fallback room and media keys when DDF omits child keys", () => {
+    const property = { ListingKey: "listing-1" };
+    const room = { RoomKey: null, RoomType: "Kitchen", RoomLevel: "Main level" };
+    const media = { MediaKey: null, MediaURL: "https://example.test/a.jpg", Order: 2 };
+
+    assert.equal(
+      roomRowFromRecord(room, property).roomKey,
+      "listing-1:Kitchen:Main level",
+    );
+    assert.equal(
+      mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }).mediaKey,
+      "Property:listing-1:https://example.test/a.jpg:2",
+    );
   });
 
   it("persists Effect DateTime timestamp values", () => {
@@ -98,9 +124,47 @@ describe("database sync sink row mapping", () => {
       openHouseRowFromRecord({
         OpenHouseKey: "open-house-1",
         OpenHouseDate: timestamp,
-      }).openHouseDate?.toISOString(),
-      "2024-01-02T03:04:05.000Z",
+      }).openHouseDate,
+      "2024-01-02",
     );
+  });
+
+  it("maps member and open house typed columns instead of relying on raw only", () => {
+    const member = {
+      MemberKey: "member-1",
+      MemberMlsId: "M123",
+      OfficeKey: "office-1",
+      JobTitle: "Broker",
+      MemberNationalAssociationId: "NAT-1",
+      MemberStateOrProvince: "Ontario",
+      MemberCountry: "Canada",
+      MemberStatus: "Active",
+      MemberType: "Salesperson",
+      MemberEmail: "agent@example.test",
+      MemberEmailYN: true,
+    };
+    const openHouse = {
+      OpenHouseKey: "open-house-1",
+      ListingKey: "listing-1",
+      ListingId: "X123",
+      OpenHouseDate: "2027-06-07",
+      OpenHouseStartTime: "12:00:00.00",
+      OpenHouseEndTime: "15:30:00.00",
+      OpenHouseType: "Open House",
+      OpenHouseStatus: "Active",
+      OpenHouseRemarks: "Come visit",
+      LivestreamOpenHouseURL: "https://example.test/live",
+    };
+
+    assert.equal(memberRowFromRecord(member).memberMlsId, "M123");
+    assert.equal(memberRowFromRecord(member).jobTitle, "Broker");
+    assert.equal(memberRowFromRecord(member).nationalAssociationId, "NAT-1");
+    assert.equal(memberRowFromRecord(member).emailYn, true);
+    assert.equal(openHouseRowFromRecord(openHouse).listingId, "X123");
+    assert.equal(openHouseRowFromRecord(openHouse).openHouseDate, "2027-06-07");
+    assert.equal(openHouseRowFromRecord(openHouse).openHouseStartTime, "12:00:00");
+    assert.equal(openHouseRowFromRecord(openHouse).openHouseEndTime, "15:30:00");
+    assert.equal(openHouseRowFromRecord(openHouse).livestreamOpenHouseUrl, "https://example.test/live");
   });
 
   it("serializes sync error causes into stable JSON DTOs", () => {
