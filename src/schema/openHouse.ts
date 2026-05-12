@@ -1,6 +1,47 @@
 import { Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 
+const isLeapYear = (year: number) =>
+  (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+
+const daysInMonth = (year: number, month: number) =>
+  month === 2
+    ? isLeapYear(year)
+      ? 29
+      : 28
+    : [4, 6, 9, 11].includes(month)
+      ? 30
+      : 31;
+
+const isEdmDateString = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (match === null) return false;
+
+  const year = Number(match[1] ?? Number.NaN);
+  const month = Number(match[2] ?? Number.NaN);
+  const day = Number(match[3] ?? Number.NaN);
+
+  return (
+    Number.isInteger(year) &&
+    Number.isInteger(month) &&
+    Number.isInteger(day) &&
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth(year, month)
+  );
+};
+
+const EdmDateString = Schema.String.pipe(
+  Schema.check(
+    Schema.makeFilter((value) =>
+      isEdmDateString(value)
+        ? undefined
+        : { path: [], issue: "Expected an Edm.Date string in YYYY-MM-DD format." },
+    ),
+  ),
+);
+
 export const OpenHouseSchema = Schema.Struct({
   OpenHouseKey: Schema.String.annotate({
     message: "Value is invalid for OpenHouseKey.",
@@ -26,15 +67,7 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.Union([
-    Schema.String.check(
-      Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/, {
-        message: "Expected an Edm.Date string in YYYY-MM-DD format.",
-        identifier: "OpenHouseDate",
-      }),
-    ),
-    Schema.Null,
-  ]).annotate({
+  OpenHouseDate: Schema.NullOr(EdmDateString).annotate({
     message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",

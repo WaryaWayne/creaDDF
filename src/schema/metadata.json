@@ -1101,6 +1101,38 @@
                 {
                   "Annotation": {
                     "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the primary MemberKey that the property belongs to."
+                  },
+                  "_Name": "ListAgentNationalAssociationId",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary MemberKey that the property belongs to."
+                  },
+                  "_Name": "CoListAgentNationalAssociationId",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary MemberKey that the property belongs to."
+                  },
+                  "_Name": "CoListAgentNationalAssociationId2",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary MemberKey that the property belongs to."
+                  },
+                  "_Name": "CoListAgentNationalAssociationId3",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
                     "_String": "A yes/no field that states the seller has allowed the listing to be displayed on Internet sites."
                   },
                   "_Name": "InternetEntireListingDisplayYN",
@@ -1169,6 +1201,38 @@
                     "_String": "A system unique identifier. This is the secondary OfficeKey that the property belongs to."
                   },
                   "_Name": "CoListOfficeKey3",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the primary OfficeKey that the property belongs to."
+                  },
+                  "_Name": "ListOfficeNationalAssociationId",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary OfficeKey that the property belongs to."
+                  },
+                  "_Name": "CoListOfficeNationalAssociationId",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary OfficeKey that the property belongs to."
+                  },
+                  "_Name": "CoListOfficeNationalAssociationId2",
+                  "_Type": "Edm.String"
+                },
+                {
+                  "Annotation": {
+                    "_Term": "DDF.Core.Description",
+                    "_String": "A system unique identifier. This is the secondary OfficeKey that the property belongs to."
+                  },
+                  "_Name": "CoListOfficeNationalAssociationId3",
                   "_Type": "Edm.String"
                 },
                 {
@@ -2035,8 +2099,7 @@
                     "_String": "The type of sites, blog, social media, the Member URL or ID is referring to. i.e. Website, Blog, Facebook, Twitter, LinkedIn, Skype, etc."
                   },
                   "_Name": "SocialMediaType",
-                  "_Type": "DDF.Core.Enums.SocialMediaEnums.SocialMediaType",
-                  "_Nullable": "false"
+                  "_Type": "DDF.Core.Enums.SocialMediaEnums.SocialMediaType"
                 },
                 {
                   "Annotation": {
@@ -2053,8 +2116,7 @@
                     "_String": "The resource or table of the listing or other record the media relates to. i.e. Property, Member, Office, etc."
                   },
                   "_Name": "ResourceName",
-                  "_Type": "DDF.Core.Enums.SharedEnums.ResourceName",
-                  "_Nullable": "false"
+                  "_Type": "DDF.Core.Enums.SharedEnums.ResourceName"
                 }
               ],
               "Annotation": {
@@ -5122,6 +5184,10 @@
                 {
                   "_Name": "Canadian Certified Green Representative (CCGR)",
                   "_Value": "5108"
+                },
+                {
+                  "_Name": "Real Estate Sector Governance Designation",
+                  "_Value": "5116"
                 }
               ],
               "_Name": "MemberDesignation"
@@ -5591,60 +5657,12 @@
                   "_Value": "2585"
                 },
                 {
-                  "_Name": "Firm",
-                  "_Value": "2586"
-                },
-                {
                   "_Name": "Affiliate",
                   "_Value": "2587"
                 },
                 {
-                  "_Name": "Affiliate Monthly",
-                  "_Value": "2588"
-                },
-                {
-                  "_Name": "Franchisor",
-                  "_Value": "2589"
-                },
-                {
-                  "_Name": "Guest",
-                  "_Value": "2590"
-                },
-                {
                   "_Name": "Honourary",
                   "_Value": "2591"
-                },
-                {
-                  "_Name": "Broker Life Member",
-                  "_Value": "2592"
-                },
-                {
-                  "_Name": "Salesperson Life Member",
-                  "_Value": "2593"
-                },
-                {
-                  "_Name": "Unknown",
-                  "_Value": "2594"
-                },
-                {
-                  "_Name": "Affiliate Bi-Annual",
-                  "_Value": "2595"
-                },
-                {
-                  "_Name": "Interboard",
-                  "_Value": "2596"
-                },
-                {
-                  "_Name": "Professional Affiliate",
-                  "_Value": "2597"
-                },
-                {
-                  "_Name": "Social Affiliate",
-                  "_Value": "2598"
-                },
-                {
-                  "_Name": "Dual",
-                  "_Value": "2599"
                 },
                 {
                   "_Name": "Member",
@@ -7060,6 +7078,10 @@
                 {
                   "_Name": "VisitAble",
                   "_Value": "4794"
+                },
+                {
+                  "_Name": "Generator",
+                  "_Value": "5117"
                 }
               ],
               "_Name": "LotFeatures"
@@ -8028,6 +8050,10 @@
                 {
                   "_Name": "Cooktop - Induction",
                   "_Value": "5068"
+                },
+                {
+                  "_Name": "Range - Induction",
+                  "_Value": "5119"
                 }
               ],
               "_Name": "Appliances"
@@ -9255,6 +9281,10 @@
                 {
                   "_Name": "Wind Power",
                   "_Value": "4606"
+                },
+                {
+                  "_Name": "Geothermal",
+                  "_Value": "5118"
                 }
               ],
               "_Name": "Heating"
@@ -10005,6 +10035,10 @@
                 {
                   "_Name": "See Remarks",
                   "_Value": "4578"
+                },
+                {
+                  "_Name": "Geothermal",
+                  "_Value": "5120"
                 }
               ],
               "_Name": "Cooling"

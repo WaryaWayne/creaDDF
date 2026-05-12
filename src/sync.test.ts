@@ -974,18 +974,20 @@ describe("syncOpenHouses", () => {
             schema?: DdfResponseSchema<T>,
           ) => {
             const payload = {
-              value: [{
-                OpenHouseKey: "open-invalid-date",
-                ListingKey: null,
-                ListingId: null,
-                OpenHouseDate: "not-a-date",
-                OpenHouseStartTime: null,
-                OpenHouseEndTime: null,
-                OpenHouseRemarks: null,
-                OpenHouseType: null,
-                OpenHouseStatus: null,
-                LivestreamOpenHouseURL: null,
-              }],
+              value: [
+                {
+                  OpenHouseKey: "open-house-1",
+                  ListingKey: null,
+                  ListingId: null,
+                  OpenHouseDate: "not-a-date",
+                  OpenHouseStartTime: null,
+                  OpenHouseEndTime: null,
+                  OpenHouseRemarks: null,
+                  OpenHouseType: null,
+                  OpenHouseStatus: null,
+                  LivestreamOpenHouseURL: null,
+                },
+              ],
             };
             return schema !== undefined
               ? (Schema.decodeUnknownEffect(schema)(payload) as Effect.Effect<
@@ -1005,7 +1007,7 @@ describe("syncOpenHouses", () => {
         assert.equal(result.errors[0]?.stage, "hydrate");
         assert.match(
           result.errors[0]?.message ?? "",
-          /OpenHouseKey|OpenHouseDate/,
+          /OpenHouseDate/,
         );
         assert.deepEqual(result.counts, {
           identifiers: 0,
