@@ -257,6 +257,18 @@ const progressLogInterval = (total: number) => {
   return 0;
 };
 
+const hydrationBatchSize = (concurrency: number) =>
+  Math.max(concurrency, concurrency * 10);
+
+function* batched<Item>(
+  items: ReadonlyArray<Item>,
+  size: number,
+): Iterable<ReadonlyArray<Item>> {
+  for (let index = 0; index < items.length; index += size) {
+    yield items.slice(index, index + size);
+  }
+}
+
 const shouldLogProgress = (
   completed: number,
   total: number,
@@ -601,38 +613,14 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       identifiers: identifiers.length,
       pageErrors: collected.errors.length,
     });
+    const batchSize = hydrationBatchSize(concurrency);
     yield* Effect.logInfo("Property sync: hydrating records", {
       identifiers: identifiers.length,
       concurrency,
+      batchSize,
     });
     const hydrateProgressEvery = progressLogInterval(identifiers.length);
     let hydratedRecords = 0;
-    const hydrated = yield* Effect.forEach(
-      identifiers,
-      (identifier) =>
-        Effect.gen(function* () {
-          const result = yield* hydrateOne(
-            "Property",
-            identifier.ListingKey,
-            (key) => getProperty(key),
-          );
-          hydratedRecords += 1;
-          if (
-            shouldLogProgress(
-              hydratedRecords,
-              identifiers.length,
-              hydrateProgressEvery,
-            )
-          ) {
-            yield* Effect.logInfo("Property sync: hydrate progress", {
-              completed: hydratedRecords,
-              total: identifiers.length,
-            });
-          }
-          return { identifier, result };
-        }),
-      { concurrency },
-    );
 
     const records: Array<PropertyGraph> = [];
     const errors: Array<SyncRecordError> = [...collected.errors];
@@ -647,74 +635,106 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       options?.sink?.upsertMedia !== undefined;
 
     yield* Effect.logInfo("Property sync: normalizing and persisting records", {
-      hydrated: hydrated.length,
+      identifiers: identifiers.length,
+      batchSize,
     });
-    const persistProgressEvery = progressLogInterval(hydrated.length);
+    const persistProgressEvery = progressLogInterval(identifiers.length);
     let processedRecords = 0;
     const logPersistProgress = (completed: number) =>
-      shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+      shouldLogProgress(completed, identifiers.length, persistProgressEvery)
         ? Effect.logInfo("Property sync: persist progress", {
             completed,
-            total: hydrated.length,
+            total: identifiers.length,
             persisted: persistedRecords,
             failed: errors.length,
           })
         : Effect.void;
 
-    for (const { identifier, result } of hydrated) {
-      processedRecords += 1;
-      if (result.error !== null) {
-        errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
-        yield* logPersistProgress(processedRecords);
-        continue;
-      }
-      if (result.record === null) {
-        yield* logPersistProgress(processedRecords);
-        continue;
-      }
+    for (const batch of batched(identifiers, batchSize)) {
+      const hydrated = yield* Effect.forEach(
+        batch,
+        (identifier) =>
+          Effect.gen(function* () {
+            const result = yield* hydrateOne(
+              "Property",
+              identifier.ListingKey,
+              (key) => getProperty(key),
+            );
+            hydratedRecords += 1;
+            if (
+              shouldLogProgress(
+                hydratedRecords,
+                identifiers.length,
+                hydrateProgressEvery,
+              )
+            ) {
+              yield* Effect.logInfo("Property sync: hydrate progress", {
+                completed: hydratedRecords,
+                total: identifiers.length,
+              });
+            }
+            return { identifier, result };
+          }),
+        { concurrency },
+      );
 
-      const graph: PropertyGraph = yield* normalizePropertyGraph(result.record);
-      records.push(graph);
+      for (const { identifier, result } of hydrated) {
+        processedRecords += 1;
+        if (result.error !== null) {
+          errors.push(result.error);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
+        if (result.record === null) {
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
 
-      const propertyKey = String(graph.property.ListingKey ?? "");
-      const persist = Effect.gen(function* () {
-        if (options?.sink?.upsertPropertyGraph !== undefined) {
-          yield* options.sink.upsertPropertyGraph(graph);
-          return;
+        const graph: PropertyGraph = yield* normalizePropertyGraph(
+          result.record,
+        );
+        records.push(graph);
+
+        const propertyKey = String(graph.property.ListingKey ?? "");
+        const persist = Effect.gen(function* () {
+          if (options?.sink?.upsertPropertyGraph !== undefined) {
+            yield* options.sink.upsertPropertyGraph(graph);
+            return;
+          }
+          if (options?.sink?.upsertProperty !== undefined) {
+            yield* options.sink.upsertProperty(graph.property);
+          }
+          if (options?.sink?.upsertRoom !== undefined) {
+            yield* Effect.forEach(
+              graph.rooms,
+              (room) =>
+                options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
+              { discard: true },
+            );
+          }
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              graph.media,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Property",
+                  key: propertyKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
+        });
+        const persistError = yield* runPersist("Property", propertyKey, persist);
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          if (hasRecordSink) persistedRecords += 1;
+          successfulWatermarks.push(identifier.ModificationTimestamp);
         }
-        if (options?.sink?.upsertProperty !== undefined) {
-          yield* options.sink.upsertProperty(graph.property);
-        }
-        if (options?.sink?.upsertRoom !== undefined) {
-          yield* Effect.forEach(
-            graph.rooms,
-            (room) =>
-              options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
-            { discard: true },
-          );
-        }
-        if (options?.sink?.upsertMedia !== undefined) {
-          yield* Effect.forEach(
-            graph.media,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
-                resource: "Property",
-                key: propertyKey,
-              }) ?? Effect.void,
-            { discard: true },
-          );
-        }
-      });
-      const persistError = yield* runPersist("Property", propertyKey, persist);
-      if (persistError !== null) {
-        errors.push(persistError);
-        failedWatermarks.push(identifier.ModificationTimestamp);
-      } else {
-        if (hasRecordSink) persistedRecords += 1;
-        successfulWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
       }
-      yield* logPersistProgress(processedRecords);
     }
 
     const nextWatermark = safeHighestWatermark(
@@ -782,38 +802,14 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     identifiers: identifiers.length,
     pageErrors: collected.errors.length,
   });
+  const batchSize = hydrationBatchSize(concurrency);
   yield* Effect.logInfo("Member sync: hydrating records", {
     identifiers: identifiers.length,
     concurrency,
+    batchSize,
   });
   const hydrateProgressEvery = progressLogInterval(identifiers.length);
   let hydratedRecords = 0;
-  const hydrated = yield* Effect.forEach(
-    identifiers,
-    (identifier) =>
-      Effect.gen(function* () {
-        const result = yield* hydrateOne(
-          "Member",
-          identifier.MemberKey,
-          getMember,
-        );
-        hydratedRecords += 1;
-        if (
-          shouldLogProgress(
-            hydratedRecords,
-            identifiers.length,
-            hydrateProgressEvery,
-          )
-        ) {
-          yield* Effect.logInfo("Member sync: hydrate progress", {
-            completed: hydratedRecords,
-            total: identifiers.length,
-          });
-        }
-        return { identifier, result };
-      }),
-    { concurrency },
-  );
   const records: Array<MemberRecord> = [];
   const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
@@ -826,67 +822,100 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
-    hydrated: hydrated.length,
+    identifiers: identifiers.length,
+    batchSize,
   });
-  const persistProgressEvery = progressLogInterval(hydrated.length);
+  const persistProgressEvery = progressLogInterval(identifiers.length);
   let processedRecords = 0;
   const logPersistProgress = (completed: number) =>
-    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+    shouldLogProgress(completed, identifiers.length, persistProgressEvery)
       ? Effect.logInfo("Member sync: persist progress", {
           completed,
-          total: hydrated.length,
+          total: identifiers.length,
           persisted: persistedRecords,
           failed: errors.length,
         })
       : Effect.void;
 
-  for (const { identifier, result } of hydrated) {
-    processedRecords += 1;
-    if (result.error !== null) {
-      errors.push(result.error);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    if (result.record === null) {
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    records.push(result.record);
-    const memberKey = String(result.record.MemberKey ?? "");
-    const memberMedia = (
-      Array.isArray((result.record as Record<string, unknown>).Media)
-        ? ((result.record as Record<string, unknown>).Media as MediaType)
-        : []
-    ).map((media) => normalizeMedia("Member", memberKey, media));
-    const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertMemberWithMedia !== undefined) {
-        yield* options.sink.upsertMemberWithMedia(result.record, memberMedia);
-        return;
+  for (const batch of batched(identifiers, batchSize)) {
+    const hydrated = yield* Effect.forEach(
+      batch,
+      (identifier) =>
+        Effect.gen(function* () {
+          const result = yield* hydrateOne(
+            "Member",
+            identifier.MemberKey,
+            getMember,
+          );
+          hydratedRecords += 1;
+          if (
+            shouldLogProgress(
+              hydratedRecords,
+              identifiers.length,
+              hydrateProgressEvery,
+            )
+          ) {
+            yield* Effect.logInfo("Member sync: hydrate progress", {
+              completed: hydratedRecords,
+              total: identifiers.length,
+            });
+          }
+          return { identifier, result };
+        }),
+      { concurrency },
+    );
+
+    for (const { identifier, result } of hydrated) {
+      processedRecords += 1;
+      if (result.error !== null) {
+        errors.push(result.error);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-      if (options?.sink?.upsertMember !== undefined)
-        yield* options.sink.upsertMember(result.record);
-      if (options?.sink?.upsertMedia !== undefined) {
-        yield* Effect.forEach(
-          memberMedia,
-          (media) =>
-            options.sink?.upsertMedia?.(media, {
-              resource: "Member",
-              key: memberKey,
-            }) ?? Effect.void,
-          { discard: true },
-        );
+      if (result.record === null) {
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-    });
-    const persistError = yield* runPersist("Member", memberKey, persist);
-    if (persistError !== null) {
-      errors.push(persistError);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-    } else {
-      if (hasRecordSink) persistedRecords += 1;
-      successfulWatermarks.push(identifier.ModificationTimestamp);
+      records.push(result.record);
+      const memberKey = String(result.record.MemberKey ?? "");
+      const memberMedia = (
+        Array.isArray((result.record as Record<string, unknown>).Media)
+          ? ((result.record as Record<string, unknown>).Media as MediaType)
+          : []
+      ).map((media) => normalizeMedia("Member", memberKey, media));
+      const persist = Effect.gen(function* () {
+        if (options?.sink?.upsertMemberWithMedia !== undefined) {
+          yield* options.sink.upsertMemberWithMedia(
+            result.record,
+            memberMedia,
+          );
+          return;
+        }
+        if (options?.sink?.upsertMember !== undefined)
+          yield* options.sink.upsertMember(result.record);
+        if (options?.sink?.upsertMedia !== undefined) {
+          yield* Effect.forEach(
+            memberMedia,
+            (media) =>
+              options.sink?.upsertMedia?.(media, {
+                resource: "Member",
+                key: memberKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+      });
+      const persistError = yield* runPersist("Member", memberKey, persist);
+      if (persistError !== null) {
+        errors.push(persistError);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+      } else {
+        if (hasRecordSink) persistedRecords += 1;
+        successfulWatermarks.push(identifier.ModificationTimestamp);
+      }
+      yield* logPersistProgress(processedRecords);
     }
-    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(
@@ -953,38 +982,14 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     identifiers: identifiers.length,
     pageErrors: collected.errors.length,
   });
+  const batchSize = hydrationBatchSize(concurrency);
   yield* Effect.logInfo("Office sync: hydrating records", {
     identifiers: identifiers.length,
     concurrency,
+    batchSize,
   });
   const hydrateProgressEvery = progressLogInterval(identifiers.length);
   let hydratedRecords = 0;
-  const hydrated = yield* Effect.forEach(
-    identifiers,
-    (identifier) =>
-      Effect.gen(function* () {
-        const result = yield* hydrateOne(
-          "Office",
-          identifier.OfficeKey,
-          getOffice,
-        );
-        hydratedRecords += 1;
-        if (
-          shouldLogProgress(
-            hydratedRecords,
-            identifiers.length,
-            hydrateProgressEvery,
-          )
-        ) {
-          yield* Effect.logInfo("Office sync: hydrate progress", {
-            completed: hydratedRecords,
-            total: identifiers.length,
-          });
-        }
-        return { identifier, result };
-      }),
-    { concurrency },
-  );
   const records: Array<OfficeRecord> = [];
   const errors: Array<SyncRecordError> = [...collected.errors];
   const successfulWatermarks: Array<unknown> = [];
@@ -997,66 +1002,99 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
     options?.sink?.upsertMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
-    hydrated: hydrated.length,
+    identifiers: identifiers.length,
+    batchSize,
   });
-  const persistProgressEvery = progressLogInterval(hydrated.length);
+  const persistProgressEvery = progressLogInterval(identifiers.length);
   let processedRecords = 0;
   const logPersistProgress = (completed: number) =>
-    shouldLogProgress(completed, hydrated.length, persistProgressEvery)
+    shouldLogProgress(completed, identifiers.length, persistProgressEvery)
       ? Effect.logInfo("Office sync: persist progress", {
           completed,
-          total: hydrated.length,
+          total: identifiers.length,
           persisted: persistedRecords,
           failed: errors.length,
         })
       : Effect.void;
 
-  for (const { identifier, result } of hydrated) {
-    processedRecords += 1;
-    if (result.error !== null) {
-      errors.push(result.error);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    if (result.record === null) {
-      yield* logPersistProgress(processedRecords);
-      continue;
-    }
-    records.push(result.record);
-    const office = result.record as Record<string, unknown>;
-    const officeKey = String(office.OfficeKey ?? "");
-    const officeMedia = (
-      Array.isArray(office.Media) ? (office.Media as MediaType) : []
-    ).map((media) => normalizeMedia("Office", officeKey, media));
-    const persist = Effect.gen(function* () {
-      if (options?.sink?.upsertOfficeWithMedia !== undefined) {
-        yield* options.sink.upsertOfficeWithMedia(result.record, officeMedia);
-        return;
+  for (const batch of batched(identifiers, batchSize)) {
+    const hydrated = yield* Effect.forEach(
+      batch,
+      (identifier) =>
+        Effect.gen(function* () {
+          const result = yield* hydrateOne(
+            "Office",
+            identifier.OfficeKey,
+            getOffice,
+          );
+          hydratedRecords += 1;
+          if (
+            shouldLogProgress(
+              hydratedRecords,
+              identifiers.length,
+              hydrateProgressEvery,
+            )
+          ) {
+            yield* Effect.logInfo("Office sync: hydrate progress", {
+              completed: hydratedRecords,
+              total: identifiers.length,
+            });
+          }
+          return { identifier, result };
+        }),
+      { concurrency },
+    );
+
+    for (const { identifier, result } of hydrated) {
+      processedRecords += 1;
+      if (result.error !== null) {
+        errors.push(result.error);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-      if (options?.sink?.upsertOffice !== undefined)
-        yield* options.sink.upsertOffice(result.record);
-      if (options?.sink?.upsertMedia !== undefined) {
-        yield* Effect.forEach(
-          officeMedia,
-          (media) =>
-            options.sink?.upsertMedia?.(media, {
-              resource: "Office",
-              key: officeKey,
-            }) ?? Effect.void,
-          { discard: true },
-        );
+      if (result.record === null) {
+        yield* logPersistProgress(processedRecords);
+        continue;
       }
-    });
-    const persistError = yield* runPersist("Office", officeKey, persist);
-    if (persistError !== null) {
-      errors.push(persistError);
-      failedWatermarks.push(identifier.ModificationTimestamp);
-    } else {
-      if (hasRecordSink) persistedRecords += 1;
-      successfulWatermarks.push(identifier.ModificationTimestamp);
+      records.push(result.record);
+      const office = result.record as Record<string, unknown>;
+      const officeKey = String(office.OfficeKey ?? "");
+      const officeMedia = (
+        Array.isArray(office.Media) ? (office.Media as MediaType) : []
+      ).map((media) => normalizeMedia("Office", officeKey, media));
+      const persist = Effect.gen(function* () {
+        if (options?.sink?.upsertOfficeWithMedia !== undefined) {
+          yield* options.sink.upsertOfficeWithMedia(
+            result.record,
+            officeMedia,
+          );
+          return;
+        }
+        if (options?.sink?.upsertOffice !== undefined)
+          yield* options.sink.upsertOffice(result.record);
+        if (options?.sink?.upsertMedia !== undefined) {
+          yield* Effect.forEach(
+            officeMedia,
+            (media) =>
+              options.sink?.upsertMedia?.(media, {
+                resource: "Office",
+                key: officeKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+      });
+      const persistError = yield* runPersist("Office", officeKey, persist);
+      if (persistError !== null) {
+        errors.push(persistError);
+        failedWatermarks.push(identifier.ModificationTimestamp);
+      } else {
+        if (hasRecordSink) persistedRecords += 1;
+        successfulWatermarks.push(identifier.ModificationTimestamp);
+      }
+      yield* logPersistProgress(processedRecords);
     }
-    yield* logPersistProgress(processedRecords);
   }
 
   const nextWatermark = safeHighestWatermark(

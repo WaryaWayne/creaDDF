@@ -136,6 +136,54 @@ describe("syncProperties", () => {
   );
 
   it.effect(
+    "persists hydrated property batches before hydrating every identifier",
+    () =>
+      Effect.gen(function* () {
+        const events: Array<string> = [];
+        const identifiers = Array.from({ length: 25 }, (_, index) => ({
+          ListingKey: `listing-${index + 1}`,
+          ModificationTimestamp: `2024-01-${String(index + 1).padStart(
+            2,
+            "0",
+          )}T00:00:00.000Z`,
+        }));
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({ value: identifiers });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) =>
+            Effect.sync(() => {
+              events.push(`hydrate:${String(key)}`);
+              return propertyFor(String(key)) as T;
+            }),
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            concurrency: 2,
+            sink: {
+              upsertPropertyGraph: (graph) =>
+                Effect.sync(() =>
+                  events.push(`persist:${graph.property.ListingKey}`),
+                ),
+            },
+          }),
+          http,
+        );
+
+        assert.equal(result.records.length, 25);
+        assert.equal(result.counts.persisted, 25);
+        assert.ok(
+          events.indexOf("persist:listing-1") <
+            events.indexOf("hydrate:listing-21"),
+        );
+      }),
+  );
+
+  it.effect(
     "uses atomic property graph sink when provided",
     () =>
       Effect.gen(function* () {
