@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 
 const isLeapYear = (year: number) =>
@@ -49,8 +49,7 @@ const EdmDateOrDateTimeString = Schema.String.pipe(
 );
 
 export const OpenHouseSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  OpenHouseKey: Schema.String.annotate({
+  OpenHouseKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for OpenHouseKey.",
     description:
       "A unique identifier for this record from the immediate source.",
@@ -107,6 +106,7 @@ export const OpenHouseSchema = Schema.Struct({
   OpenHouseType: Schema.Union([
     Schema.Literals([
       "Open House",
+      "Public",
       "Tour",
       "Showing",
       "Conference",

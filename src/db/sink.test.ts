@@ -30,7 +30,6 @@ describe("database sync sink row mapping", () => {
       ListAgentKey: "member-1",
       StandardStatus: "Active",
       PropertySubType: "Single Family",
-      PropertyType: "legacy-property-type",
       City: "Ottawa",
       StateOrProvince: "ON",
       Latitude: 45.42,
@@ -52,7 +51,6 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.listOfficeKey, "office-1");
     assert.equal(row.listAgentKey, "member-1");
     assert.equal(row.propertySubType, "Single Family");
-    assert.equal(row.propertyType, "legacy-property-type");
     assert.equal(row.latitude, 45.42);
     assert.equal(row.longitude, -75.69);
     assert.equal(row.pricePerUnit, "square feet");

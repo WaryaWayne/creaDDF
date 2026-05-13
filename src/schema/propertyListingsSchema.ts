@@ -1,10 +1,10 @@
-import { DateTime, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { RoomsSchema } from "./roomsSchema";
 import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
 
 export const PropertyListingSchema = Schema.Struct({
-  ListingKey: Schema.String.annotate({
+  ListingKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for ListingKey.",
     description: "A unique identifier for this record.",
     title: "Listing Key",
@@ -36,16 +36,11 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "PropertySubType",
     examples: ["Multi-family", "Single Family", "Office", "Vacant Land"],
   }),
-  PropertyType: Schema.Union([Schema.String, Schema.Null]).annotate({
-    message: "Value is invalid for PropertyType.",
-    description: "The property resource type supplied by the listing source.",
-    title: "Property Type",
-    identifier: "PropertyType",
-  }),
   DocumentsAvailable: Schema.Union([
     Schema.Array(
       Schema.Literals([
         "Floor Plan",
+        "Floor Plan, Site Plan",
         "Site Plan",
         "Original Blueprints",
         "Water Certificate",
@@ -99,6 +94,7 @@ export const PropertyListingSchema = Schema.Struct({
       Schema.Literals([
         "Accommodation",
         "Agriculture, Forestry, Fishing and Hunting",
+        "Agriculture, Forestry",
         "Automobile",
         "Construction",
         "Food Services and Beverage",
@@ -144,9 +140,13 @@ export const PropertyListingSchema = Schema.Struct({
   LeasePerUnit: Schema.Union([
     Schema.Literals([
       "square feet",
+      "Square Feet",
       "square meters",
+      "Square Meters",
       "acres",
+      "Acres",
       "hectares",
+      "Hectares",
     ]).annotate({
       description:
         "A pick list of the unit of measurement for the area. i.e. Square Feet, Square Meters, Acres, etc.",
@@ -163,9 +163,13 @@ export const PropertyListingSchema = Schema.Struct({
   PricePerUnit: Schema.Union([
     Schema.Literals([
       "square feet",
+      "Square Feet",
       "square meters",
+      "Square Meters",
       "acres",
+      "Acres",
       "hectares",
+      "Hectares",
     ]).annotate({
       description:
         "A pick list of the unit of measurement for the area. i.e. Square Feet, Square Meters, Acres, etc.",
@@ -512,7 +516,7 @@ export const PropertyListingSchema = Schema.Struct({
   }),
   LotSizeUnits: Schema.Union([
     Schema.Null,
-    Schema.Literals(["square feet", "hectares", "square meters", "acres"]),
+    Schema.Literals(["square feet", "Square Feet", "hectares", "Hectares", "square meters", "Square Meters", "acres", "Acres"]),
   ]).annotate({
     message: "Value is invalid for LotSizeDimensions.",
     description:
@@ -1237,7 +1241,7 @@ export const PropertyListingSchema = Schema.Struct({
     title: "Co List Agent National Association Id 3",
     identifier: "CoListAgentNationalAssociationId3",
   }),
-  ListOfficeKey: Schema.String.annotate({
+  ListOfficeKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for ListOfficeKey.",
     description:
       "A system unique identifier. This is the secondary OfficeKey that the property belongs to.",
@@ -2206,7 +2210,7 @@ export const PropertyListingSchema = Schema.Struct({
     examples: [3000, 1200, 890],
   }),
   BuildingAreaUnits: Schema.Union([
-    Schema.Literals(["square feet", "square meters"]),
+    Schema.Literals(["square feet", "Square Feet", "square meters", "Square Meters", "Acres"]),
     Schema.Null,
   ]).annotate({
     message: "Value is invalid for BuildingAreaUnits.",
@@ -2305,7 +2309,7 @@ export const PropertyListingSchema = Schema.Struct({
     examples: [900, 1200, 678],
   }),
   AboveGradeFinishedAreaUnits: Schema.Union([
-    Schema.Literals(["square feet", "square meters"]),
+    Schema.Literals(["square feet", "Square Feet", "square meters", "Square Meters", "Acres"]),
     Schema.Null,
   ]).annotate({
     message: "Value is invalid for AboveGradeFinishedAreaUnits.",
@@ -2366,7 +2370,7 @@ export const PropertyListingSchema = Schema.Struct({
     examples: [850, 2200, 1643],
   }),
   BelowGradeFinishedAreaUnits: Schema.Union([
-    Schema.Literals(["square feet", "square meters"]),
+    Schema.Literals(["square feet", "Square Feet", "square meters", "Square Meters", "Acres"]),
     Schema.Null,
   ]).annotate({
     message: "Value is invalid for BelowGradeFinishedAreaUnits.",
@@ -2426,7 +2430,7 @@ export const PropertyListingSchema = Schema.Struct({
     examples: [4500, 5150, 980],
   }),
   LivingAreaUnits: Schema.Union([
-    Schema.Literals(["square feet", "square meters"]),
+    Schema.Literals(["square feet", "Square Feet", "square meters", "Square Meters", "Acres"]),
     Schema.Null,
   ]).annotate({
     message: "Value is invalid for LivingAreaUnits.",
@@ -3406,7 +3410,9 @@ export const MultiplePropertyListingResponseSchema = ODataListEnvelopeSchema(
 );
 
 export const SinglePropertyListingResponseSchema = Schema.Struct({
-  "@odata.context": Schema.Union([Schema.String, Schema.Null]),
+  "@odata.context": Schema.NullOr(Schema.String).pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed(null)),
+  ),
   ...PropertyListingSchema.fields,
   // value: Schema.Array(PropertyListingSchema),
 });

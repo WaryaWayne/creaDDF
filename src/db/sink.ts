@@ -148,7 +148,6 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
   standardStatus: nullable(property.StandardStatus),
   propertySubType: nullable(property.PropertySubType),
   businessType: nullable(property.BusinessType),
-  propertyType: nullable(property.PropertyType),
   publicRemarks: nullable(property.PublicRemarks),
   listPrice: nullable(property.ListPrice),
   leaseAmount: nullable(property.LeaseAmount),
@@ -668,7 +667,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                 { discard: true },
               );
               yield* Effect.forEach(
-                socialMediaRowsFromRecord(member.MemberSocialMedia, { resource: "Member", key: memberKey }),
+                socialMediaRowsFromRecord(member.MemberSocialMedia ?? null, { resource: "Member", key: memberKey }),
                 (socialMediaRow) =>
                   Effect.gen(function* () {
                     const socialMediaKey = yield* requireKey(
@@ -735,7 +734,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                   and(eq(ddfSocialMedia.resource, "Office"), eq(ddfSocialMedia.resourceKey, officeKey)),
                 );
               yield* Effect.forEach(
-                socialMediaRowsFromRecord(office.OfficeSocialMedia, { resource: "Office", key: officeKey }),
+                socialMediaRowsFromRecord(office.OfficeSocialMedia ?? null, { resource: "Office", key: officeKey }),
                 (socialMediaRow) =>
                   Effect.gen(function* () {
                     const socialMediaKey = yield* requireKey(

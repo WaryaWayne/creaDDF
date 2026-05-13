@@ -4,8 +4,7 @@ import { ODataListEnvelopeSchema } from "./odata";
 import { ResourceNameSchema, SocialMediaTypeSchema } from "./officeSchema";
 
 export const MemberSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  MemberKey: Schema.String,
+  MemberKey: Schema.NullOr(Schema.String),
   MemberMlsId: Schema.Union([Schema.Null, Schema.String]),
   OfficeKey: Schema.Union([Schema.Null, Schema.String]),
   OfficeNationalAssociationId: Schema.Union([Schema.Null, Schema.String]),
@@ -31,6 +30,7 @@ export const MemberSchema = Schema.Struct({
   MemberCity: Schema.Union([Schema.Null, Schema.String]),
   MemberAOR: Schema.Union([
     Schema.Literals([
+      "Affiliate",
       "Alberta West",
       "AREA",
       "Barrie",
@@ -613,6 +613,7 @@ export const MemberSchema = Schema.Struct({
       "Salesperson",
       "Firm",
       "Affiliate",
+      "GlobalAffiliate",
       "Affiliate Monthly",
       "Franchisor",
       "Guest",

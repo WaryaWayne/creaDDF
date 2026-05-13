@@ -30,6 +30,7 @@ import {
   normalizePropertyRooms,
 } from "./normalizers";
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
+import { listSchemaForSelect } from "./schema/select";
 import type { MediaType } from "./schema/mediaSchema";
 import type { SocialMedia } from "./schema/officeSchema";
 import type { RoomsType } from "./schema/roomsSchema";
@@ -51,38 +52,6 @@ import {
   ddfSyncPersistedCount,
 } from "./metrics";
 import { DdfWatermarkStore } from "./watermark";
-
-type SelectQuery = { readonly select?: ReadonlyArray<string> };
-
-const hasSelect = (query?: SelectQuery) =>
-  query?.select !== undefined && query.select.length > 0;
-
-const partialStruct = <Fields extends Schema.Struct.Fields>(
-  schema: Schema.Struct<Fields>,
-) =>
-  schema.mapFields(
-    (fields) =>
-      Object.fromEntries(
-        Object.entries(fields).map(([key, field]) => [
-          key,
-          Schema.optionalKey(field as Schema.Top),
-        ]),
-      ) as { readonly [Key in keyof Fields]: Schema.optionalKey<Fields[Key]> },
-  );
-
-const selectedOpenHouseResponseSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  "@odata.count": Schema.optionalKey(Schema.NullOr(Schema.Int)),
-  "@odata.nextLink": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  value: Schema.NullOr(Schema.Array(
-    Schema.Struct({
-      ...partialStruct(OpenHouseSchema).fields,
-    }),
-  )),
-});
-
-const openHousePageSchema = (query?: SelectQuery) =>
-  hasSelect(query) ? selectedOpenHouseResponseSchema : OpenHouseResponseSchema;
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([
@@ -207,6 +176,18 @@ export interface SyncResult<Identifier = unknown> {
   readonly errors: ReadonlyArray<SyncRecordError>;
   readonly counts: SyncCounts;
   readonly nextWatermark: string | null;
+}
+
+export class DdfReplicationIdentifierError extends Data.TaggedError(
+  "DdfReplicationIdentifierError",
+)<{
+  readonly resource: SyncResource;
+  readonly keyName: string;
+  readonly index: number;
+}> {
+  override get message() {
+    return `${this.resource} replication identifier at index ${this.index} is missing ${this.keyName}`;
+  }
 }
 
 export interface BaseSyncOptions {
@@ -618,6 +599,21 @@ const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
   };
 });
 
+
+const stableReplicationKey = (value: string | null | undefined): string | null =>
+  value !== null && value !== undefined && value.length > 0 ? value : null;
+
+const missingReplicationKeyError = (
+  resource: SyncResource,
+  keyName: string,
+) =>
+  makeRecordError(
+    resource,
+    `missing:${keyName}`,
+    "hydrate",
+    new Error(`Missing ${keyName} in replication identifier`),
+  );
+
 const syncCounts = (
   identifiers: number,
   hydrated: number,
@@ -714,9 +710,20 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         batch,
         (identifier) =>
           Effect.gen(function* () {
+            const listingKey = stableReplicationKey(identifier.ListingKey);
+            if (listingKey === null) {
+              return {
+                identifier,
+                result: {
+                  record: null,
+                  error: missingReplicationKeyError("Property", "ListingKey"),
+                },
+                affectsWatermark: true,
+              };
+            }
             const result = yield* hydrateOne(
               "Property",
-              identifier.ListingKey,
+              listingKey,
               (key) => getProperty(key),
             );
             hydratedRecords += 1;
@@ -732,16 +739,16 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
                 total: identifiers.length,
               });
             }
-            return { identifier, result };
+            return { identifier, result, affectsWatermark: true };
           }),
         { concurrency },
       );
 
-      for (const { identifier, result } of hydrated) {
+      for (const { affectsWatermark, identifier, result } of hydrated) {
         processedRecords += 1;
         if (result.error !== null) {
           errors.push(result.error);
-          failedWatermarks.push(identifier.ModificationTimestamp);
+          if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
           yield* logPersistProgress(processedRecords);
           continue;
         }
@@ -751,7 +758,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         }
 
         const graph: PropertyGraph = yield* normalizePropertyGraph(
-          result.record,
+          result.record as PropertyRecord,
         );
         hydratedSuccessRecords += 1;
 
@@ -903,9 +910,20 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
+          const memberKey = stableReplicationKey(identifier.MemberKey);
+          if (memberKey === null) {
+            return {
+              identifier,
+              result: {
+                record: null,
+                error: missingReplicationKeyError("Member", "MemberKey"),
+              },
+              affectsWatermark: true,
+            };
+          }
           const result = yield* hydrateOne(
             "Member",
-            identifier.MemberKey,
+            memberKey,
             getMember,
           );
           hydratedRecords += 1;
@@ -921,16 +939,16 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
               total: identifiers.length,
             });
           }
-          return { identifier, result };
+          return { identifier, result, affectsWatermark: true };
         }),
       { concurrency },
     );
 
-    for (const { identifier, result } of hydrated) {
+    for (const { affectsWatermark, identifier, result } of hydrated) {
       processedRecords += 1;
       if (result.error !== null) {
         errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
+        if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
         yield* logPersistProgress(processedRecords);
         continue;
       }
@@ -1097,9 +1115,20 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
+          const officeKey = stableReplicationKey(identifier.OfficeKey);
+          if (officeKey === null) {
+            return {
+              identifier,
+              result: {
+                record: null,
+                error: missingReplicationKeyError("Office", "OfficeKey"),
+              },
+              affectsWatermark: true,
+            };
+          }
           const result = yield* hydrateOne(
             "Office",
-            identifier.OfficeKey,
+            officeKey,
             getOffice,
           );
           hydratedRecords += 1;
@@ -1115,16 +1144,16 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
               total: identifiers.length,
             });
           }
-          return { identifier, result };
+          return { identifier, result, affectsWatermark: true };
         }),
       { concurrency },
     );
 
-    for (const { identifier, result } of hydrated) {
+    for (const { affectsWatermark, identifier, result } of hydrated) {
       processedRecords += 1;
       if (result.error !== null) {
         errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
+        if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
         yield* logPersistProgress(processedRecords);
         continue;
       }
@@ -1345,6 +1374,12 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
         }
 
         const http = yield* DdfHttp;
+        const pageSchema = yield* listSchemaForSelect(
+          "OpenHouse",
+          query,
+          OpenHouseResponseSchema,
+          OpenHouseSchema,
+        );
         let page = firstExit.value;
         let next: string | null = null;
         while (true) {
@@ -1370,7 +1405,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             http.requestJson<typeof firstExit.value>(
               next,
               undefined,
-              openHousePageSchema(query) as Schema.Decoder<
+              pageSchema as Schema.Decoder<
                 typeof firstExit.value,
                 never
               >,
@@ -1433,6 +1468,29 @@ export const getPropertyMasterList = Effect.fn(
   );
 });
 
+const masterKeysOrFail = Effect.fn("DdfSync.masterKeysOrFail")(
+  function* <Identifier>(
+    resource: SyncResource,
+    keyName: string,
+    identifiers: ReadonlyArray<Identifier>,
+    keyOf: (identifier: Identifier) => string | null | undefined,
+  ) {
+    const keys: Array<string> = [];
+    for (const [index, identifier] of identifiers.entries()) {
+      const key = keyOf(identifier);
+      if (key === null || key === undefined || key.length === 0) {
+        return yield* new DdfReplicationIdentifierError({
+          resource,
+          keyName,
+          index,
+        });
+      }
+      keys.push(key);
+    }
+    return keys;
+  },
+);
+
 export const diffLocalKeysAgainstMasterList = (
   localKeys: ReadonlyArray<string>,
   masterKeys: ReadonlyArray<string>,
@@ -1458,10 +1516,13 @@ export const pruneMissingProperties = Effect.fn(
   >,
 ) {
   const masterList = yield* getPropertyMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.map((identifier) => identifier.ListingKey),
+  const masterKeys = yield* masterKeysOrFail(
+    "Property",
+    "ListingKey",
+    masterList,
+    (identifier) => identifier.ListingKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&
@@ -1517,10 +1578,13 @@ export const pruneMissingMembers = Effect.fn(
   >,
 ) {
   const masterList = yield* getMemberMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.map((identifier) => identifier.MemberKey),
+  const masterKeys = yield* masterKeysOrFail(
+    "Member",
+    "MemberKey",
+    masterList,
+    (identifier) => identifier.MemberKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&
@@ -1542,10 +1606,13 @@ export const pruneMissingOffices = Effect.fn(
   >,
 ) {
   const masterList = yield* getOfficeMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.map((identifier) => identifier.OfficeKey),
+  const masterKeys = yield* masterKeysOrFail(
+    "Office",
+    "OfficeKey",
+    masterList,
+    (identifier) => identifier.OfficeKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&

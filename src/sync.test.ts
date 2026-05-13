@@ -23,6 +23,7 @@ import {
   syncOpenHouses,
   syncProperties,
 } from "./sync";
+import { OpenHouseSchema } from "./schema/openHouse";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
 
@@ -473,6 +474,59 @@ describe("syncProperties", () => {
     }),
   );
 
+  it.effect("reports missing property replication keys without hydrating empty keys", () =>
+    Effect.gen(function* () {
+      const requestedKeys: Array<string> = [];
+      const savedWatermarks: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                {
+                  ListingKey: null,
+                  ModificationTimestamp: "2024-05-01T00:00:00.000Z",
+                },
+                {
+                  ModificationTimestamp: "2024-05-02T00:00:00.000Z",
+                },
+                {
+                  ListingKey: "listing-1",
+                  ModificationTimestamp: "2024-05-03T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(_path: string, key: string | number) => {
+          requestedKeys.push(String(key));
+          return response<T>(propertyFor(String(key)));
+        },
+      });
+
+      const result = yield* runWithHttp(
+        syncProperties({
+          sink: {
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => savedWatermarks.push(watermark)),
+          },
+        }),
+        http,
+      );
+
+      assert.deepEqual(requestedKeys, ["listing-1"]);
+      assert.deepEqual(result.errors.map((error) => error.key), [
+        "page:first:row:0",
+        "page:first:row:1",
+      ]);
+      assert.equal(result.counts.hydrated, 1);
+      assert.equal(result.counts.failed, 2);
+      assert.equal(result.nextWatermark, null);
+      assert.deepEqual(savedWatermarks, []);
+    }),
+  );
+
   it.effect(
     "does not save a property watermark past a persistence failure",
     () =>
@@ -665,9 +719,10 @@ describe("syncMembers and syncOffices", () => {
       }),
   );
 
-  it.effect("skips null or empty member and office replication keys", () =>
+  it.effect("reports missing member and office replication keys without hydrating empty keys", () =>
     Effect.gen(function* () {
       const requestedKeys: Array<string> = [];
+      const calls: Array<string> = [];
       const http = emptyHttp({
         requestJson: <T = unknown>(path: string) => {
           if (path.startsWith("/odata/v1/Member/MemberReplication")) {
@@ -699,11 +754,23 @@ describe("syncMembers and syncOffices", () => {
       });
 
       const members = yield* runWithHttp(
-        syncMembers({ sink: { upsertMember: () => Effect.void } }),
+        syncMembers({
+          sink: {
+            upsertMember: () => Effect.void,
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
+          },
+        }),
         http,
       );
       const offices = yield* runWithHttp(
-        syncOffices({ sink: { upsertOffice: () => Effect.void } }),
+        syncOffices({
+          sink: {
+            upsertOffice: () => Effect.void,
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
+          },
+        }),
         http,
       );
 
@@ -712,13 +779,18 @@ describe("syncMembers and syncOffices", () => {
         "/odata/v1/Office:office-ok",
       ]);
       assert.equal(members.counts.identifiers, 1);
+      assert.equal(members.counts.hydrated, 1);
+      assert.equal(members.counts.persisted, 1);
       assert.equal(members.counts.failed, 2);
       assert.equal(members.nextWatermark, null);
       assert.match(members.errors.map((error) => error.message).join("\n"), /MemberKey/);
       assert.equal(offices.counts.identifiers, 1);
+      assert.equal(offices.counts.hydrated, 1);
+      assert.equal(offices.counts.persisted, 1);
       assert.equal(offices.counts.failed, 2);
       assert.equal(offices.nextWatermark, null);
       assert.match(offices.errors.map((error) => error.message).join("\n"), /OfficeKey/);
+      assert.deepEqual(calls, []);
     }),
   );
 
@@ -993,6 +1065,30 @@ describe("syncMembers and syncOffices", () => {
           "page:https://ddf.test/office-page-2",
         );
       }),
+  );
+});
+
+describe("OpenHouse schema", () => {
+  it.effect("accepts YYYY-MM-DD dates and rejects invalid calendar dates", () =>
+    Effect.gen(function* () {
+      const OpenHouseDateSchema = Schema.Struct({
+        OpenHouseKey: OpenHouseSchema.fields.OpenHouseKey,
+        OpenHouseDate: OpenHouseSchema.fields.OpenHouseDate,
+      });
+      const valid = yield* Schema.decodeUnknownEffect(OpenHouseDateSchema)({
+        OpenHouseKey: "open-house-1",
+        OpenHouseDate: "2024-02-29",
+      });
+      const invalid = yield* Effect.exit(
+        Schema.decodeUnknownEffect(OpenHouseDateSchema)({
+          OpenHouseKey: "open-house-2",
+          OpenHouseDate: "2024-02-30",
+        }),
+      );
+
+      assert.equal(valid.OpenHouseDate, "2024-02-29");
+      assert.equal(Exit.isFailure(invalid), true);
+    }),
   );
 });
 
@@ -1317,6 +1413,42 @@ describe("master list prune helpers", () => {
     });
   });
 
+  it.effect("fails property pruning on malformed master-list keys", () =>
+    Effect.gen(function* () {
+      const marked: Array<ReadonlyArray<string>> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [{ ListingKey: "master-1" }, { ListingKey: null }],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const exit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingProperties(["master-1", "stale-1"], {
+            sink: {
+              markMissingPropertiesInactive: (keys) =>
+                Effect.sync(() => marked.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const failure = Exit.findErrorOption(exit);
+
+      assert.equal(Exit.isFailure(exit), true);
+      assert.equal(failure._tag, "Some");
+      if (failure._tag === "Some") {
+        assert.match(failure.value.message, /missing ListingKey/);
+      }
+      assert.deepEqual(marked, []);
+    }),
+  );
+
   it.effect(
     "gets property master lists and calls prune sinks without owning a database",
     () =>
@@ -1377,6 +1509,60 @@ describe("master list prune helpers", () => {
       if (Exit.isFailure(exit)) {
         assert.match(String(exit.cause), /ListingKey/);
       }
+    }),
+  );
+
+  it.effect("fails member and office pruning on malformed master-list keys", () =>
+    Effect.gen(function* () {
+      const markedMembers: Array<ReadonlyArray<string>> = [];
+      const markedOffices: Array<ReadonlyArray<string>> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+            return response<T>({ value: [{ MemberKey: null }] });
+          }
+          if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+            return response<T>({ value: [{}] });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const memberExit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingMembers(["stale-member"], {
+            sink: {
+              markMissingMembersInactive: (keys) =>
+                Effect.sync(() => markedMembers.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const officeExit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingOffices(["stale-office"], {
+            sink: {
+              markMissingOfficesInactive: (keys) =>
+                Effect.sync(() => markedOffices.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const memberFailure = Exit.findErrorOption(memberExit);
+      const officeFailure = Exit.findErrorOption(officeExit);
+
+      assert.equal(Exit.isFailure(memberExit), true);
+      assert.equal(Exit.isFailure(officeExit), true);
+      if (memberFailure._tag === "Some") {
+        assert.match(memberFailure.value.message, /missing MemberKey/);
+      }
+      if (officeFailure._tag === "Some") {
+        assert.match(officeFailure.value.message, /missing OfficeKey/);
+      }
+      assert.deepEqual(markedMembers, []);
+      assert.deepEqual(markedOffices, []);
     }),
   );
 

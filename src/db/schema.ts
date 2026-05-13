@@ -52,7 +52,6 @@ export const ddfProperties = pgTable(
     standardStatus: text("standard_status"),
     propertySubType: text("property_sub_type"),
     businessType: jsonb("business_type").$type<PropertyRecord["BusinessType"]>(),
-    propertyType: text("property_type"),
     publicRemarks: text("public_remarks"),
     listPrice: doublePrecision("list_price"),
     leaseAmount: doublePrecision("lease_amount"),

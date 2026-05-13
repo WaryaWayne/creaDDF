@@ -3,6 +3,12 @@ import { Schema, SchemaTransformation } from "effect"
 const NullableString = Schema.NullOr(Schema.String)
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString)
 
+export type ODataListEnvelope<Item> = {
+  readonly "@odata.context"?: string | null
+  readonly "@odata.count"?: number
+  readonly "@odata.nextLink"?: string | null
+  readonly value: ReadonlyArray<Item>
+}
 const ReplicationKeySchema = Schema.NullOr(Schema.String).pipe(
   Schema.decodeTo(
     Schema.String,
@@ -19,7 +25,7 @@ export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
     "@odata.count": Schema.optionalKey(Schema.NullOr(Schema.Int)),
     "@odata.nextLink": Schema.optionalKey(NullableString),
     value: Schema.Array(item),
-  })
+  }) as unknown as Schema.Decoder<ODataListEnvelope<Item["Type"]>, never>
 
 export const ODataUnknownListEnvelopeSchema = ODataListEnvelopeSchema(Schema.Unknown)
 
@@ -50,9 +56,6 @@ export const OfficeReplicationIdentifierResponseSchema = ODataListEnvelopeSchema
   OfficeReplicationIdentifierSchema,
 )
 
-export type ODataListEnvelope<Item> = typeof ODataUnknownListEnvelopeSchema.Type & {
-  readonly value: ReadonlyArray<Item>
-}
 export type PropertyReplicationIdentifier = typeof PropertyReplicationIdentifierSchema.Type
 export type MemberReplicationIdentifier = typeof MemberReplicationIdentifierSchema.Type
 export type OfficeReplicationIdentifier = typeof OfficeReplicationIdentifierSchema.Type

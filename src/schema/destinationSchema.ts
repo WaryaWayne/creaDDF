@@ -99,12 +99,10 @@ const DestinationStatusSchema = Schema.Union([
     }),
   ),
 );
-
 const NullableDestinationType = Schema.NullOr(DestinationTypeSchema);
 const NullableDestinationStatus = Schema.NullOr(DestinationStatusSchema);
 
 export const DestinationSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(NullableString),
   DestinationId: Schema.Number,
   DestinationName: NullableString,
   DestinationUrl: NullableString,
