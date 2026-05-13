@@ -832,6 +832,23 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           })
           .pipe(Effect.mapError(mapSinkError("upsertMedia")));
       }),
+      upsertSocialMedia: Effect.fn("DdfDatabaseSyncSink.upsertSocialMedia")(
+        function* (socialMedia, owner) {
+          const row = socialMediaRowFromRecord(socialMedia, owner);
+          const socialMediaKey = yield* requireKey(
+            "upsertSocialMedia",
+            row.socialMediaKey.length > 0 ? row.socialMediaKey : null,
+          );
+          yield* db
+            .insert(ddfSocialMedia)
+            .values({ ...row, socialMediaKey })
+            .onConflictDoUpdate({
+              target: ddfSocialMedia.socialMediaKey,
+              set: { ...row, socialMediaKey, ...touchUpdatedAt },
+            })
+            .pipe(Effect.mapError(mapSinkError("upsertSocialMedia")));
+        },
+      ),
       upsertMember: Effect.fn("DdfDatabaseSyncSink.upsertMember")(function* (
         member,
       ) {

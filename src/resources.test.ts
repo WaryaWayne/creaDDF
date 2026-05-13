@@ -53,6 +53,21 @@ const tokenResponse = Response.json({
   expires_in: 3600,
 });
 
+
+const resourceTypeChecks = () => {
+  const selectedProperties = listProperties({ select: ["ListingKey"] });
+  const selectedProperty = getProperty("property-1", { select: ["ListingKey"] });
+  // @ts-expect-error select fields must be valid Property fields.
+  const invalidPropertySelect = listProperties({ select: ["NotAPropertyField"] });
+  // @ts-expect-error get select fields must be valid Member fields.
+  const invalidMemberSelect = getMember("member-1", { select: ["NotAMemberField"] });
+  void selectedProperties;
+  void selectedProperty;
+  void invalidPropertySelect;
+  void invalidMemberSelect;
+};
+void resourceTypeChecks;
+
 const configFor = (): DdfClientConfig => ({
   clientId: "client-id",
   clientSecret: "client-secret",

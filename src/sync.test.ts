@@ -375,6 +375,48 @@ describe("syncProperties", () => {
       }),
   );
 
+
+  it.effect("skips null or empty replication keys without hydrating or advancing watermarks", () =>
+    Effect.gen(function* () {
+      const requestedKeys: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                { ListingKey: null, ModificationTimestamp: "2024-01-01T00:00:00.000Z" },
+                { ListingKey: "", ModificationTimestamp: "2024-01-02T00:00:00.000Z" },
+                { ListingKey: "listing-ok", ModificationTimestamp: "2024-01-03T00:00:00.000Z" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(_path: string, key: string | number) => {
+          requestedKeys.push(String(key));
+          return response<T>(propertyFor(String(key)));
+        },
+      });
+
+      const result = yield* runWithHttp(
+        syncProperties({ sink: { upsertProperty: () => Effect.void } }),
+        http,
+      );
+
+      assert.deepEqual(requestedKeys, ["listing-ok"]);
+      assert.equal(result.counts.identifiers, 1);
+      assert.equal(result.counts.hydrated, 1);
+      assert.equal(result.counts.persisted, 1);
+      assert.equal(result.counts.failed, 2);
+      assert.equal(result.nextWatermark, null);
+      assert.deepEqual(
+        result.errors.map((error) => error.key),
+        ["page:first:row:0", "page:first:row:1"],
+      );
+      assert.match(result.errors.map((error) => error.message).join("\n"), /ListingKey/);
+    }),
+  );
+
   it.effect("does not save a property watermark past a hydration failure", () =>
     Effect.gen(function* () {
       const savedWatermarks: Array<string> = [];
@@ -621,6 +663,134 @@ describe("syncMembers and syncOffices", () => {
           "office-watermark:2024-03-01T00:00:00.000Z",
         ]);
       }),
+  );
+
+  it.effect("skips null or empty member and office replication keys", () =>
+    Effect.gen(function* () {
+      const requestedKeys: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+            return response<T>({
+              value: [
+                { MemberKey: null, ModificationTimestamp: "2024-02-01T00:00:00.000Z" },
+                { MemberKey: "", ModificationTimestamp: "2024-02-02T00:00:00.000Z" },
+                { MemberKey: "member-ok", ModificationTimestamp: "2024-02-03T00:00:00.000Z" },
+              ],
+            });
+          }
+          if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+            return response<T>({
+              value: [
+                { OfficeKey: null, ModificationTimestamp: "2024-03-01T00:00:00.000Z" },
+                { OfficeKey: "", ModificationTimestamp: "2024-03-02T00:00:00.000Z" },
+                { OfficeKey: "office-ok", ModificationTimestamp: "2024-03-03T00:00:00.000Z" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) => {
+          requestedKeys.push(`${path}:${key}`);
+          return path === "/odata/v1/Member"
+            ? response<T>({ MemberKey: key, Media: [], MemberSocialMedia: [] })
+            : response<T>({ OfficeKey: key, Media: [], OfficeSocialMedia: [] });
+        },
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({ sink: { upsertMember: () => Effect.void } }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({ sink: { upsertOffice: () => Effect.void } }),
+        http,
+      );
+
+      assert.deepEqual(requestedKeys, [
+        "/odata/v1/Member:member-ok",
+        "/odata/v1/Office:office-ok",
+      ]);
+      assert.equal(members.counts.identifiers, 1);
+      assert.equal(members.counts.failed, 2);
+      assert.equal(members.nextWatermark, null);
+      assert.match(members.errors.map((error) => error.message).join("\n"), /MemberKey/);
+      assert.equal(offices.counts.identifiers, 1);
+      assert.equal(offices.counts.failed, 2);
+      assert.equal(offices.nextWatermark, null);
+      assert.match(offices.errors.map((error) => error.message).join("\n"), /OfficeKey/);
+    }),
+  );
+
+  it.effect("counts social-media-only member and office sinks as persisted records", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication"))
+            return response<T>({ value: [{ MemberKey: "member-social" }] });
+          if (path.startsWith("/odata/v1/Office/OfficeReplication"))
+            return response<T>({ value: [{ OfficeKey: "office-social" }] });
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) =>
+          path === "/odata/v1/Member"
+            ? response<T>({
+                MemberKey: key,
+                Media: [],
+                MemberSocialMedia: [
+                  {
+                    SocialMediaKey: "member-social-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-02-01T00:00:00.000Z",
+                    ResourceName: "Member",
+                    SocialMediaUrlOrId: "https://member.example.test",
+                  },
+                ],
+              })
+            : response<T>({
+                OfficeKey: key,
+                Media: [],
+                OfficeSocialMedia: [
+                  {
+                    SocialMediaKey: "office-social-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-03-01T00:00:00.000Z",
+                    ResourceName: "Office",
+                    SocialMediaUrlOrId: "https://office.example.test",
+                  },
+                ],
+              }),
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({
+          sink: {
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() => calls.push(`${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`)),
+          },
+        }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({
+          sink: {
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() => calls.push(`${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`)),
+          },
+        }),
+        http,
+      );
+
+      assert.equal(members.counts.persisted, 1);
+      assert.equal(offices.counts.persisted, 1);
+      assert.deepEqual(calls, [
+        "Member:member-social:member-social-1",
+        "Office:office-social:office-social-1",
+      ]);
+    }),
   );
 
   it.effect("keeps member and office watermarks before failed records", () =>
