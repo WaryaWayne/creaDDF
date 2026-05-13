@@ -514,6 +514,10 @@ const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
   };
 });
 
+
+const stableReplicationKey = (value: string | null | undefined): string | null =>
+  value !== null && value !== undefined && value.length > 0 ? value : null;
+
 const missingReplicationKeyError = (
   resource: SyncResource,
   keyName: string,
@@ -621,19 +625,20 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         batch,
         (identifier) =>
           Effect.gen(function* () {
-            if (identifier.ListingKey === null || identifier.ListingKey === undefined) {
+            const listingKey = stableReplicationKey(identifier.ListingKey);
+            if (listingKey === null) {
               return {
                 identifier,
                 result: {
                   record: null,
                   error: missingReplicationKeyError("Property", "ListingKey"),
                 },
-                affectsWatermark: false,
+                affectsWatermark: true,
               };
             }
             const result = yield* hydrateOne(
               "Property",
-              identifier.ListingKey,
+              listingKey,
               (key) => getProperty(key),
             );
             hydratedRecords += 1;
@@ -819,19 +824,20 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
-          if (identifier.MemberKey === null || identifier.MemberKey === undefined) {
+          const memberKey = stableReplicationKey(identifier.MemberKey);
+          if (memberKey === null) {
             return {
               identifier,
               result: {
                 record: null,
                 error: missingReplicationKeyError("Member", "MemberKey"),
               },
-              affectsWatermark: false,
+              affectsWatermark: true,
             };
           }
           const result = yield* hydrateOne(
             "Member",
-            identifier.MemberKey,
+            memberKey,
             getMember,
           );
           hydratedRecords += 1;
@@ -1010,19 +1016,20 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
-          if (identifier.OfficeKey === null || identifier.OfficeKey === undefined) {
+          const officeKey = stableReplicationKey(identifier.OfficeKey);
+          if (officeKey === null) {
             return {
               identifier,
               result: {
                 record: null,
                 error: missingReplicationKeyError("Office", "OfficeKey"),
               },
-              affectsWatermark: false,
+              affectsWatermark: true,
             };
           }
           const result = yield* hydrateOne(
             "Office",
-            identifier.OfficeKey,
+            officeKey,
             getOffice,
           );
           hydratedRecords += 1;
@@ -1350,7 +1357,7 @@ const masterKeysOrFail = Effect.fn("DdfSync.masterKeysOrFail")(
     const keys: Array<string> = [];
     for (const [index, identifier] of identifiers.entries()) {
       const key = keyOf(identifier);
-      if (key === null || key === undefined) {
+      if (key === null || key === undefined || key.length === 0) {
         return yield* new DdfReplicationIdentifierError({
           resource,
           keyName,

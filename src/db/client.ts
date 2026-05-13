@@ -615,7 +615,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         const rows = yield* simpleList("destinations.get", ddfDestinations, destinationColumns, ["destinationId", "destinationName", "destinationUrl", "destinationType", "destinationStatus"], eq(ddfDestinations.destinationId, destinationId), { ...options, limit: 1 });
         return rows[0] ?? null;
       }),
-      list: Effect.fn("DdfDbClient.destinations.list")(function* (options?: ListOptions<DestinationField, { readonly destinationStatus?: string }, never>) {
+      list: Effect.fn("DdfDbClient.destinations.list")(function* (options?: ListOptions<DestinationField, { readonly destinationStatus?: number }, never>) {
         const where = options?.filters?.destinationStatus === undefined ? undefined : eq(ddfDestinations.destinationStatus, options.filters.destinationStatus);
         return yield* simpleList("destinations.list", ddfDestinations, destinationColumns, ["destinationId", "destinationName", "destinationUrl", "destinationType", "destinationStatus"], where, options);
       }),

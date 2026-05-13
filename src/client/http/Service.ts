@@ -78,29 +78,6 @@ const apiTransportError = (url: string, cause: unknown) =>
 const responseText = (res: HttpClientResponse.HttpClientResponse) =>
   res.text.pipe(Effect.orElseSucceed(() => undefined as string | undefined));
 
-const normalizeODataValue = <T>(value: T): T => {
-  if (value !== null && typeof value === "object") {
-    const envelope = value as {
-      "@odata.context"?: unknown;
-      "@odata.count"?: unknown;
-      "@odata.nextLink"?: unknown;
-      value?: unknown;
-    };
-    const isODataEnvelope =
-      "value" in envelope ||
-      "@odata.context" in envelope ||
-      "@odata.count" in envelope ||
-      "@odata.nextLink" in envelope;
-    if (
-      isODataEnvelope &&
-      (envelope.value === null || envelope.value === undefined)
-    ) {
-      envelope.value = [];
-    }
-  }
-  return value;
-};
-
 const decodeJson = <T>(
   json: unknown,
   url: string,
@@ -108,8 +85,7 @@ const decodeJson = <T>(
 ): Effect.Effect<T, DdfApiResponseSchemaDecodeError> => {
   if (schema === undefined) return Effect.succeed(json as T);
 
-  return Schema.decodeUnknownEffect(schema)(normalizeODataValue(json)).pipe(
-    Effect.map(normalizeODataValue),
+  return Schema.decodeUnknownEffect(schema)(json).pipe(
     Effect.mapError((cause) => {
       const issues = schemaDecodeIssuesFromCause(cause);
       return new DdfApiResponseSchemaDecodeError(

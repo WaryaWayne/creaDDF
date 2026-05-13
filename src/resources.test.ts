@@ -1,5 +1,5 @@
 import { assert, describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, Layer } from "effect";
+import { DateTime, Effect, Exit, Layer } from "effect";
 import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "./client";
 import type {
   DdfClientConfig,
@@ -345,7 +345,7 @@ describe("selected resource decoding", () => {
       }),
   );
 
-  it.effect("normalizes OData envelopes with omitted value to an empty array", () =>
+  it.effect("keeps omitted OData envelope values as schema decode errors", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -357,6 +357,32 @@ describe("selected resource decoding", () => {
         ) {
           return Response.json({
             "@odata.context": "https://ddf.test/$metadata#Property",
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      const exit = yield* Effect.exit(
+        listProperties({ top: 1 }).pipe(Effect.provide(layerFor(httpHandler))),
+      );
+
+      assert.equal(Exit.isFailure(exit), true);
+    }),
+  );
+
+  it.effect("decodes OData envelopes that explicitly contain an empty value array", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+        if (url === "https://identity.test/connect/token")
+          return tokenResponse.clone();
+        if (
+          url ===
+          "https://ddf.test/odata/v1/Property?%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+        ) {
+          return Response.json({
+            "@odata.context": "https://ddf.test/$metadata#Property",
+            value: [],
           });
         }
         throw new Error(`Unexpected request: ${url}`);

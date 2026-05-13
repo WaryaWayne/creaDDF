@@ -24,6 +24,7 @@ import {
   syncOpenHouses,
   syncProperties,
 } from "./sync";
+import { OpenHouseSchema } from "./schema/openHouse";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
 
@@ -480,8 +481,8 @@ describe("syncProperties", () => {
       ]);
       assert.equal(result.counts.hydrated, 1);
       assert.equal(result.counts.failed, 2);
-      assert.equal(result.nextWatermark, "2024-05-03T00:00:00.000Z");
-      assert.deepEqual(savedWatermarks, ["2024-05-03T00:00:00.000Z"]);
+      assert.equal(result.nextWatermark, null);
+      assert.deepEqual(savedWatermarks, []);
     }),
   );
 
@@ -740,12 +741,9 @@ describe("syncMembers and syncOffices", () => {
       ]);
       assert.equal(members.counts.hydrated, 1);
       assert.equal(offices.counts.hydrated, 1);
-      assert.equal(members.nextWatermark, "2024-09-02T00:00:00.000Z");
-      assert.equal(offices.nextWatermark, "2024-10-02T00:00:00.000Z");
-      assert.deepEqual(calls, [
-        "member-watermark:2024-09-02T00:00:00.000Z",
-        "office-watermark:2024-10-02T00:00:00.000Z",
-      ]);
+      assert.equal(members.nextWatermark, null);
+      assert.equal(offices.nextWatermark, null);
+      assert.deepEqual(calls, []);
     }),
   );
 
@@ -928,6 +926,26 @@ describe("syncMembers and syncOffices", () => {
           "page:https://ddf.test/office-page-2",
         );
       }),
+  );
+});
+
+describe("OpenHouse schema", () => {
+  it.effect("accepts YYYY-MM-DD dates and rejects invalid calendar dates", () =>
+    Effect.gen(function* () {
+      const valid = yield* Schema.decodeUnknownEffect(OpenHouseSchema)({
+        OpenHouseKey: "open-house-1",
+        OpenHouseDate: "2024-02-29",
+      });
+      const invalid = yield* Effect.exit(
+        Schema.decodeUnknownEffect(OpenHouseSchema)({
+          OpenHouseKey: "open-house-2",
+          OpenHouseDate: "2024-02-30",
+        }),
+      );
+
+      assert.equal(valid.OpenHouseDate, "2024-02-29");
+      assert.equal(Exit.isFailure(invalid), true);
+    }),
   );
 });
 

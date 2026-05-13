@@ -30,7 +30,6 @@ describe("database sync sink row mapping", () => {
       ListAgentKey: "member-1",
       StandardStatus: "Active",
       PropertySubType: "Single Family",
-      PropertyType: "legacy-property-type",
       City: "Ottawa",
       StateOrProvince: "ON",
       Latitude: 45.42,
@@ -233,8 +232,8 @@ describe("database sync sink row mapping", () => {
       destinationId: 123,
       destinationName: "Website Feed",
       destinationUrl: "https://example.test",
-      destinationType: "9",
-      destinationStatus: "1",
+      destinationType: 9,
+      destinationStatus: 1,
       raw: destination,
     });
   });

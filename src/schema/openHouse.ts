@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 import { optionalStruct } from "./utils";
 
@@ -33,14 +33,25 @@ const isEdmDateString = (value: string) => {
   );
 };
 
-const isDateTimeString = (value: string) => !Number.isNaN(Date.parse(value));
+const dateTimePattern =
+  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+const isStrictIsoDateTimeString = (value: string) => {
+  const match = dateTimePattern.exec(value);
+  if (match === null) return false;
+
+  const datePart = `${match[1]}-${match[2]}-${match[3]}`;
+  if (!isEdmDateString(datePart)) return false;
+
+  return Option.isSome(Schema.decodeUnknownOption(Schema.DateTimeUtcFromString)(value));
+};
 
 const OpenHouseDateString = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) =>
-      isEdmDateString(value) || isDateTimeString(value)
+      isEdmDateString(value) || isStrictIsoDateTimeString(value)
         ? undefined
-        : { path: [], issue: "Expected a date or date-time string." },
+        : { path: [], issue: "Expected a valid YYYY-MM-DD date or strict ISO/RFC3339 date-time string." },
     ),
   ),
 );
