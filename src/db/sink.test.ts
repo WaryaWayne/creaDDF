@@ -43,6 +43,11 @@ describe("database sync sink row mapping", () => {
       CoListOfficeNationalAssociationId: "CLONA-1",
       CoListOfficeNationalAssociationId2: "CLONA-2",
       CoListOfficeNationalAssociationId3: "CLONA-3",
+      Rooms: [{ RoomKey: "room-1", RoomType: "Kitchen" }],
+      Media: [
+        { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+        { MediaKey: "media-1", MediaURL: "https://example.test/primary.jpg", PreferredPhotoYN: true, Order: 1 },
+      ],
     });
 
     const row = propertyRowFromRecord(property);
@@ -58,7 +63,25 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.coListAgentNationalAssociationId3, "CLANA-3");
     assert.equal(row.listOfficeNationalAssociationId, "LONA-1");
     assert.equal(row.coListOfficeNationalAssociationId3, "CLONA-3");
+    assert.deepEqual(row.rooms as unknown, [{ RoomKey: "room-1", RoomType: "Kitchen" }]);
+    assert.deepEqual(row.media as unknown, [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      { MediaKey: "media-1", MediaURL: "https://example.test/primary.jpg", PreferredPhotoYN: true, Order: 1 },
+    ]);
+    assert.equal(row.primaryMediaUrl, "https://example.test/primary.jpg");
     assert.equal(row.raw, property);
+  });
+
+  it("selects the first ordered property media URL when no preferred photo exists", () => {
+    const property = asPropertyRecord({
+      ListingKey: "listing-1",
+      Media: [
+        { MediaURL: "https://example.test/two.jpg", Order: 2 },
+        { MediaURL: "https://example.test/zero.jpg", Order: 0 },
+      ],
+    });
+
+    assert.equal(propertyRowFromRecord(property).primaryMediaUrl, "https://example.test/zero.jpg");
   });
 
   it("derives stable room and media ownership keys", () => {
