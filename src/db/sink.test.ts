@@ -114,6 +114,28 @@ describe("database sync sink row mapping", () => {
     );
   });
 
+  it("treats empty stable keys as missing", () => {
+    const property = asPropertyRecord({ ListingKey: "" });
+    const room = asRoomRecord({ RoomKey: "", RoomType: "Kitchen", RoomLevel: "Main level" });
+    const media = asMediaRecord({ MediaKey: "", MediaURL: "https://example.test/a.jpg", Order: 2 });
+    const member = asMemberRecord({ MemberKey: "" });
+    const office = asOfficeRecord({ OfficeKey: "" });
+    const openHouse = asOpenHouseRecord({ OpenHouseKey: "" });
+
+    assert.equal(propertyRowFromRecord(property).listingKey, null);
+    assert.equal(memberRowFromRecord(member).memberKey, null);
+    assert.equal(officeRowFromRecord(office).officeKey, null);
+    assert.equal(openHouseRowFromRecord(openHouse).openHouseKey, null);
+    assert.equal(
+      roomRowFromRecord(room, asPropertyRecord({ ListingKey: "listing-1" })).roomKey,
+      "listing-1:Kitchen:Main level",
+    );
+    assert.equal(
+      mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }).mediaKey,
+      "Property:listing-1:https://example.test/a.jpg:2",
+    );
+  });
+
   it("persists Effect DateTime timestamp values", () => {
     const timestamp = DateTime.makeUnsafe("2024-01-02T03:04:05.000Z");
 

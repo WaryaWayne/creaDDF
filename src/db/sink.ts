@@ -58,6 +58,9 @@ const arbitraryStringField = (record: JsonRecord, field: string): string | null 
 const nullable = <Value>(value: Value | null | undefined): Value | null =>
   value ?? null;
 
+const stableKey = (value: string | null | undefined): string | null =>
+  value != null && value.length > 0 ? value : null;
+
 const dateValue = (value: Date | DateTime.DateTime | string | null | undefined): string | null => {
   const iso = value instanceof Date
     ? value.toISOString()
@@ -86,7 +89,7 @@ const timestampValue = (value: Date | DateTime.DateTime | string | null | undefi
 };
 
 const requireKey = (operation: string, key: string | null) =>
-  key === null
+  key === null || key.length === 0
     ? Effect.fail(
         new DdfDatabaseSinkError({
           operation,
@@ -106,7 +109,7 @@ const requireNumberKey = (operation: string, key: number | null) =>
     : Effect.succeed(key);
 
 export const propertyRowFromRecord = (property: PropertyRecord) => ({
-  listingKey: nullable(property.ListingKey),
+  listingKey: stableKey(property.ListingKey),
   listingId: nullable(property.ListingId),
   modificationTimestamp: timestampValue(property.ModificationTimestamp),
   originalEntryTimestamp: timestampValue(property.OriginalEntryTimestamp),
@@ -254,13 +257,13 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
 });
 
 export const roomRowFromRecord = (room: RoomRecord, property: PropertyRecord) => {
-  const listingKey = nullable(room.ListingKey) ?? nullable(property.ListingKey);
+  const listingKey = stableKey(room.ListingKey) ?? stableKey(property.ListingKey);
   return {
     listingKey,
     listingId: nullable(room.ListingId) ?? nullable(property.ListingId),
     roomKey:
-      nullable(room.RoomKey) ??
-      [listingKey, nullable(room.RoomType), nullable(room.RoomLevel)]
+      stableKey(room.RoomKey) ??
+      [listingKey, stableKey(room.RoomType), stableKey(room.RoomLevel)]
         .filter((part): part is string => part !== null)
         .join(":"),
     modificationTimestamp: timestampValue(room.ModificationTimestamp),
@@ -277,8 +280,8 @@ export const roomRowFromRecord = (room: RoomRecord, property: PropertyRecord) =>
 
 export const mediaRowFromRecord = (media: MediaRecord, owner: SyncOwner) => ({
   mediaKey:
-    nullable(media.MediaKey) ??
-    [owner.resource, owner.key, nullable(media.MediaURL), nullable(media.Order)]
+    stableKey(media.MediaKey) ??
+    [owner.resource, owner.key, stableKey(media.MediaURL), nullable(media.Order)]
       .filter((part): part is string | number => part !== null)
       .join(":"),
   resource: owner.resource,
@@ -296,7 +299,7 @@ export const mediaRowFromRecord = (media: MediaRecord, owner: SyncOwner) => ({
 });
 
 export const memberRowFromRecord = (member: MemberRecord) => ({
-  memberKey: nullable(member.MemberKey),
+  memberKey: stableKey(member.MemberKey),
   memberMlsId: nullable(member.MemberMlsId),
   modificationTimestamp: timestampValue(member.ModificationTimestamp),
   originalEntryTimestamp: timestampValue(member.OriginalEntryTimestamp),
@@ -344,8 +347,8 @@ export const memberDesignationRowsFromRecord = (member: MemberRecord, memberKey:
 
 export const socialMediaRowFromRecord = (socialMedia: SocialMedia, owner: SyncOwner) => ({
   socialMediaKey:
-    nullable(socialMedia.SocialMediaKey) ??
-    [owner.resource, owner.key, nullable(socialMedia.SocialMediaType), nullable(socialMedia.SocialMediaUrlOrId)]
+    stableKey(socialMedia.SocialMediaKey) ??
+    [owner.resource, owner.key, stableKey(socialMedia.SocialMediaType), stableKey(socialMedia.SocialMediaUrlOrId)]
       .filter((part): part is string => part !== null)
       .join(":"),
   resource: owner.resource,
@@ -364,7 +367,7 @@ export const socialMediaRowsFromRecord = (
 ) => (socialMedia ?? []).map((record) => socialMediaRowFromRecord(record, owner));
 
 export const officeRowFromRecord = (office: OfficeRecord) => ({
-  officeKey: nullable(office.OfficeKey),
+  officeKey: stableKey(office.OfficeKey),
   officeMlsId: nullable(office.OfficeMlsId),
   modificationTimestamp: timestampValue(office.ModificationTimestamp),
   originalEntryTimestamp: timestampValue(office.OriginalEntryTimestamp),
@@ -399,7 +402,7 @@ export const destinationRowFromRecord = (destination: Destination) => ({
 });
 
 export const openHouseRowFromRecord = (openHouse: OpenHouseRecord) => ({
-  openHouseKey: nullable(openHouse.OpenHouseKey),
+  openHouseKey: stableKey(openHouse.OpenHouseKey),
   listingKey: nullable(openHouse.ListingKey),
   listingId: nullable(openHouse.ListingId),
   openHouseDate: dateValue(openHouse.OpenHouseDate),
