@@ -1,7 +1,12 @@
 import { assert, describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Layer } from "effect";
 import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "./client";
-import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+import type {
+  DdfClientConfig,
+  DdfHttpApi,
+  DdfHttpError,
+  DdfRequestOptions,
+} from "./client";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -93,7 +98,9 @@ const layerFor = (handler: HttpHandler) => {
   return Layer.mergeAll(configLayer, nativeHttpLayer, authLayer, httpLayer);
 };
 
-const requestedUrlFor = (effect: Effect.Effect<unknown, unknown, DdfHttp>) =>
+const requestedUrlFor = (
+  effect: Effect.Effect<unknown, DdfHttpError, DdfHttp>,
+) =>
   Effect.gen(function* () {
     const requestedUrls: Array<string> = [];
     const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -678,11 +685,9 @@ describe("lead resource", () => {
         paginateOData: () => Effect.succeed([]),
       };
 
-      const provided = Effect.provide(
-        createLead(leadInput),
-        Layer.succeed(DdfHttp)(http),
-      ) as Effect.Effect<unknown, unknown, never>;
-      const result = yield* provided;
+      const result = yield* createLead(leadInput).pipe(
+        Effect.provideService(DdfHttp, http),
+      );
 
       assert.deepEqual(result, { success: true });
       assert.equal(requests[0]?.url, "/v1/Lead/CreateLead");
@@ -709,11 +714,9 @@ describe("lead resource", () => {
         paginateOData: () => Effect.succeed([]),
       };
 
-      const provided = Effect.provide(
-        createLead(leadInput, { suppressEmail: true }),
-        Layer.succeed(DdfHttp)(http),
-      ) as Effect.Effect<unknown, unknown, never>;
-      const result = yield* provided;
+      const result = yield* createLead(leadInput, {
+        suppressEmail: true,
+      }).pipe(Effect.provideService(DdfHttp, http));
 
       assert.deepEqual(result, { success: true });
       assert.equal(requests[0]?.url, "/v1/Lead/CreateLead?SuppressEmail=true");
