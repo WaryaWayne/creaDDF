@@ -12,7 +12,9 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import type { Destination } from "../schema/destinationSchema";
+import type { MediaType } from "../schema/mediaSchema";
 import type { SocialMedia } from "../schema/officeSchema";
+import type { RoomsType } from "../schema/roomsSchema";
 import type { SyncDdfDatabaseOnceSummary } from "../syncDatabase";
 import type {
   MediaRecord,
@@ -184,6 +186,9 @@ export const ddfProperties = pgTable(
     inclusions: text("inclusions"),
     internetEntireListingDisplay: boolean("internet_entire_listing_display"),
     internetAddressDisplay: boolean("internet_address_display"),
+    rooms: jsonb("rooms").$type<RoomsType>(),
+    media: jsonb("media").$type<MediaType>(),
+    primaryMediaUrl: text("primary_media_url"),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<PropertyRecord>().notNull(),
     ...timestamps,
@@ -195,6 +200,7 @@ export const ddfProperties = pgTable(
     index("ddf_properties_status_idx").on(table.standardStatus),
     index("ddf_properties_location_idx").on(table.province, table.city),
     index("ddf_properties_listing_id_idx").on(table.listingId),
+    index("ddf_properties_list_aor_key_idx").on(table.listAorKey),
   ],
 );
 

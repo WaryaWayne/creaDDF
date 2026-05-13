@@ -137,6 +137,17 @@ const requireNumberKey = (operation: string, key: number | null) =>
       )
     : Effect.succeed(key);
 
+const mediaSortRank = (media: MediaRecord) =>
+  typeof media.Order === "number" ? media.Order : Number.MAX_SAFE_INTEGER;
+
+const primaryPropertyMediaUrl = (media: ReadonlyArray<MediaRecord>): string | null => {
+  const sorted = [...media].sort((left, right) => mediaSortRank(left) - mediaSortRank(right));
+  const preferred = sorted.find(
+    (record) => record.PreferredPhotoYN === true && stableKey(record.MediaURL) !== null,
+  );
+  return stableKey(preferred?.MediaURL) ?? stableKey(sorted.find((record) => stableKey(record.MediaURL) !== null)?.MediaURL);
+};
+
 export const propertyRowFromRecord = (property: PropertyRecord) => ({
   listingKey: stableKey(property.ListingKey),
   listingId: nullable(property.ListingId),
@@ -280,6 +291,9 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
   inclusions: nullable(property.Inclusions),
   internetEntireListingDisplay: nullable(property.InternetEntireListingDisplayYN),
   internetAddressDisplay: nullable(property.InternetAddressDisplayYN),
+  rooms: nullable(property.Rooms),
+  media: nullable(property.Media),
+  primaryMediaUrl: primaryPropertyMediaUrl(property.Media ?? []),
   active: true,
   raw: property,
 });
@@ -559,71 +573,13 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
             propertyRow.listingKey,
           );
           yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx
-                .insert(ddfProperties)
-                .values({ ...propertyRow, listingKey })
-                .onConflictDoUpdate({
-                  target: ddfProperties.listingKey,
-                  set: { ...propertyRow, listingKey, ...touchUpdatedAt },
-                });
-              yield* tx
-                .delete(ddfPropertyRooms)
-                .where(eq(ddfPropertyRooms.listingKey, listingKey));
-              yield* tx
-                .delete(ddfMedia)
-                .where(
-                  and(
-                    eq(ddfMedia.resource, "Property"),
-                    eq(ddfMedia.resourceKey, listingKey),
-                  ),
-                );
-              yield* Effect.forEach(
-                graph.rooms,
-                (room) =>
-                  Effect.gen(function* () {
-                    const row = roomRowFromRecord(room, graph.property);
-                    const roomListingKey = yield* requireKey(
-                      "upsertPropertyGraph.roomListingKey",
-                      row.listingKey,
-                    );
-                    const roomKey = yield* requireKey(
-                      "upsertPropertyGraph.roomKey",
-                      row.roomKey.length > 0 ? row.roomKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfPropertyRooms)
-                      .values({ ...row, listingKey: roomListingKey, roomKey })
-                      .onConflictDoUpdate({
-                        target: ddfPropertyRooms.roomKey,
-                        set: { ...row, listingKey: roomListingKey, roomKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                graph.media,
-                (media) =>
-                  Effect.gen(function* () {
-                    const row = mediaRowFromRecord(media, {
-                      resource: "Property",
-                      key: listingKey,
-                    });
-                    const mediaKey = yield* requireKey(
-                      "upsertPropertyGraph.mediaKey",
-                      row.mediaKey.length > 0 ? row.mediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfMedia)
-                      .values({ ...row, mediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfMedia.mediaKey,
-                        set: { ...row, mediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-            }),
+            tx
+              .insert(ddfProperties)
+              .values({ ...propertyRow, listingKey })
+              .onConflictDoUpdate({
+                target: ddfProperties.listingKey,
+                set: { ...propertyRow, listingKey, ...touchUpdatedAt },
+              }),
           ).pipe(Effect.mapError(mapSinkError("upsertPropertyGraph")));
         },
       ),

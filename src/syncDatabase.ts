@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import { Data, DateTime, Effect } from "effect";
+import { and, eq, inArray } from "drizzle-orm";
+import { Config, Data, DateTime, Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import type {
   MemberSyncOptions,
@@ -16,6 +16,7 @@ import {
   syncOpenHouses,
   syncProperties,
 } from "./sync";
+import { filters } from "./client/http/odata";
 import { DdfDatabase } from "./db/layer";
 import { runDdfDatabaseMigrations } from "./db/runMigrations";
 import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "./db/sink";
@@ -41,6 +42,110 @@ const mapDatabaseSyncError =
   (operation: DdfDatabaseSyncError["operation"]) => (cause: unknown) =>
     new DdfDatabaseSyncError({ operation, cause });
 
+export class DdfChosenAorConfigError extends Data.TaggedError(
+  "DdfChosenAorConfigError",
+)<{
+  readonly rawValue: string;
+  readonly reason: string;
+}> {
+  override get message() {
+    return `Invalid CREA_CHOSEN_AOR_KEYS: ${this.reason}`;
+  }
+}
+
+const parseChosenAorKeysValue = (rawValue: string): ReadonlyArray<string> => {
+  const trimmed = rawValue.trim();
+  if (trimmed.length === 0) return [];
+
+  const values: ReadonlyArray<unknown> = trimmed.startsWith("[")
+    ? (() => {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (!Array.isArray(parsed)) {
+            throw new Error("expected a JSON array");
+          }
+          return parsed;
+        } catch (cause) {
+          throw new DdfChosenAorConfigError({
+            rawValue,
+            reason: cause instanceof Error ? cause.message : "expected a JSON array",
+          });
+        }
+      })()
+    : trimmed.split(",");
+
+  const keys = values.map((value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+    if (typeof value === "string") {
+      return value.trim();
+    }
+    throw new DdfChosenAorConfigError({
+      rawValue,
+      reason: "expected a comma-separated list or JSON array of string/number AOR keys",
+    });
+  });
+
+  if (keys.some((key) => key.length === 0)) {
+    throw new DdfChosenAorConfigError({
+      rawValue,
+      reason: "AOR keys must be non-empty strings after trimming",
+    });
+  }
+
+  return Array.from(new Set(keys));
+};
+
+export const parseChosenAorKeys = Effect.fn(
+  "DdfDatabaseSync.parseChosenAorKeys",
+)(function* (rawValue: string) {
+  return yield* Effect.try({
+    try: () => parseChosenAorKeysValue(rawValue),
+    catch: (cause) =>
+      cause instanceof DdfChosenAorConfigError
+        ? cause
+        : new DdfChosenAorConfigError({
+            rawValue,
+            reason: cause instanceof Error ? cause.message : String(cause),
+          }),
+  });
+});
+
+export const chosenAorKeysFromEnv = Effect.fn(
+  "DdfDatabaseSync.chosenAorKeysFromEnv",
+)(function* () {
+  const rawValue = yield* Config.string("CREA_CHOSEN_AOR_KEYS").pipe(
+    Config.withDefault(""),
+  );
+  return yield* parseChosenAorKeys(rawValue);
+});
+
+const combineODataFilters = (
+  ...clauses: ReadonlyArray<string | undefined>
+): string | undefined => {
+  const present = clauses.filter(
+    (clause): clause is string => clause !== undefined && clause.length > 0,
+  );
+  return present.length === 0 ? undefined : filters.and(...present);
+};
+
+const aorFilter = (
+  field: "ListAORKey" | "MemberAORKey" | "OfficeAORKey",
+  chosenAorKeys: ReadonlyArray<string>,
+): string | undefined =>
+  chosenAorKeys.length === 0 ? undefined : filters.in(field, chosenAorKeys);
+
+const withAorFilter = <Query extends { readonly filter?: string } | undefined>(
+  query: Query,
+  field: "ListAORKey" | "MemberAORKey" | "OfficeAORKey",
+  chosenAorKeys: ReadonlyArray<string>,
+): Query => {
+  const filter = combineODataFilters(aorFilter(field, chosenAorKeys), query?.filter);
+  if (filter === undefined) return query;
+  return { ...(query ?? {}), filter } as Query;
+};
+
 export interface SyncDdfDatabaseOnceOptions {
   readonly runMigrations?: boolean;
   readonly destinationId?: number;
@@ -63,11 +168,14 @@ export interface SyncDdfDatabaseDependencies {
   readonly saveWatermark: typeof saveDatabaseWatermark;
   readonly runMigrations: typeof runDdfDatabaseMigrations;
   readonly makeSink: typeof makeDdfDatabaseSyncSink;
-  readonly loadOpenHouseListingScopes: () => Effect.Effect<
+  readonly loadOpenHouseListingScopes: (
+    chosenAorKeys: ReadonlyArray<string>,
+  ) => Effect.Effect<
     ReadonlyArray<OpenHouseListingScope>,
     DdfDatabaseSyncError,
     DdfDatabase
   >;
+  readonly loadChosenAorKeys: typeof chosenAorKeysFromEnv;
   readonly recordRun: (
     summary: SyncDdfDatabaseOnceSummary,
     destinationId?: number,
@@ -126,15 +234,21 @@ const defaultOpenHouseDateWindow = Effect.fn(
 
 const loadOpenHouseListingScopes = Effect.fn(
   "DdfDatabaseSync.loadOpenHouseListingScopes",
-)(function* () {
+)(function* (chosenAorKeys: ReadonlyArray<string>) {
   const { db } = yield* DdfDatabase;
+  const where = chosenAorKeys.length === 0
+    ? eq(ddfProperties.active, true)
+    : and(
+        eq(ddfProperties.active, true),
+        inArray(ddfProperties.listAorKey, chosenAorKeys),
+      );
   return yield* db
     .select({
       listingKey: ddfProperties.listingKey,
       listingId: ddfProperties.listingId,
     })
     .from(ddfProperties)
-    .where(eq(ddfProperties.active, true))
+    .where(where)
     .pipe(Effect.mapError(mapDatabaseSyncError("loadOpenHouseListingScopes")));
 });
 
@@ -156,35 +270,39 @@ export const databaseSyncOptionsFromWatermarks = (
     | "officeQuery"
     | "openHouseQuery"
     | "openHouseListingChunkSize"
-  >,
-) => ({
-  property: {
-    mode: watermarks.property === null ? "initial" : "incremental",
-    since: watermarks.property ?? undefined,
-    destinationId: options?.destinationId,
-    concurrency: options?.concurrency,
-    query: options?.propertyQuery,
-  } satisfies Omit<PropertySyncOptions, "sink">,
-  member: {
-    mode: watermarks.member === null ? "initial" : "incremental",
-    since: watermarks.member ?? undefined,
-    destinationId: options?.destinationId,
-    concurrency: options?.concurrency,
-    query: options?.memberQuery,
-  } satisfies Omit<MemberSyncOptions, "sink">,
-  office: {
-    mode: watermarks.office === null ? "initial" : "incremental",
-    since: watermarks.office ?? undefined,
-    destinationId: options?.destinationId,
-    concurrency: options?.concurrency,
-    query: options?.officeQuery,
-  } satisfies Omit<OfficeSyncOptions, "sink">,
-  openHouse: {
-    query: openHouseQueryForDatabaseSync(options?.openHouseQuery),
-    concurrency: options?.concurrency,
-    listingChunkSize: options?.openHouseListingChunkSize,
-  } satisfies Omit<OpenHouseSyncOptions, "sink">,
-});
+  > & { readonly chosenAorKeys?: ReadonlyArray<string> },
+) => {
+  const chosenAorKeys = options?.chosenAorKeys ?? [];
+  return ({
+    property: {
+      mode: watermarks.property === null ? "initial" : "incremental",
+      since: watermarks.property ?? undefined,
+      destinationId: options?.destinationId,
+      concurrency: options?.concurrency,
+      query: withAorFilter(options?.propertyQuery, "ListAORKey", chosenAorKeys),
+    } satisfies Omit<PropertySyncOptions, "sink">,
+    member: {
+      mode: watermarks.member === null ? "initial" : "incremental",
+      since: watermarks.member ?? undefined,
+      destinationId: options?.destinationId,
+      concurrency: options?.concurrency,
+      query: withAorFilter(options?.memberQuery, "MemberAORKey", chosenAorKeys),
+    } satisfies Omit<MemberSyncOptions, "sink">,
+    office: {
+      mode: watermarks.office === null ? "initial" : "incremental",
+      since: watermarks.office ?? undefined,
+      destinationId: options?.destinationId,
+      concurrency: options?.concurrency,
+      query: withAorFilter(options?.officeQuery, "OfficeAORKey", chosenAorKeys),
+    } satisfies Omit<OfficeSyncOptions, "sink">,
+    openHouse: {
+      query: openHouseQueryForDatabaseSync(options?.openHouseQuery),
+      concurrency: options?.concurrency,
+      listingChunkSize: options?.openHouseListingChunkSize,
+    } satisfies Omit<OpenHouseSyncOptions, "sink">,
+  });
+};
+
 const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
   saveWatermark: SyncDdfDatabaseDependencies["saveWatermark"],
   resource: Parameters<typeof saveDatabaseWatermark>[0],
@@ -237,6 +355,7 @@ const defaultDependencies: SyncDdfDatabaseDependencies = {
   runMigrations: runDdfDatabaseMigrations,
   makeSink: makeDdfDatabaseSyncSink,
   loadOpenHouseListingScopes,
+  loadChosenAorKeys: chosenAorKeysFromEnv,
   recordRun: recordRunSummary,
 };
 
@@ -287,12 +406,18 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       office: officeWatermark,
     });
 
+    const chosenAorKeys = yield* dependencies.loadChosenAorKeys();
+    yield* Effect.logInfo("DDF database sync: loaded chosen AOR scope", {
+      runId,
+      chosenAorKeys,
+    });
+
     const syncOptions = databaseSyncOptionsFromWatermarks({
       property: propertyWatermark,
       member: memberWatermark,
       office: officeWatermark,
       openHouse: null,
-    }, options);
+    }, { ...options, chosenAorKeys });
     yield* Effect.logInfo("DDF database sync: sync plan ready", {
       runId,
       propertyMode: syncOptions.property.mode,
@@ -349,7 +474,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     );
     yield* saveIfAdvanced(dependencies.saveWatermark, "Office", office.nextWatermark);
 
-    const openHouseListingScopes = yield* dependencies.loadOpenHouseListingScopes();
+    const openHouseListingScopes = yield* dependencies.loadOpenHouseListingScopes(chosenAorKeys);
     const openHouseDateWindow = options?.openHouseDateWindow ?? (yield* defaultOpenHouseDateWindow());
     yield* Effect.logInfo("DDF database sync: syncing open houses", {
       runId,

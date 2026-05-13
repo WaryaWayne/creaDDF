@@ -20,6 +20,7 @@ describe("database read client helpers", () => {
       "propertySubType",
       "bedroomsTotal",
       "bathroomsTotalInteger",
+      "primaryMediaUrl",
       "modificationTimestamp",
     ]);
     assert.equal(propertyFieldPresets.card.join(",").includes("raw"), false);

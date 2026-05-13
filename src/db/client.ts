@@ -120,6 +120,7 @@ export const propertyFieldPresets = {
     "propertySubType",
     "bedroomsTotal",
     "bathroomsTotalInteger",
+    "primaryMediaUrl",
     "modificationTimestamp",
   ],
   detail: [
@@ -133,6 +134,7 @@ export const propertyFieldPresets = {
     "propertySubType",
     "bedroomsTotal",
     "bathroomsTotalInteger",
+    "primaryMediaUrl",
     "listAgentKey",
     "listOfficeKey",
     "modificationTimestamp",
