@@ -345,6 +345,31 @@ describe("selected resource decoding", () => {
       }),
   );
 
+  it.effect("normalizes OData envelopes with omitted value to an empty array", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+        if (url === "https://identity.test/connect/token")
+          return tokenResponse.clone();
+        if (
+          url ===
+          "https://ddf.test/odata/v1/Property?%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+        ) {
+          return Response.json({
+            "@odata.context": "https://ddf.test/$metadata#Property",
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      const result = yield* listProperties({ top: 1 }).pipe(
+        Effect.provide(layerFor(httpHandler)),
+      );
+
+      assert.deepEqual(result.value, []);
+    }),
+  );
+
   it.effect(
     "decodes selected keyed resources without requiring non-selected fields",
     () =>

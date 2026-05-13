@@ -16,7 +16,7 @@ export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
     "@odata.context": Schema.optionalKey(NullableString),
     "@odata.count": Schema.optionalKey(Schema.Number),
     "@odata.nextLink": Schema.optionalKey(NullableString),
-    value: Schema.optionalKey(Schema.NullOr(Schema.Array(item))),
+    value: Schema.Array(item),
   }) as unknown as Schema.Decoder<ODataListEnvelope<Item["Type"]>, never>
 
 export const ODataUnknownListEnvelopeSchema = ODataListEnvelopeSchema(Schema.Unknown)

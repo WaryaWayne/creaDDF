@@ -136,6 +136,18 @@ export interface SyncResult<Identifier = unknown> {
   readonly nextWatermark: string | null;
 }
 
+export class DdfReplicationIdentifierError extends Data.TaggedError(
+  "DdfReplicationIdentifierError",
+)<{
+  readonly resource: SyncResource;
+  readonly keyName: string;
+  readonly index: number;
+}> {
+  override get message() {
+    return `${this.resource} replication identifier at index ${this.index} is missing ${this.keyName}`;
+  }
+}
+
 export interface BaseSyncOptions {
   readonly mode?: SyncMode;
   readonly since?: string;
@@ -1328,6 +1340,29 @@ export const getPropertyMasterList = Effect.fn(
   );
 });
 
+const masterKeysOrFail = Effect.fn("DdfSync.masterKeysOrFail")(
+  function* <Identifier>(
+    resource: SyncResource,
+    keyName: string,
+    identifiers: ReadonlyArray<Identifier>,
+    keyOf: (identifier: Identifier) => string | null | undefined,
+  ) {
+    const keys: Array<string> = [];
+    for (const [index, identifier] of identifiers.entries()) {
+      const key = keyOf(identifier);
+      if (key === null || key === undefined) {
+        return yield* new DdfReplicationIdentifierError({
+          resource,
+          keyName,
+          index,
+        });
+      }
+      keys.push(key);
+    }
+    return keys;
+  },
+);
+
 export const diffLocalKeysAgainstMasterList = (
   localKeys: ReadonlyArray<string>,
   masterKeys: ReadonlyArray<string>,
@@ -1353,10 +1388,13 @@ export const pruneMissingProperties = Effect.fn(
   >,
 ) {
   const masterList = yield* getPropertyMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.flatMap((identifier) => identifier.ListingKey === null || identifier.ListingKey === undefined ? [] : [identifier.ListingKey]),
+  const masterKeys = yield* masterKeysOrFail(
+    "Property",
+    "ListingKey",
+    masterList,
+    (identifier) => identifier.ListingKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&
@@ -1410,10 +1448,13 @@ export const pruneMissingMembers = Effect.fn(
   >,
 ) {
   const masterList = yield* getMemberMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.flatMap((identifier) => identifier.MemberKey === null || identifier.MemberKey === undefined ? [] : [identifier.MemberKey]),
+  const masterKeys = yield* masterKeysOrFail(
+    "Member",
+    "MemberKey",
+    masterList,
+    (identifier) => identifier.MemberKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&
@@ -1435,10 +1476,13 @@ export const pruneMissingOffices = Effect.fn(
   >,
 ) {
   const masterList = yield* getOfficeMasterList(options);
-  const diff = diffLocalKeysAgainstMasterList(
-    localKeys,
-    masterList.flatMap((identifier) => identifier.OfficeKey === null || identifier.OfficeKey === undefined ? [] : [identifier.OfficeKey]),
+  const masterKeys = yield* masterKeysOrFail(
+    "Office",
+    "OfficeKey",
+    masterList,
+    (identifier) => identifier.OfficeKey,
   );
+  const diff = diffLocalKeysAgainstMasterList(localKeys, masterKeys);
 
   if (
     diff.missingLocalKeys.length > 0 &&

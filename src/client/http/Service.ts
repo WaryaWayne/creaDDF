@@ -79,9 +79,22 @@ const responseText = (res: HttpClientResponse.HttpClientResponse) =>
   res.text.pipe(Effect.orElseSucceed(() => undefined as string | undefined));
 
 const normalizeODataValue = <T>(value: T): T => {
-  if (value !== null && typeof value === "object" && "value" in value) {
-    const envelope = value as { value?: unknown };
-    if (envelope.value === null || envelope.value === undefined) {
+  if (value !== null && typeof value === "object") {
+    const envelope = value as {
+      "@odata.context"?: unknown;
+      "@odata.count"?: unknown;
+      "@odata.nextLink"?: unknown;
+      value?: unknown;
+    };
+    const isODataEnvelope =
+      "value" in envelope ||
+      "@odata.context" in envelope ||
+      "@odata.count" in envelope ||
+      "@odata.nextLink" in envelope;
+    if (
+      isODataEnvelope &&
+      (envelope.value === null || envelope.value === undefined)
+    ) {
       envelope.value = [];
     }
   }
@@ -95,7 +108,7 @@ const decodeJson = <T>(
 ): Effect.Effect<T, DdfApiResponseSchemaDecodeError> => {
   if (schema === undefined) return Effect.succeed(json as T);
 
-  return Schema.decodeUnknownEffect(schema)(json).pipe(
+  return Schema.decodeUnknownEffect(schema)(normalizeODataValue(json)).pipe(
     Effect.map(normalizeODataValue),
     Effect.mapError((cause) => {
       const issues = schemaDecodeIssuesFromCause(cause);

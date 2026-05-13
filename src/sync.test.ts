@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Exit, Schema } from "effect";
 import {
   DdfApiHttpError,
   DdfApiResponseSchemaDecodeError,
@@ -11,6 +11,7 @@ import type {
   DdfResponseSchema,
 } from "./client";
 import {
+  DdfReplicationIdentifierError,
   diffLocalKeysAgainstMasterList,
   getMemberMasterList,
   getOfficeMasterList,
@@ -1251,6 +1252,43 @@ describe("master list prune helpers", () => {
     });
   });
 
+  it.effect("fails property pruning on malformed master-list keys", () =>
+    Effect.gen(function* () {
+      const marked: Array<ReadonlyArray<string>> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [{ ListingKey: "master-1" }, { ListingKey: null }],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const exit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingProperties(["master-1", "stale-1"], {
+            sink: {
+              markMissingPropertiesInactive: (keys) =>
+                Effect.sync(() => marked.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const failure = Exit.findErrorOption(exit);
+
+      assert.equal(Exit.isFailure(exit), true);
+      assert.equal(failure._tag, "Some");
+      if (failure._tag === "Some") {
+        assert.equal(failure.value instanceof DdfReplicationIdentifierError, true);
+        assert.match(failure.value.message, /missing ListingKey/);
+      }
+      assert.deepEqual(marked, []);
+    }),
+  );
+
   it.effect(
     "gets property master lists and calls prune sinks without owning a database",
     () =>
@@ -1285,6 +1323,62 @@ describe("master list prune helpers", () => {
         assert.deepEqual(diff.missingLocalKeys, ["stale-1"]);
         assert.deepEqual(marked, [["stale-1"]]);
       }),
+  );
+
+  it.effect("fails member and office pruning on malformed master-list keys", () =>
+    Effect.gen(function* () {
+      const markedMembers: Array<ReadonlyArray<string>> = [];
+      const markedOffices: Array<ReadonlyArray<string>> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+            return response<T>({ value: [{ MemberKey: null }] });
+          }
+          if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+            return response<T>({ value: [{}] });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const memberExit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingMembers(["stale-member"], {
+            sink: {
+              markMissingMembersInactive: (keys) =>
+                Effect.sync(() => markedMembers.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const officeExit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingOffices(["stale-office"], {
+            sink: {
+              markMissingOfficesInactive: (keys) =>
+                Effect.sync(() => markedOffices.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+      const memberFailure = Exit.findErrorOption(memberExit);
+      const officeFailure = Exit.findErrorOption(officeExit);
+
+      assert.equal(Exit.isFailure(memberExit), true);
+      assert.equal(Exit.isFailure(officeExit), true);
+      if (memberFailure._tag === "Some") {
+        assert.equal(memberFailure.value instanceof DdfReplicationIdentifierError, true);
+        assert.match(memberFailure.value.message, /missing MemberKey/);
+      }
+      if (officeFailure._tag === "Some") {
+        assert.equal(officeFailure.value instanceof DdfReplicationIdentifierError, true);
+        assert.match(officeFailure.value.message, /missing OfficeKey/);
+      }
+      assert.deepEqual(markedMembers, []);
+      assert.deepEqual(markedOffices, []);
+    }),
   );
 
   it.effect("gets member and office master lists and calls prune sinks", () =>
