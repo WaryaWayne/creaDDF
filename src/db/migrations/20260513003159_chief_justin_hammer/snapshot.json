@@ -1,11 +1,17 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "886ef57c-ac40-4b7d-ac50-86396cca818f",
+  "id": "10d0bfc8-63de-485d-82b8-a396f5f6169e",
   "prevIds": [
-    "f487d6f3-ffcb-4c8f-9a71-ad6a2c200be9"
+    "00000000-0000-0000-0000-000000000000"
   ],
   "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "ddf_destinations",
+      "entityType": "tables",
+      "schema": "public"
+    },
     {
       "isRlsEnabled": false,
       "name": "ddf_media",
@@ -77,6 +83,110 @@
       "name": "ddf_watermarks",
       "entityType": "tables",
       "schema": "public"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "destination_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "destination_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "destination_url",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "destination_type",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "destination_status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "raw",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
     },
     {
       "type": "text",
@@ -750,19 +860,6 @@
       "generated": null,
       "identity": null,
       "name": "type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_members"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "email",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_members"
@@ -1535,7 +1632,7 @@
       "table": "ddf_properties"
     },
     {
-      "type": "double precision",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -1685,6 +1782,58 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "name": "list_office_national_association_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_office_national_association_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_office_national_association_id2",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_office_national_association_id3",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
       "name": "list_agent_key",
       "entityType": "columns",
       "schema": "public",
@@ -1725,6 +1874,58 @@
       "generated": null,
       "identity": null,
       "name": "co_list_agent_key3",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "list_agent_national_association_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_agent_national_association_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_agent_national_association_id2",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_properties"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "co_list_agent_national_association_id3",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_properties"
@@ -3683,6 +3884,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "destination_status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ddf_destinations_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "resource",
           "isExpression": false,
           "asc": true,
@@ -4238,6 +4460,16 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "ddf_sync_runs"
+    },
+    {
+      "columns": [
+        "destination_id"
+      ],
+      "nameExplicit": false,
+      "name": "ddf_destinations_pkey",
+      "schema": "public",
+      "table": "ddf_destinations",
+      "entityType": "pks"
     },
     {
       "columns": [
