@@ -32,17 +32,24 @@ const isEdmDateString = (value: string) => {
   );
 };
 
-const EdmDateString = Schema.String.pipe(
+const isEdmDateTimeString = (value: string) =>
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+
+const isEdmDateOrDateTimeString = (value: string) =>
+  isEdmDateString(value) || isEdmDateTimeString(value);
+
+const EdmDateOrDateTimeString = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) =>
-      isEdmDateString(value)
+      isEdmDateOrDateTimeString(value)
         ? undefined
-        : { path: [], issue: "Expected an Edm.Date string in YYYY-MM-DD format." },
+        : { path: [], issue: "Expected an Edm.Date or date-time string." },
     ),
   ),
 );
 
 export const OpenHouseSchema = Schema.Struct({
+  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
   OpenHouseKey: Schema.String.annotate({
     message: "Value is invalid for OpenHouseKey.",
     description:
@@ -67,12 +74,12 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.NullOr(EdmDateString).annotate({
+  OpenHouseDate: Schema.NullOr(EdmDateOrDateTimeString).annotate({
     message: "Value is invalid for OpenHouseDate.",
-    description: "The date on which the open house will occur.",
+    description: "The date or date-time on which the open house will occur.",
     title: "Open House Date",
     identifier: "OpenHouseDate",
-    examples: ["2025-07-15", "2025-12-12", "2026-09-12"],
+    examples: ["2025-07-15", "2025-12-12T00:00:00.000Z", "2026-09-12"],
   }),
   OpenHouseStartTime: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for OpenHouseStartTime.",

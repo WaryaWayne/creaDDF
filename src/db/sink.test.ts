@@ -104,13 +104,13 @@ describe("database sync sink row mapping", () => {
     const room = asRoomRecord({ RoomKey: null, RoomType: "Kitchen", RoomLevel: "Main level" });
     const media = asMediaRecord({ MediaKey: null, MediaURL: "https://example.test/a.jpg", Order: 2 });
 
-    assert.equal(
-      roomRowFromRecord(room, property).roomKey,
-      "listing-1:Kitchen:Main level",
+    assert.match(
+      roomRowFromRecord(room, property).roomKey ?? "",
+      /^listing-1:Kitchen:Main level:[a-z0-9]+$/,
     );
-    assert.equal(
+    assert.match(
       mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }).mediaKey,
-      "Property:listing-1:https://example.test/a.jpg:2",
+      /^Property:listing-1:https:\/\/example\.test\/a\.jpg:2:[a-z0-9]+$/,
     );
   });
 
@@ -126,13 +126,13 @@ describe("database sync sink row mapping", () => {
     assert.equal(memberRowFromRecord(member).memberKey, null);
     assert.equal(officeRowFromRecord(office).officeKey, null);
     assert.equal(openHouseRowFromRecord(openHouse).openHouseKey, null);
-    assert.equal(
-      roomRowFromRecord(room, asPropertyRecord({ ListingKey: "listing-1" })).roomKey,
-      "listing-1:Kitchen:Main level",
+    assert.match(
+      roomRowFromRecord(room, asPropertyRecord({ ListingKey: "listing-1" })).roomKey ?? "",
+      /^listing-1:Kitchen:Main level:[a-z0-9]+$/,
     );
-    assert.equal(
+    assert.match(
       mediaRowFromRecord(media, { resource: "Property", key: "listing-1" }).mediaKey,
-      "Property:listing-1:https://example.test/a.jpg:2",
+      /^Property:listing-1:https:\/\/example\.test\/a\.jpg:2:[a-z0-9]+$/,
     );
   });
 
@@ -227,6 +227,12 @@ describe("database sync sink row mapping", () => {
       DestinationUrl: "https://example.test",
       DestinationType: "Technology Provider",
       DestinationStatus: "Active",
+      MemberFirstName: "Ada",
+      MemberLastName: "Lovelace",
+      MemberKey: "member-1",
+      OriginalEntryTimestamp: "2024-01-01T00:00:00.000Z",
+      ModificationTimestamp: "2024-01-02T00:00:00.000Z",
+      FullNSP: true,
     });
 
     assert.deepEqual(destinationRowFromRecord(destination), {
@@ -235,6 +241,12 @@ describe("database sync sink row mapping", () => {
       destinationUrl: "https://example.test",
       destinationType: "Technology Provider",
       destinationStatus: "Active",
+      memberFirstName: "Ada",
+      memberLastName: "Lovelace",
+      memberKey: "member-1",
+      originalEntryTimestamp: new Date("2024-01-01T00:00:00.000Z"),
+      modificationTimestamp: new Date("2024-01-02T00:00:00.000Z"),
+      fullNsp: true,
       raw: destination,
     });
   });

@@ -31,6 +31,7 @@ import {
 } from "./normalizers";
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
 import type { MediaType } from "./schema/mediaSchema";
+import type { SocialMedia } from "./schema/officeSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 import type {
   MemberReplicationIdentifier,
@@ -73,12 +74,11 @@ const selectedOpenHouseResponseSchema = Schema.Struct({
   "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
   "@odata.count": Schema.optionalKey(Schema.Number),
   "@odata.nextLink": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  value: Schema.Array(
+  value: Schema.NullOr(Schema.Array(
     Schema.Struct({
-      "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
       ...partialStruct(OpenHouseSchema).fields,
     }),
-  ),
+  )),
 });
 
 const openHousePageSchema = (query?: SelectQuery) =>
@@ -180,6 +180,10 @@ export interface MemberSyncSink<SinkError = never> {
     media: MediaRecord,
     owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
+  readonly upsertSocialMedia?: (
+    socialMedia: SocialMedia,
+    owner: SyncOwner,
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Member",
     watermark: string,
@@ -199,6 +203,10 @@ export interface OfficeSyncSink<SinkError = never> {
   ) => Effect.Effect<void, SinkError>;
   readonly upsertMedia?: (
     media: MediaRecord,
+    owner: SyncOwner,
+  ) => Effect.Effect<void, SinkError>;
+  readonly upsertSocialMedia?: (
+    socialMedia: SocialMedia,
     owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
@@ -414,12 +422,12 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
     schema: Schema.Decoder<ODataListEnvelope<Identifier>, never>,
   ) {
     const http = yield* DdfHttp;
-    const out: Array<Identifier> = [...first.value];
+    const out: Array<Identifier> = [...(first.value ?? [])];
     let next = first["@odata.nextLink"] ?? null;
 
     while (next !== null) {
       const page = yield* http.requestJson(next, undefined, schema);
-      out.push(...page.value);
+      out.push(...(page.value ?? []));
       next = page["@odata.nextLink"] ?? null;
     }
 
@@ -435,7 +443,7 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   schema: Schema.Decoder<ODataListEnvelope<Identifier>, never>,
 ) {
   const http = yield* DdfHttp;
-  const identifiers: Array<Identifier> = [...first.value];
+  const identifiers: Array<Identifier> = [...(first.value ?? [])];
   const errors: Array<SyncRecordError> = [];
   let next = first["@odata.nextLink"] ?? null;
   let pageCount = 1;
@@ -443,7 +451,7 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
     pages: pageCount,
     identifiers: identifiers.length,
-    pageSize: first.value.length,
+    pageSize: first.value?.length ?? 0,
     hasNextPage: next !== null,
   });
 
@@ -463,8 +471,9 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
       break;
     }
     pageCount += 1;
-    const pageSize = pageExit.value.value.length;
-    identifiers.push(...pageExit.value.value);
+    const pageValue = pageExit.value.value ?? [];
+    const pageSize = pageValue.length;
+    identifiers.push(...pageValue);
     next = pageExit.value["@odata.nextLink"] ?? null;
     if (shouldLogPageProgress(pageCount, next !== null)) {
       yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
@@ -827,6 +836,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
           ? ((result.record as Record<string, unknown>).Media as MediaType)
           : []
       ).map((media) => normalizeMedia("Member", memberKey, media));
+      const memberSocialMedia = result.record.MemberSocialMedia ?? [];
       hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertMemberWithMedia !== undefined) {
@@ -843,6 +853,17 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
             memberMedia,
             (media) =>
               options.sink?.upsertMedia?.(media, {
+                resource: "Member",
+                key: memberKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+        if (options?.sink?.upsertSocialMedia !== undefined) {
+          yield* Effect.forEach(
+            memberSocialMedia,
+            (socialMedia) =>
+              options.sink?.upsertSocialMedia?.(socialMedia, {
                 resource: "Member",
                 key: memberKey,
               }) ?? Effect.void,
@@ -1007,6 +1028,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
       const officeMedia = (
         Array.isArray(office.Media) ? (office.Media as MediaType) : []
       ).map((media) => normalizeMedia("Office", officeKey, media));
+      const officeSocialMedia = result.record.OfficeSocialMedia ?? [];
       hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertOfficeWithMedia !== undefined) {
@@ -1023,6 +1045,17 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
             officeMedia,
             (media) =>
               options.sink?.upsertMedia?.(media, {
+                resource: "Office",
+                key: officeKey,
+              }) ?? Effect.void,
+            { discard: true },
+          );
+        }
+        if (options?.sink?.upsertSocialMedia !== undefined) {
+          yield* Effect.forEach(
+            officeSocialMedia,
+            (socialMedia) =>
+              options.sink?.upsertSocialMedia?.(socialMedia, {
                 resource: "Office",
                 key: officeKey,
               }) ?? Effect.void,
@@ -1209,12 +1242,13 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           yield* Effect.logInfo("OpenHouse sync: collected page", {
             queryIndex,
             pages: pageCount,
-            records: processedRecords + page.value.length,
-            pageSize: page.value.length,
+            records: processedRecords + (page.value?.length ?? 0),
+            pageSize: page.value?.length ?? 0,
             hasNextPage: next !== null,
           });
-          yield* persistPage(page.value);
-          yield* logPersistProgress(page.value.length, next !== null);
+          const pageValue = page.value ?? [];
+          yield* persistPage(pageValue);
+          yield* logPersistProgress(pageValue.length, next !== null);
 
           if (next === null) break;
 

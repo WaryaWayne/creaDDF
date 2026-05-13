@@ -137,6 +137,7 @@ export const SocialMediaSchema = Schema.Struct({
 });
 
 export const OfficeSchema = Schema.Struct({
+  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
   OfficeKey: Schema.String,
   OfficeMlsId: Schema.Union([Schema.String, Schema.Null]),
   OfficeAORKey: Schema.Union([Schema.String, Schema.Null]),

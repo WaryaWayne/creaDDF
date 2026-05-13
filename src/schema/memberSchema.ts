@@ -4,6 +4,7 @@ import { ODataListEnvelopeSchema } from "./odata";
 import { ResourceNameSchema, SocialMediaTypeSchema } from "./officeSchema";
 
 export const MemberSchema = Schema.Struct({
+  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
   MemberKey: Schema.String,
   MemberMlsId: Schema.Union([Schema.Null, Schema.String]),
   OfficeKey: Schema.Union([Schema.Null, Schema.String]),
