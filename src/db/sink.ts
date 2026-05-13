@@ -148,7 +148,6 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
   standardStatus: nullable(property.StandardStatus),
   propertySubType: nullable(property.PropertySubType),
   businessType: nullable(property.BusinessType),
-  propertyType: nullable(property.PropertyType),
   publicRemarks: nullable(property.PublicRemarks),
   listPrice: nullable(property.ListPrice),
   leaseAmount: nullable(property.LeaseAmount),

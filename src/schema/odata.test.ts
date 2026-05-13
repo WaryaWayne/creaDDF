@@ -39,6 +39,25 @@ describe("ODataListEnvelopeSchema", () => {
     }),
   );
 
+
+  it.effect("decodes a directly represented empty value array", () =>
+    Effect.gen(function* () {
+      const decoded = yield* decodeTestEnvelope({ value: [] });
+
+      assert.deepEqual(decoded.value, []);
+    }),
+  );
+
+  it.effect("rejects envelopes with missing or non-array value fields", () =>
+    Effect.gen(function* () {
+      const missing = yield* Effect.exit(decodeTestEnvelope({}));
+      const nonArray = yield* Effect.exit(decodeTestEnvelope({ value: null }));
+
+      assert.equal(Exit.isFailure(missing), true);
+      assert.equal(Exit.isFailure(nonArray), true);
+    }),
+  );
+
   it.effect("rejects a non-integer @odata.count", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(

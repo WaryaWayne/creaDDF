@@ -518,8 +518,8 @@ describe("selected resource decoding", () => {
         "Website Feed",
       );
       assert.equal(result.destination.MemberKey, "member-1");
-      assert.equal(result.destination.DestinationType, "Technology Provider");
-      assert.equal(result.destination.DestinationStatus, "Active");
+      assert.equal(result.destination.DestinationType, 9);
+      assert.equal(result.destination.DestinationStatus, 1);
       const destinationTimestamp = result.destination.ModificationTimestamp;
       if (!DateTime.isDateTime(destinationTimestamp) || !DateTime.isUtc(destinationTimestamp)) {
         assert.fail("expected destination ModificationTimestamp to decode as Effect DateTime.Utc");
@@ -555,8 +555,8 @@ describe("selected resource decoding", () => {
         Effect.provide(layerFor(httpHandler)),
       );
 
-      assert.equal(destination.DestinationType, "Technology Provider");
-      assert.equal(destination.DestinationStatus, "Active");
+      assert.equal(destination.DestinationType, 9);
+      assert.equal(destination.DestinationStatus, 1);
     }),
   );
 

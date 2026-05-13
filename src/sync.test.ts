@@ -530,6 +530,52 @@ describe("syncProperties", () => {
   );
 
   it.effect(
+    "records malformed property identifiers and does not advance to a following valid timestamp",
+    () =>
+      Effect.gen(function* () {
+        const requestedKeys: Array<string> = [];
+        const savedWatermarks: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({
+                value: [
+                  { ModificationTimestamp: "2024-05-13T00:00:00.000Z" },
+                  {
+                    ListingKey: "listing-after-malformed",
+                    ModificationTimestamp: "2024-05-14T00:00:00.000Z",
+                  },
+                ],
+              });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) => {
+            requestedKeys.push(String(key));
+            return response<T>(propertyFor(String(key)));
+          },
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            sink: {
+              upsertProperty: () => Effect.void,
+              saveWatermark: (_resource, watermark) =>
+                Effect.sync(() => savedWatermarks.push(watermark)),
+            },
+          }),
+          http,
+        );
+
+        assert.deepEqual(requestedKeys, ["listing-after-malformed"]);
+        assert.equal(result.errors.length, 1);
+        assert.match(result.errors[0]?.message ?? "", /ListingKey/);
+        assert.equal(result.nextWatermark, null);
+        assert.deepEqual(savedWatermarks, []);
+      }),
+  );
+
+  it.effect(
     "counts record persistence independently from watermark persistence",
     () =>
       Effect.gen(function* () {
@@ -1377,6 +1423,40 @@ describe("master list prune helpers", () => {
       if (Exit.isFailure(exit)) {
         assert.match(String(exit.cause), /ListingKey/);
       }
+    }),
+  );
+
+  it.effect("fails pruning without marking records inactive when the master list has malformed keys", () =>
+    Effect.gen(function* () {
+      const marked: Array<ReadonlyArray<string>> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                { ListingKey: null },
+                { ListingKey: "master-1" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const exit = yield* Effect.exit(
+        runWithHttp(
+          pruneMissingProperties(["stale-1"], {
+            sink: {
+              markMissingPropertiesInactive: (keys) =>
+                Effect.sync(() => marked.push(keys)),
+            },
+          }),
+          http,
+        ),
+      );
+
+      assert.equal(Exit.isFailure(exit), true);
+      assert.deepEqual(marked, []);
     }),
   );
 

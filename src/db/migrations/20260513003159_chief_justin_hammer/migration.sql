@@ -2,8 +2,8 @@ CREATE TABLE "ddf_destinations" (
 	"destination_id" integer PRIMARY KEY,
 	"destination_name" text,
 	"destination_url" text,
-	"destination_type" text,
-	"destination_status" text,
+	"destination_type" integer,
+	"destination_status" integer,
 	"raw" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -133,7 +133,6 @@ CREATE TABLE "ddf_properties" (
 	"standard_status" text,
 	"property_sub_type" text,
 	"business_type" jsonb,
-	"property_type" text,
 	"public_remarks" text,
 	"list_price" double precision,
 	"lease_amount" double precision,

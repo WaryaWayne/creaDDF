@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
 
 const isLeapYear = (year: number) =>
@@ -32,8 +32,38 @@ const isEdmDateString = (value: string) => {
   );
 };
 
-const isEdmDateTimeString = (value: string) =>
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+const isEdmDateTimeString = (value: string) => {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(
+    value,
+  );
+  if (match === null) return false;
+  if (!isEdmDateString(match[1] ?? "")) return false;
+
+  const hour = Number(match[2] ?? Number.NaN);
+  const minute = Number(match[3] ?? Number.NaN);
+  const second = Number(match[4] ?? Number.NaN);
+  const offsetHour = match[6] === undefined ? 0 : Number(match[6]);
+  const offsetMinute = match[7] === undefined ? 0 : Number(match[7]);
+
+  return (
+    Number.isInteger(hour) &&
+    Number.isInteger(minute) &&
+    Number.isInteger(second) &&
+    Number.isInteger(offsetHour) &&
+    Number.isInteger(offsetMinute) &&
+    hour >= 0 &&
+    hour <= 23 &&
+    minute >= 0 &&
+    minute <= 59 &&
+    second >= 0 &&
+    second <= 59 &&
+    offsetHour >= 0 &&
+    offsetHour <= 23 &&
+    offsetMinute >= 0 &&
+    offsetMinute <= 59 &&
+    Option.isSome(DateTime.make(value))
+  );
+};
 
 const isEdmDateOrDateTimeString = (value: string) =>
   isEdmDateString(value) || isEdmDateTimeString(value);

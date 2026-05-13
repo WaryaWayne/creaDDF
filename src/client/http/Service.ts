@@ -336,10 +336,10 @@ export class DdfHttp extends Context.Service<DdfHttp, DdfHttpApi>()(
               undefined,
               ODataUnknownListEnvelopeSchema,
             )) as {
-              readonly value?: ReadonlyArray<unknown>;
+              readonly value: ReadonlyArray<unknown>;
               readonly "@odata.nextLink"?: string | null;
             };
-            out.push(...(page.value ?? []));
+            out.push(...page.value);
             next = page["@odata.nextLink"] ?? undefined;
           }
           return out;
