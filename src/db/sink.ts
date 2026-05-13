@@ -61,6 +61,35 @@ const nullable = <Value>(value: Value | null | undefined): Value | null =>
 const stableKey = (value: string | null | undefined): string | null =>
   value != null && value.length > 0 ? value : null;
 
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (typeof value === "object" && value !== null) {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const stableHash = (value: unknown): string => {
+  let hash = 0x811c9dc5;
+  const text = stableJson(value);
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+};
+
+const fallbackKey = (
+  scope: string,
+  parts: ReadonlyArray<string | number | null | undefined>,
+  raw: unknown,
+): string =>
+  [...parts.filter((part): part is string | number => part != null), stableHash(raw)]
+    .join(":") || `${scope}:${stableHash(raw)}`;
+
 const dateValue = (value: Date | DateTime.DateTime | string | null | undefined): string | null => {
   const iso = value instanceof Date
     ? value.toISOString()
@@ -263,9 +292,16 @@ export const roomRowFromRecord = (room: RoomRecord, property: PropertyRecord) =>
     listingId: nullable(room.ListingId) ?? nullable(property.ListingId),
     roomKey:
       stableKey(room.RoomKey) ??
-      [listingKey, stableKey(room.RoomType), stableKey(room.RoomLevel)]
-        .filter((part): part is string => part !== null)
-        .join(":"),
+      fallbackKey(
+        "room",
+        [
+          listingKey,
+          stableKey(room.RoomType),
+          stableKey(room.RoomLevel),
+          stableKey(room.RoomDimensions),
+        ],
+        room,
+      ),
     modificationTimestamp: timestampValue(room.ModificationTimestamp),
     roomDescription: nullable(room.RoomDescription),
     roomDimensions: nullable(room.RoomDimensions),
@@ -281,9 +317,11 @@ export const roomRowFromRecord = (room: RoomRecord, property: PropertyRecord) =>
 export const mediaRowFromRecord = (media: MediaRecord, owner: SyncOwner) => ({
   mediaKey:
     stableKey(media.MediaKey) ??
-    [owner.resource, owner.key, stableKey(media.MediaURL), nullable(media.Order)]
-      .filter((part): part is string | number => part !== null)
-      .join(":"),
+    fallbackKey(
+      "media",
+      [owner.resource, owner.key, stableKey(media.MediaURL), nullable(media.Order)],
+      media,
+    ),
   resource: owner.resource,
   resourceKey: owner.key,
   resourceRecordId: nullable(media.ResourceRecordId),
@@ -348,9 +386,16 @@ export const memberDesignationRowsFromRecord = (member: MemberRecord, memberKey:
 export const socialMediaRowFromRecord = (socialMedia: SocialMedia, owner: SyncOwner) => ({
   socialMediaKey:
     stableKey(socialMedia.SocialMediaKey) ??
-    [owner.resource, owner.key, stableKey(socialMedia.SocialMediaType), stableKey(socialMedia.SocialMediaUrlOrId)]
-      .filter((part): part is string => part !== null)
-      .join(":"),
+    fallbackKey(
+      "social-media",
+      [
+        owner.resource,
+        owner.key,
+        stableKey(socialMedia.SocialMediaType),
+        stableKey(socialMedia.SocialMediaUrlOrId),
+      ],
+      socialMedia,
+    ),
   resource: owner.resource,
   resourceKey: owner.key,
   resourceRecordKey: nullable(socialMedia.ResourceRecordKey),
@@ -398,6 +443,12 @@ export const destinationRowFromRecord = (destination: Destination) => ({
   destinationUrl: nullable(destination.DestinationUrl),
   destinationType: nullable(destination.DestinationType),
   destinationStatus: nullable(destination.DestinationStatus),
+  memberFirstName: nullable(destination.MemberFirstName),
+  memberLastName: nullable(destination.MemberLastName),
+  memberKey: nullable(destination.MemberKey),
+  originalEntryTimestamp: timestampValue(destination.OriginalEntryTimestamp),
+  modificationTimestamp: timestampValue(destination.ModificationTimestamp),
+  fullNsp: nullable(destination.FullNSP),
   raw: destination,
 });
 
@@ -781,6 +832,23 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           })
           .pipe(Effect.mapError(mapSinkError("upsertMedia")));
       }),
+      upsertSocialMedia: Effect.fn("DdfDatabaseSyncSink.upsertSocialMedia")(
+        function* (socialMedia, owner) {
+          const row = socialMediaRowFromRecord(socialMedia, owner);
+          const socialMediaKey = yield* requireKey(
+            "upsertSocialMedia",
+            row.socialMediaKey.length > 0 ? row.socialMediaKey : null,
+          );
+          yield* db
+            .insert(ddfSocialMedia)
+            .values({ ...row, socialMediaKey })
+            .onConflictDoUpdate({
+              target: ddfSocialMedia.socialMediaKey,
+              set: { ...row, socialMediaKey, ...touchUpdatedAt },
+            })
+            .pipe(Effect.mapError(mapSinkError("upsertSocialMedia")));
+        },
+      ),
       upsertMember: Effect.fn("DdfDatabaseSyncSink.upsertMember")(function* (
         member,
       ) {

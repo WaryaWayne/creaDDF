@@ -1,6 +1,6 @@
 import { Data, Effect, Schema } from "effect";
 import { DdfHttp, encodeODataQuery } from "./client";
-import type { DdfResponseSchema } from "./client";
+import type { DdfHttpError, DdfResponseSchema } from "./client";
 import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema";
 import {
   DestinationResponseSchema,
@@ -18,6 +18,7 @@ import {
   ODataListEnvelopeSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
+  type ODataListEnvelope,
 } from "./schema/odata";
 import type {
   LeadInput,
@@ -61,12 +62,12 @@ const selectedEntitySchema = <Fields extends Schema.Struct.Fields>(
     ...partialStruct(schema).fields,
   });
 
-const schemaForSelect = <Full>(
+const schemaForSelect = <Full, Selected>(
   query: SelectQuery | undefined,
-  selectedSchema: DdfResponseSchema<unknown>,
+  selectedSchema: DdfResponseSchema<Selected>,
   fullSchema: DdfResponseSchema<Full>,
-) =>
-  (hasSelect(query) ? selectedSchema : fullSchema) as DdfResponseSchema<Full>;
+): DdfResponseSchema<Full> | DdfResponseSchema<Selected> =>
+  hasSelect(query) ? selectedSchema : fullSchema;
 
 const withDefaultOrder = <Query extends ODataListQuery | ReplicationQuery>(
   query: Query | undefined,
@@ -86,6 +87,44 @@ const syncOrder = {
   Member: "ModificationTimestamp asc,MemberKey asc",
   Office: "ModificationTimestamp asc,OfficeKey asc",
 } as const;
+
+
+type ResourceEffect<Success> = Effect.Effect<Success, DdfHttpError, DdfHttp>;
+type SelectedEntity<Full, Field extends keyof Full & string> = Partial<
+  Pick<Full, Field>
+> & {
+  readonly "@odata.context"?: string | null;
+};
+type SelectedQuery<Field extends string, Select extends ReadonlyArray<Field>> =
+  Omit<ODataListQuery<Field>, "select"> & { readonly select: Select };
+type SelectedGetQuery<Field extends string, Select extends ReadonlyArray<Field>> =
+  Omit<ODataGetQuery<Field>, "select"> & { readonly select: Select };
+type ListResource<Full, Field extends keyof Full & string> = {
+  <const Select extends ReadonlyArray<Field>>(
+    query: SelectedQuery<Field, Select>,
+  ): ResourceEffect<ODataListEnvelope<SelectedEntity<Full, Select[number]>>>;
+  (query?: ODataListQuery<Field>): ResourceEffect<ODataListEnvelope<Full>>;
+};
+type GetResource<Key extends string | number, Full, Field extends keyof Full & string> = {
+  <const Select extends ReadonlyArray<Field>>(
+    key: Key,
+    query: SelectedGetQuery<Field, Select>,
+  ): ResourceEffect<SelectedEntity<Full, Select[number]>>;
+  (key: Key, query?: ODataGetQuery<Field>): ResourceEffect<Full>;
+};
+
+type PropertyListing = typeof PropertyListingSchema.Type;
+type SinglePropertyListing = typeof SinglePropertyListingResponseSchema.Type;
+type Member = typeof MemberSchema.Type;
+type Office = typeof OfficeSchema.Type;
+type OpenHouse = typeof OpenHouseSchema.Type;
+type Destination = typeof DestinationSchema.Type;
+type PropertyField = keyof PropertyListing & string;
+type SinglePropertyField = keyof SinglePropertyListing & string;
+type MemberField = keyof Member & string;
+type OfficeField = keyof Office & string;
+type OpenHouseField = keyof OpenHouse & string;
+type DestinationField = keyof Destination & string;
 
 const LeadInputSchema = Schema.Struct({
   Culture: Schema.Literals(["en-CA", "fr-CA"]),
@@ -147,7 +186,7 @@ const SelectedDestinationResponseSchema = ODataListEnvelopeSchema(
 );
 
 export const listProperties = Effect.fn("DdfProperty.listProperties")(
-  function* (query?: ODataListQuery) {
+  function* (query?: ODataListQuery<PropertyField>) {
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/Property",
@@ -159,10 +198,10 @@ export const listProperties = Effect.fn("DdfProperty.listProperties")(
       ),
     );
   },
-);
+) as ListResource<PropertyListing, PropertyField>;
 export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
   propertyKey: string,
-  query?: ODataGetQuery,
+  query?: ODataGetQuery<SinglePropertyField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.getOData(
@@ -175,10 +214,10 @@ export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
       SinglePropertyListingResponseSchema,
     ),
   );
-});
+}) as GetResource<string, SinglePropertyListing, SinglePropertyField>;
 
 export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(
-  function* (query?: ReplicationQuery) {
+  function* (query?: ReplicationQuery<PropertyField>) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
       `${replicationPath("Property", "PropertyReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Property))}`,
@@ -189,7 +228,7 @@ export const replicateProperties = Effect.fn("DdfProperty.replicateProperties")(
 );
 export const replicatePropertiesForDestination = Effect.fn(
   "DdfProperty.replicatePropertiesForDestination",
-)(function* (destinationId: number, query?: ReplicationQuery) {
+)(function* (destinationId: number, query?: ReplicationQuery<PropertyField>) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
     `${replicationPath("Property", "PropertyReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Property))}`,
@@ -198,7 +237,7 @@ export const replicatePropertiesForDestination = Effect.fn(
   );
 });
 export const listMembers = Effect.fn("DdfMember.listMembers")(function* (
-  query?: ODataListQuery,
+  query?: ODataListQuery<MemberField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.listOData(
@@ -206,10 +245,10 @@ export const listMembers = Effect.fn("DdfMember.listMembers")(function* (
     withDefaultOrder(query, listOrder.Member),
     schemaForSelect(query, SelectedMemberResponseSchema, MemberResponseSchema),
   );
-});
+}) as ListResource<Member, MemberField>;
 export const getMember = Effect.fn("DdfMember.getMember")(function* (
   memberKey: string,
-  query?: ODataGetQuery,
+  query?: ODataGetQuery<MemberField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.getOData(
@@ -218,9 +257,9 @@ export const getMember = Effect.fn("DdfMember.getMember")(function* (
     query,
     schemaForSelect(query, SelectedMemberSchema, MemberSchema),
   );
-});
+}) as GetResource<string, Member, MemberField>;
 export const replicateMembers = Effect.fn("DdfMember.replicateMembers")(
-  function* (query?: ReplicationQuery) {
+  function* (query?: ReplicationQuery<MemberField>) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
       `${replicationPath("Member", "MemberReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Member))}`,
@@ -231,7 +270,7 @@ export const replicateMembers = Effect.fn("DdfMember.replicateMembers")(
 );
 export const replicateMembersForDestination = Effect.fn(
   "DdfMember.replicateMembersForDestination",
-)(function* (destinationId: number, query?: ReplicationQuery) {
+)(function* (destinationId: number, query?: ReplicationQuery<MemberField>) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
     `${replicationPath("Member", "MemberReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Member))}`,
@@ -240,7 +279,7 @@ export const replicateMembersForDestination = Effect.fn(
   );
 });
 export const listOffices = Effect.fn("DdfOffice.listOffices")(function* (
-  query?: ODataListQuery,
+  query?: ODataListQuery<OfficeField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.listOData(
@@ -248,10 +287,10 @@ export const listOffices = Effect.fn("DdfOffice.listOffices")(function* (
     withDefaultOrder(query, listOrder.Office),
     schemaForSelect(query, SelectedOfficeResponseSchema, OfficeResponseSchema),
   );
-});
+}) as ListResource<Office, OfficeField>;
 export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
   officeKey: string,
-  query?: ODataGetQuery,
+  query?: ODataGetQuery<OfficeField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.getOData(
@@ -260,9 +299,9 @@ export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
     query,
     schemaForSelect(query, SelectedOfficeSchema, OfficeSchema),
   );
-});
+}) as GetResource<string, Office, OfficeField>;
 export const replicateOffices = Effect.fn("DdfOffice.replicateOffices")(
-  function* (query?: ReplicationQuery) {
+  function* (query?: ReplicationQuery<OfficeField>) {
     const http = yield* DdfHttp;
     return yield* http.requestJson(
       `${replicationPath("Office", "OfficeReplication")}${encodeODataQuery(withDefaultOrder(query, syncOrder.Office))}`,
@@ -273,7 +312,7 @@ export const replicateOffices = Effect.fn("DdfOffice.replicateOffices")(
 );
 export const replicateOfficesForDestination = Effect.fn(
   "DdfOffice.replicateOfficesForDestination",
-)(function* (destinationId: number, query?: ReplicationQuery) {
+)(function* (destinationId: number, query?: ReplicationQuery<OfficeField>) {
   const http = yield* DdfHttp;
   return yield* http.requestJson(
     `${replicationPath("Office", "OfficeReplication", destinationId)}${encodeODataQuery(withDefaultOrder(query, syncOrder.Office))}`,
@@ -282,7 +321,7 @@ export const replicateOfficesForDestination = Effect.fn(
   );
 });
 export const listOpenHouses = Effect.fn("DdfOpenHouse.listOpenHouses")(
-  function* (query?: ODataListQuery) {
+  function* (query?: ODataListQuery<OpenHouseField>) {
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/OpenHouse",
@@ -294,10 +333,10 @@ export const listOpenHouses = Effect.fn("DdfOpenHouse.listOpenHouses")(
       ),
     );
   },
-);
+) as ListResource<OpenHouse, OpenHouseField>;
 export const getOpenHouse = Effect.fn("DdfOpenHouse.getOpenHouse")(function* (
   openHouseKey: string,
-  query?: ODataGetQuery,
+  query?: ODataGetQuery<OpenHouseField>,
 ) {
   const http = yield* DdfHttp;
   return yield* http.getOData(
@@ -306,9 +345,9 @@ export const getOpenHouse = Effect.fn("DdfOpenHouse.getOpenHouse")(function* (
     query,
     schemaForSelect(query, SelectedOpenHouseSchema, OpenHouseSchema),
   );
-});
+}) as GetResource<string, OpenHouse, OpenHouseField>;
 export const listDestinations = Effect.fn("DdfDestination.listDestinations")(
-  function* (query?: ODataListQuery) {
+  function* (query?: ODataListQuery<DestinationField>) {
     const http = yield* DdfHttp;
     return yield* http.listOData(
       "/odata/v1/Destination",
@@ -320,9 +359,9 @@ export const listDestinations = Effect.fn("DdfDestination.listDestinations")(
       ),
     );
   },
-);
+) as ListResource<Destination, DestinationField>;
 export const getDestination = Effect.fn("DdfDestination.getDestination")(
-  function* (destinationId: number, query?: ODataGetQuery) {
+  function* (destinationId: number, query?: ODataGetQuery<DestinationField>) {
     const http = yield* DdfHttp;
     return yield* http.getOData(
       "/odata/v1/Destination",
@@ -331,14 +370,14 @@ export const getDestination = Effect.fn("DdfDestination.getDestination")(
       schemaForSelect(query, SelectedDestinationSchema, DestinationSchema),
     );
   },
-);
+) as GetResource<number, Destination, DestinationField>;
 export const createLead = Effect.fn("DdfLead.createLead")(function* (
   input: LeadInput,
   options?: { suppressEmail?: boolean },
 ) {
   const http = yield* DdfHttp;
   const path =
-    options?.suppressEmail !== undefined
+    options?.suppressEmail === true
       ? "/v1/Lead/CreateLead?SuppressEmail=true"
       : "/v1/Lead/CreateLead";
   const body = yield* encodeLeadInputJson(input);

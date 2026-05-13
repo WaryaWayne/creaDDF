@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, DateTime, Effect, Exit, Schema } from "effect";
 import {
+  getPropertyMedia,
   normalizeMedia,
   normalizePropertyGraph,
   normalizePropertyRooms,
@@ -68,6 +69,16 @@ describe("normalizers", () => {
         assert.strictEqual(graph.media[0]?.ResourceName, "Property");
         assert.strictEqual(graph.media[0]?.ResourceRecordKey, "listing-graph");
       }),
+  );
+
+  it.effect("returns no embedded media when media fails schema decoding", () =>
+    Effect.sync(() => {
+      const decoded = getPropertyMedia({
+        Media: [media({ MediaKey: "bad", ResourceName: "Listing" as never })],
+      });
+
+      assert.deepStrictEqual(decoded, []);
+    }),
   );
 
   it.effect(
