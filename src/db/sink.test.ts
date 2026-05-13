@@ -8,6 +8,7 @@ import {
   memberRowFromRecord,
   officeRowFromRecord,
   openHouseRowFromRecord,
+  propertyRowFromGraph,
   propertyRowFromRecord,
   roomRowFromRecord,
   serializeSyncRecordError,
@@ -43,6 +44,8 @@ describe("database sync sink row mapping", () => {
       CoListOfficeNationalAssociationId: "CLONA-1",
       CoListOfficeNationalAssociationId2: "CLONA-2",
       CoListOfficeNationalAssociationId3: "CLONA-3",
+      Rooms: [asRoomRecord({ RoomKey: "room-1", RoomType: "Kitchen" })],
+      Media: [asMediaRecord({ MediaKey: "media-1", MediaURL: "https://example.test/photo.jpg" })],
     });
 
     const row = propertyRowFromRecord(property);
@@ -58,7 +61,27 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.coListAgentNationalAssociationId3, "CLANA-3");
     assert.equal(row.listOfficeNationalAssociationId, "LONA-1");
     assert.equal(row.coListOfficeNationalAssociationId3, "CLONA-3");
+    assert.deepEqual(row.rooms, [asRoomRecord({ RoomKey: "room-1", RoomType: "Kitchen" })]);
+    assert.deepEqual(row.media, [asMediaRecord({ MediaKey: "media-1", MediaURL: "https://example.test/photo.jpg" })]);
+    assert.equal(row.primaryMediaUrl, "https://example.test/photo.jpg");
     assert.equal(row.raw, property);
+  });
+
+
+  it("maps normalized property graph children onto property JSON columns", () => {
+    const property = asPropertyRecord({
+      ListingKey: "listing-1",
+      Rooms: [asRoomRecord({ RoomKey: "raw-room" })],
+      Media: [asMediaRecord({ MediaURL: "https://example.test/raw.jpg" })],
+    });
+    const rooms = [asRoomRecord({ RoomKey: "normalized-room", RoomType: "Bedroom" })];
+    const media = [asMediaRecord({ MediaKey: "normalized-media", MediaURL: "https://example.test/normalized.jpg" })];
+
+    const row = propertyRowFromGraph({ property, rooms, media });
+
+    assert.deepEqual(row.rooms, rooms);
+    assert.deepEqual(row.media, media);
+    assert.equal(row.primaryMediaUrl, "https://example.test/normalized.jpg");
   });
 
   it("derives stable room and media ownership keys", () => {

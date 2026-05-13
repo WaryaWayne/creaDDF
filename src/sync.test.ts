@@ -224,6 +224,35 @@ describe("syncProperties", () => {
       }),
   );
 
+
+  it.effect(
+    "composes caller filters before the incremental property watermark",
+    () =>
+      Effect.gen(function* () {
+        const paths: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            paths.push(path);
+            return response<T>({ value: [] });
+          },
+        });
+
+        yield* runWithHttp(
+          syncProperties({
+            mode: "incremental",
+            since: "2024-01-01T00:00:00.000Z",
+            query: { filter: "(ListAORKey in ('76','77')) and (StandardStatus eq 'Active')" },
+          }),
+          http,
+        );
+
+        assert.equal(
+          decodeURIComponent(paths[0] ?? ""),
+          "/odata/v1/Property/PropertyReplication?$filter=((ListAORKey in ('76','77')) and (StandardStatus eq 'Active')) and ModificationTimestamp gt 2024-01-01T00:00:00.000Z&$orderby=ModificationTimestamp asc,ListingKey asc",
+        );
+      }),
+  );
+
   it.effect(
     "paginates replication next links and calls property persistence sinks",
     () =>
