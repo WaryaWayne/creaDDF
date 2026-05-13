@@ -469,8 +469,8 @@ describe("selected resource decoding", () => {
         DestinationId: 123,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: "Technology Provider",
-        DestinationStatus: "Active",
+        DestinationType: 9,
+        DestinationStatus: 1,
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
         MemberKey: "member-1",
@@ -503,8 +503,8 @@ describe("selected resource decoding", () => {
         "Website Feed",
       );
       assert.equal(result.destination.MemberKey, "member-1");
-      assert.equal(result.destination.DestinationType, "Technology Provider");
-      assert.equal(result.destination.DestinationStatus, "Active");
+      assert.equal(result.destination.DestinationType, 9);
+      assert.equal(result.destination.DestinationStatus, 1);
       const destinationTimestamp = result.destination.ModificationTimestamp;
       if (!DateTime.isDateTime(destinationTimestamp) || !DateTime.isUtc(destinationTimestamp)) {
         assert.fail("expected destination ModificationTimestamp to decode as Effect DateTime.Utc");
@@ -512,14 +512,14 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("decodes OData string enum values for Destination responses", () =>
+  it.effect("decodes OData integer enum values for Destination responses", () =>
     Effect.gen(function* () {
       const destinationRecord = {
         DestinationId: 456,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: "Technology Provider",
-        DestinationStatus: "Active",
+        DestinationType: 9,
+        DestinationStatus: 1,
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
         MemberKey: "member-1",
@@ -540,8 +540,8 @@ describe("selected resource decoding", () => {
         Effect.provide(layerFor(httpHandler)),
       );
 
-      assert.equal(destination.DestinationType, "Technology Provider");
-      assert.equal(destination.DestinationStatus, "Active");
+      assert.equal(destination.DestinationType, 9);
+      assert.equal(destination.DestinationStatus, 1);
     }),
   );
 

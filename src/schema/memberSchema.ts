@@ -1,10 +1,11 @@
 import { Schema } from "effect";
 import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
+import { optionalStruct } from "./utils";
 import { ResourceNameSchema, SocialMediaTypeSchema } from "./officeSchema";
 
-export const MemberSchema = Schema.Struct({
-  MemberKey: Schema.String,
+export const MemberSchema = optionalStruct(Schema.Struct({
+  MemberKey: Schema.NullOr(Schema.String),
   MemberMlsId: Schema.Union([Schema.Null, Schema.String]),
   OfficeKey: Schema.Union([Schema.Null, Schema.String]),
   OfficeNationalAssociationId: Schema.Union([Schema.Null, Schema.String]),
@@ -30,6 +31,7 @@ export const MemberSchema = Schema.Struct({
   MemberCity: Schema.Union([Schema.Null, Schema.String]),
   MemberAOR: Schema.Union([
     Schema.Literals([
+      "Affiliate",
       "Alberta West",
       "AREA",
       "Barrie",
@@ -571,14 +573,14 @@ export const MemberSchema = Schema.Struct({
   ]),
   MemberSocialMedia: Schema.Union([
     Schema.Array(
-      Schema.Struct({
+      optionalStruct(Schema.Struct({
         SocialMediaKey: Schema.String,
         ResourceRecordKey: Schema.String,
         SocialMediaType: Schema.NullOr(SocialMediaTypeSchema),
         ModificationTimestamp: Schema.DateTimeUtcFromString,
         ResourceName: Schema.NullOr(ResourceNameSchema),
         SocialMediaUrlOrId: Schema.String,
-      }),
+      })),
     ),
     Schema.Null,
   ]),
@@ -612,6 +614,7 @@ export const MemberSchema = Schema.Struct({
       "Salesperson",
       "Firm",
       "Affiliate",
+      "GlobalAffiliate",
       "Affiliate Monthly",
       "Franchisor",
       "Guest",
@@ -629,7 +632,7 @@ export const MemberSchema = Schema.Struct({
     Schema.Null,
   ]),
   MemberEmailYN: Schema.Union([Schema.Boolean, Schema.Null]),
-});
+}));
 
 export const MemberResponseSchema = ODataListEnvelopeSchema(MemberSchema);
 

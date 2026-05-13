@@ -119,7 +119,7 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
   standardStatus: nullable(property.StandardStatus),
   propertySubType: nullable(property.PropertySubType),
   businessType: nullable(property.BusinessType),
-  propertyType: nullable(property.PropertyType),
+  propertyType: null,
   publicRemarks: nullable(property.PublicRemarks),
   listPrice: nullable(property.ListPrice),
   leaseAmount: nullable(property.LeaseAmount),
@@ -396,8 +396,8 @@ export const destinationRowFromRecord = (destination: Destination) => ({
   destinationId: nullable(destination.DestinationId),
   destinationName: nullable(destination.DestinationName),
   destinationUrl: nullable(destination.DestinationUrl),
-  destinationType: nullable(destination.DestinationType),
-  destinationStatus: nullable(destination.DestinationStatus),
+  destinationType: destination.DestinationType === null ? null : String(destination.DestinationType),
+  destinationStatus: destination.DestinationStatus === null ? null : String(destination.DestinationStatus),
   raw: destination,
 });
 
@@ -617,7 +617,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                 { discard: true },
               );
               yield* Effect.forEach(
-                socialMediaRowsFromRecord(member.MemberSocialMedia, { resource: "Member", key: memberKey }),
+                socialMediaRowsFromRecord(member.MemberSocialMedia ?? null, { resource: "Member", key: memberKey }),
                 (socialMediaRow) =>
                   Effect.gen(function* () {
                     const socialMediaKey = yield* requireKey(
@@ -684,7 +684,7 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
                   and(eq(ddfSocialMedia.resource, "Office"), eq(ddfSocialMedia.resourceKey, officeKey)),
                 );
               yield* Effect.forEach(
-                socialMediaRowsFromRecord(office.OfficeSocialMedia, { resource: "Office", key: officeKey }),
+                socialMediaRowsFromRecord(office.OfficeSocialMedia ?? null, { resource: "Office", key: officeKey }),
                 (socialMediaRow) =>
                   Effect.gen(function* () {
                     const socialMediaKey = yield* requireKey(

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
+import { optionalStruct } from "./utils";
 
 const SocialMediaTypeSchema = Schema.Literals([
   "Website",
@@ -125,17 +126,17 @@ const AorSchema = Schema.Literals([
   "Yukon",
 ]);
 
-export const SocialMediaSchema = Schema.Struct({
+export const SocialMediaSchema = optionalStruct(Schema.Struct({
   SocialMediaKey: Schema.String,
   ResourceRecordKey: Schema.String,
   SocialMediaType: Schema.NullOr(SocialMediaTypeSchema),
   ModificationTimestamp: Schema.DateTimeUtcFromString,
   ResourceName: Schema.NullOr(ResourceNameSchema),
   SocialMediaUrlOrId: Schema.String,
-});
+}));
 
-export const OfficeSchema = Schema.Struct({
-  OfficeKey: Schema.String,
+export const OfficeSchema = optionalStruct(Schema.Struct({
+  OfficeKey: Schema.NullOr(Schema.String),
   OfficeMlsId: Schema.Union([Schema.String, Schema.Null]),
   OfficeAORKey: Schema.Union([Schema.String, Schema.Null]),
   OfficeNationalAssociationId: Schema.Union([Schema.String, Schema.Null]),
@@ -161,7 +162,7 @@ export const OfficeSchema = Schema.Struct({
   OfficeAOR: Schema.NullOr(AorSchema),
   OfficeStatus: Schema.NullOr(OfficeStatusSchema),
   OfficeCountry: Schema.NullOr(CountrySchema),
-});
+}));
 
 export { SocialMediaTypeSchema, ResourceNameSchema };
 

@@ -78,6 +78,16 @@ const apiTransportError = (url: string, cause: unknown) =>
 const responseText = (res: HttpClientResponse.HttpClientResponse) =>
   res.text.pipe(Effect.orElseSucceed(() => undefined as string | undefined));
 
+const normalizeODataValue = <T>(value: T): T => {
+  if (value !== null && typeof value === "object" && "value" in value) {
+    const envelope = value as { value?: unknown };
+    if (envelope.value === null || envelope.value === undefined) {
+      envelope.value = [];
+    }
+  }
+  return value;
+};
+
 const decodeJson = <T>(
   json: unknown,
   url: string,
@@ -86,6 +96,7 @@ const decodeJson = <T>(
   if (schema === undefined) return Effect.succeed(json as T);
 
   return Schema.decodeUnknownEffect(schema)(json).pipe(
+    Effect.map(normalizeODataValue),
     Effect.mapError((cause) => {
       const issues = schemaDecodeIssuesFromCause(cause);
       return new DdfApiResponseSchemaDecodeError(

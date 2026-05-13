@@ -1,7 +1,8 @@
 import { DateTime, Schema } from "effect";
+import { optionalStruct } from "./utils";
 
 export const RoomsSchema = Schema.Array(
-  Schema.Struct({
+  optionalStruct(Schema.Struct({
     RoomKey: Schema.Union([Schema.String, Schema.Null]).annotate({
       message: "Value is invalid for RoomKey.",
       description: "A unique identifier for this record.",
@@ -234,7 +235,7 @@ export const RoomsSchema = Schema.Array(
       examples: ["Bathroom", "Bedroom", "Living room", "Primary Bedroom"],
       identifier: "RoomType",
     }),
-  }),
+  })),
 );
 
 export type RoomsType = typeof RoomsSchema.Type;

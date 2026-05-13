@@ -600,7 +600,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           Effect.gen(function* () {
             const result = yield* hydrateOne(
               "Property",
-              identifier.ListingKey,
+              identifier.ListingKey ?? "",
               (key) => getProperty(key),
             );
             hydratedRecords += 1;
@@ -635,7 +635,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         }
 
         const graph: PropertyGraph = yield* normalizePropertyGraph(
-          result.record,
+          result.record as PropertyRecord,
         );
         hydratedSuccessRecords += 1;
 
@@ -788,7 +788,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         Effect.gen(function* () {
           const result = yield* hydrateOne(
             "Member",
-            identifier.MemberKey,
+            identifier.MemberKey ?? "",
             getMember,
           );
           hydratedRecords += 1;
@@ -969,7 +969,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         Effect.gen(function* () {
           const result = yield* hydrateOne(
             "Office",
-            identifier.OfficeKey,
+            identifier.OfficeKey ?? "",
             getOffice,
           );
           hydratedRecords += 1;
@@ -1314,7 +1314,7 @@ export const pruneMissingProperties = Effect.fn(
   const masterList = yield* getPropertyMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.ListingKey),
+    masterList.flatMap((identifier) => identifier.ListingKey === null || identifier.ListingKey === undefined ? [] : [identifier.ListingKey]),
   );
 
   if (
@@ -1371,7 +1371,7 @@ export const pruneMissingMembers = Effect.fn(
   const masterList = yield* getMemberMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.MemberKey),
+    masterList.flatMap((identifier) => identifier.MemberKey === null || identifier.MemberKey === undefined ? [] : [identifier.MemberKey]),
   );
 
   if (
@@ -1396,7 +1396,7 @@ export const pruneMissingOffices = Effect.fn(
   const masterList = yield* getOfficeMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.OfficeKey),
+    masterList.flatMap((identifier) => identifier.OfficeKey === null || identifier.OfficeKey === undefined ? [] : [identifier.OfficeKey]),
   );
 
   if (

@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
+import { optionalStruct } from "./utils";
 
 const isLeapYear = (year: number) =>
   (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
@@ -32,18 +33,20 @@ const isEdmDateString = (value: string) => {
   );
 };
 
-const EdmDateString = Schema.String.pipe(
+const isDateTimeString = (value: string) => !Number.isNaN(Date.parse(value));
+
+const OpenHouseDateString = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) =>
-      isEdmDateString(value)
+      isEdmDateString(value) || isDateTimeString(value)
         ? undefined
-        : { path: [], issue: "Expected an Edm.Date string in YYYY-MM-DD format." },
+        : { path: [], issue: "Expected a date or date-time string." },
     ),
   ),
 );
 
-export const OpenHouseSchema = Schema.Struct({
-  OpenHouseKey: Schema.String.annotate({
+export const OpenHouseSchema = optionalStruct(Schema.Struct({
+  OpenHouseKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for OpenHouseKey.",
     description:
       "A unique identifier for this record from the immediate source.",
@@ -67,7 +70,7 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.NullOr(EdmDateString).annotate({
+  OpenHouseDate: Schema.NullOr(OpenHouseDateString).annotate({
     message: "Value is invalid for OpenHouseDate.",
     description: "The date on which the open house will occur.",
     title: "Open House Date",
@@ -100,6 +103,7 @@ export const OpenHouseSchema = Schema.Struct({
   OpenHouseType: Schema.Union([
     Schema.Literals([
       "Open House",
+      "Public",
       "Tour",
       "Showing",
       "Conference",
@@ -134,7 +138,7 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "LivestreamOpenHouseURL",
     examples: [null], // TODO: Add examples
   }),
-});
+}));
 
 export const OpenHouseType = OpenHouseSchema.Type;
 
