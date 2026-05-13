@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect, Exit, Schema } from "effect";
 import {
   DdfApiHttpError,
   DdfApiResponseSchemaDecodeError,
@@ -722,7 +722,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect("counts social-media-only member and office sinks as persisted records", () =>
+  it.effect("runs social-media hooks alongside compound member and office sinks", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const http = emptyHttp({
@@ -768,8 +768,18 @@ describe("syncMembers and syncOffices", () => {
       const members = yield* runWithHttp(
         syncMembers({
           sink: {
+            upsertMemberWithMedia: (member, media) =>
+              Effect.sync(() =>
+                calls.push(
+                  `member-compound:${member.MemberKey}:${media.length}`,
+                ),
+              ),
             upsertSocialMedia: (socialMedia, owner) =>
-              Effect.sync(() => calls.push(`${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`)),
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
           },
         }),
         http,
@@ -777,8 +787,17 @@ describe("syncMembers and syncOffices", () => {
       const offices = yield* runWithHttp(
         syncOffices({
           sink: {
+            upsertOfficeWithMedia: (office, media) =>
+              Effect.sync(() => {
+                const officeKey = (office as { OfficeKey: string }).OfficeKey;
+                calls.push(`office-compound:${officeKey}:${media.length}`);
+              }),
             upsertSocialMedia: (socialMedia, owner) =>
-              Effect.sync(() => calls.push(`${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`)),
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
           },
         }),
         http,
@@ -787,7 +806,9 @@ describe("syncMembers and syncOffices", () => {
       assert.equal(members.counts.persisted, 1);
       assert.equal(offices.counts.persisted, 1);
       assert.deepEqual(calls, [
+        "member-compound:member-social:0",
         "Member:member-social:member-social-1",
+        "office-compound:office-social:0",
         "Office:office-social:office-social-1",
       ]);
     }),
@@ -1330,6 +1351,33 @@ describe("master list prune helpers", () => {
         assert.deepEqual(diff.missingLocalKeys, ["stale-1"]);
         assert.deepEqual(marked, [["stale-1"]]);
       }),
+  );
+
+  it.effect("fails property master lists on invalid replication keys", () =>
+    Effect.gen(function* () {
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                { ListingKey: null },
+                { ListingKey: "master-1" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const exit = yield* Effect.exit(
+        runWithHttp(getPropertyMasterList(), http),
+      );
+
+      assert.equal(Exit.isFailure(exit), true);
+      if (Exit.isFailure(exit)) {
+        assert.match(String(exit.cause), /ListingKey/);
+      }
+    }),
   );
 
   it.effect("gets member and office master lists and calls prune sinks", () =>

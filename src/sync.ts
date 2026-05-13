@@ -164,6 +164,17 @@ const partitionReplicationIdentifiers = <Identifier>(
   return { valid, errors };
 };
 
+const failOnReplicationIdentifierErrors = <Identifier>(
+  partition: ReturnType<typeof partitionReplicationIdentifiers<Identifier>>,
+): Effect.Effect<void, DdfReplicationIdentifierKeyError> => {
+  const [firstError] = partition.errors;
+  if (firstError === undefined) return Effect.void;
+  const cause = firstError.cause;
+  return cause instanceof DdfReplicationIdentifierKeyError
+    ? Effect.fail(cause)
+    : Effect.die(cause);
+};
+
 export interface SyncOwner {
   readonly resource: SyncResource;
   readonly key: string;
@@ -500,6 +511,7 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
       "page:first",
       first.value,
     );
+    yield* failOnReplicationIdentifierErrors(firstPage);
     const out: Array<Identifier> = [...firstPage.valid];
     let next = first["@odata.nextLink"] ?? null;
 
@@ -510,6 +522,7 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
         `page:${next}`,
         page.value,
       );
+      yield* failOnReplicationIdentifierErrors(pageIdentifiers);
       out.push(...pageIdentifiers.valid);
       next = page["@odata.nextLink"] ?? null;
     }
@@ -939,20 +952,20 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
             result.record,
             memberMedia,
           );
-          return;
-        }
-        if (options?.sink?.upsertMember !== undefined)
-          yield* options.sink.upsertMember(result.record);
-        if (options?.sink?.upsertMedia !== undefined) {
-          yield* Effect.forEach(
-            memberMedia,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
-                resource: "Member",
-                key: memberKey,
-              }) ?? Effect.void,
-            { discard: true },
-          );
+        } else {
+          if (options?.sink?.upsertMember !== undefined)
+            yield* options.sink.upsertMember(result.record);
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              memberMedia,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Member",
+                  key: memberKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
@@ -1132,20 +1145,20 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
             result.record,
             officeMedia,
           );
-          return;
-        }
-        if (options?.sink?.upsertOffice !== undefined)
-          yield* options.sink.upsertOffice(result.record);
-        if (options?.sink?.upsertMedia !== undefined) {
-          yield* Effect.forEach(
-            officeMedia,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
-                resource: "Office",
-                key: officeKey,
-              }) ?? Effect.void,
-            { discard: true },
-          );
+        } else {
+          if (options?.sink?.upsertOffice !== undefined)
+            yield* options.sink.upsertOffice(result.record);
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              officeMedia,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Office",
+                  key: officeKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
