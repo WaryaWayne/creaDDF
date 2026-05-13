@@ -512,7 +512,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       get: Effect.fn("DdfDbClient.members.get")(function* (memberKey: string, options?: GetOptions<MemberField, MemberInclude>) {
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
-        
+
         const rows = yield* simpleList("members.get", ddfMembers, memberColumns, memberFieldPresets.detail, eq(ddfMembers.memberKey, memberKey), { ...options, limit: 1, select: options?.select, includeRaw: options?.includeRaw, include: undefined }, hidden);
         const included = yield* withMemberIncludes(rows, include, options?.includeRaw);
         return included[0] ?? null;
@@ -524,7 +524,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         if (filters?.officeKey !== undefined) clauses.push(eq(ddfMembers.officeKey, filters.officeKey));
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
-        
+
         const rows = yield* simpleList("members.list", ddfMembers, memberColumns, memberFieldPresets.card, clauses.length > 0 ? and(...clauses) : undefined, { ...options, include: undefined }, hidden);
         return yield* withMemberIncludes(rows, include, options?.includeRaw);
       }),
@@ -533,7 +533,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       get: Effect.fn("DdfDbClient.offices.get")(function* (officeKey: string, options?: GetOptions<OfficeField, OfficeInclude>) {
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
-        
+
         const rows = yield* simpleList("offices.get", ddfOffices, officeColumns, officeFieldPresets.detail, eq(ddfOffices.officeKey, officeKey), { ...options, limit: 1, include: undefined }, hidden);
         const included = yield* withOfficeIncludes(rows, include, options?.includeRaw);
         return included[0] ?? null;
@@ -546,7 +546,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         if (filters?.province !== undefined) clauses.push(eq(ddfOffices.province, filters.province));
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
-        
+
         const rows = yield* simpleList("offices.list", ddfOffices, officeColumns, officeFieldPresets.card, clauses.length > 0 ? and(...clauses) : undefined, { ...options, include: undefined }, hidden);
         return yield* withOfficeIncludes(rows, include, options?.includeRaw);
       }),

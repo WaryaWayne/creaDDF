@@ -144,80 +144,80 @@ export interface BaseSyncOptions {
   readonly query?: ReplicationQuery;
 }
 
-export interface PropertySyncSink {
+export interface PropertySyncSink<SinkError = never> {
   readonly upsertPropertyGraph?: (
     graph: PropertyGraph,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertProperty?: (
     property: PropertyRecord,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertRoom?: (
     room: RoomRecord,
     property: PropertyRecord,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertMedia?: (
     media: MediaRecord,
     owner: SyncOwner,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Property",
     watermark: string,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly markMissingPropertiesInactive?: (
     keys: ReadonlyArray<string>,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
 }
 
-export interface MemberSyncSink {
+export interface MemberSyncSink<SinkError = never> {
   readonly upsertMemberWithMedia?: (
     member: MemberRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertMember?: (
     member: MemberRecord,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertMedia?: (
     media: MediaRecord,
     owner: SyncOwner,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Member",
     watermark: string,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly markMissingMembersInactive?: (
     keys: ReadonlyArray<string>,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
 }
 
-export interface OfficeSyncSink {
+export interface OfficeSyncSink<SinkError = never> {
   readonly upsertOfficeWithMedia?: (
     office: OfficeRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertOffice?: (
     office: OfficeRecord,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly upsertMedia?: (
     media: MediaRecord,
     owner: SyncOwner,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Office",
     watermark: string,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly markMissingOfficesInactive?: (
     keys: ReadonlyArray<string>,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
 }
 
-export interface OpenHouseSyncSink {
+export interface OpenHouseSyncSink<SinkError = never> {
   readonly upsertOpenHouse?: (
     openHouse: OpenHouseRecord,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "OpenHouse",
     watermark: string,
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, SinkError>;
 }
 
 export interface OpenHouseListingScope {
@@ -230,22 +230,22 @@ export interface OpenHouseDateWindow {
   readonly endDate?: string;
 }
 
-export interface PropertySyncOptions extends BaseSyncOptions {
-  readonly sink?: PropertySyncSink;
+export interface PropertySyncOptions<SinkError = never> extends BaseSyncOptions {
+  readonly sink?: PropertySyncSink<SinkError>;
 }
 
-export interface MemberSyncOptions extends BaseSyncOptions {
-  readonly sink?: MemberSyncSink;
+export interface MemberSyncOptions<SinkError = never> extends BaseSyncOptions {
+  readonly sink?: MemberSyncSink<SinkError>;
 }
 
-export interface OfficeSyncOptions extends BaseSyncOptions {
-  readonly sink?: OfficeSyncSink;
+export interface OfficeSyncOptions<SinkError = never> extends BaseSyncOptions {
+  readonly sink?: OfficeSyncSink<SinkError>;
 }
 
-export interface OpenHouseSyncOptions {
+export interface OpenHouseSyncOptions<SinkError = never> {
   readonly query?: ODataListQuery;
   readonly concurrency?: number;
-  readonly sink?: OpenHouseSyncSink;
+  readonly sink?: OpenHouseSyncSink<SinkError>;
   readonly listingScopes?: ReadonlyArray<OpenHouseListingScope>;
   readonly dateWindow?: OpenHouseDateWindow;
   readonly listingChunkSize?: number;
@@ -479,10 +479,10 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
   return { identifiers, errors };
 });
 
-const runPersist = Effect.fn("DdfSync.runPersist")(function* (
+const runPersist = Effect.fn("DdfSync.runPersist")(function* <PersistError>(
   resource: SyncResource,
   key: string,
-  persist: Effect.Effect<void, unknown>,
+  persist: Effect.Effect<void, PersistError>,
 ) {
   const exit = yield* Effect.exit(persist);
   if (Exit.isSuccess(exit)) return null;
@@ -532,7 +532,7 @@ const trackSyncMetrics = (counts: SyncCounts) =>
   );
 
 export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
-  function* (options?: PropertySyncOptions) {
+  function* <SinkError = never>(options?: PropertySyncOptions<SinkError>) {
     const concurrency = boundedConcurrency(options?.concurrency);
     const query = incrementalQuery(options);
     yield* Effect.logInfo(
@@ -718,8 +718,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
   },
 );
 
-export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
-  options?: MemberSyncOptions,
+export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
+  SinkError = never,
+>(
+  options?: MemberSyncOptions<SinkError>,
 ) {
   const concurrency = boundedConcurrency(options?.concurrency);
   const query = incrementalQuery(options);
@@ -897,8 +899,10 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* (
   };
 });
 
-export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* (
-  options?: OfficeSyncOptions,
+export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
+  SinkError = never,
+>(
+  options?: OfficeSyncOptions<SinkError>,
 ) {
   const concurrency = boundedConcurrency(options?.concurrency);
   const query = incrementalQuery(options);
@@ -1101,7 +1105,9 @@ const openHouseDateWindowFilter = (window: OpenHouseDateWindow | undefined) => {
     : `${start} and OpenHouseDate le ${window.endDate}`;
 };
 
-const openHouseQueriesForOptions = (options: OpenHouseSyncOptions | undefined) => {
+const openHouseQueriesForOptions = <SinkError>(
+  options: OpenHouseSyncOptions<SinkError> | undefined,
+) => {
   const baseQuery = options?.query ?? {};
   const dateFilter = openHouseDateWindowFilter(options?.dateWindow);
   if (options?.listingScopes === undefined) {
@@ -1120,7 +1126,7 @@ const openHouseQueriesForOptions = (options: OpenHouseSyncOptions | undefined) =
 };
 
 export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
-  function* (options?: OpenHouseSyncOptions) {
+  function* <SinkError = never>(options?: OpenHouseSyncOptions<SinkError>) {
     const concurrency = boundedConcurrency(options?.concurrency);
     const queries = openHouseQueriesForOptions(options);
     yield* Effect.logInfo("OpenHouse sync: collecting and persisting pages", {
@@ -1298,9 +1304,12 @@ export const diffLocalKeysAgainstMasterList = (
 
 export const pruneMissingProperties = Effect.fn(
   "DdfPropertySync.pruneMissingProperties",
-)(function* (
+)(function* <SinkError = never>(
   localKeys: ReadonlyArray<string>,
-  options?: Pick<PropertySyncOptions, "destinationId" | "query" | "sink">,
+  options?: Pick<
+    PropertySyncOptions<SinkError>,
+    "destinationId" | "query" | "sink"
+  >,
 ) {
   const masterList = yield* getPropertyMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
@@ -1352,9 +1361,12 @@ export const getOfficeMasterList = Effect.fn(
 
 export const pruneMissingMembers = Effect.fn(
   "DdfMemberSync.pruneMissingMembers",
-)(function* (
+)(function* <SinkError = never>(
   localKeys: ReadonlyArray<string>,
-  options?: Pick<MemberSyncOptions, "destinationId" | "query" | "sink">,
+  options?: Pick<
+    MemberSyncOptions<SinkError>,
+    "destinationId" | "query" | "sink"
+  >,
 ) {
   const masterList = yield* getMemberMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
@@ -1374,9 +1386,12 @@ export const pruneMissingMembers = Effect.fn(
 
 export const pruneMissingOffices = Effect.fn(
   "DdfOfficeSync.pruneMissingOffices",
-)(function* (
+)(function* <SinkError = never>(
   localKeys: ReadonlyArray<string>,
-  options?: Pick<OfficeSyncOptions, "destinationId" | "query" | "sink">,
+  options?: Pick<
+    OfficeSyncOptions<SinkError>,
+    "destinationId" | "query" | "sink"
+  >,
 ) {
   const masterList = yield* getOfficeMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(

@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { DateTime, Effect } from "effect";
+import { Data, DateTime, Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import type {
   MemberSyncOptions,
@@ -26,6 +26,21 @@ import {
   saveDatabaseWatermark,
 } from "./db/watermarks";
 
+export class DdfDatabaseSyncError extends Data.TaggedError(
+  "DdfDatabaseSyncError",
+)<{
+  readonly operation: "loadOpenHouseListingScopes" | "recordRun";
+  readonly cause: unknown;
+}> {
+  override get message() {
+    return `DDF database sync operation failed: ${this.operation}`;
+  }
+}
+
+const mapDatabaseSyncError =
+  (operation: DdfDatabaseSyncError["operation"]) => (cause: unknown) =>
+    new DdfDatabaseSyncError({ operation, cause });
+
 export interface SyncDdfDatabaseOnceOptions {
   readonly runMigrations?: boolean;
   readonly destinationId?: number;
@@ -48,8 +63,15 @@ export interface SyncDdfDatabaseDependencies {
   readonly saveWatermark: typeof saveDatabaseWatermark;
   readonly runMigrations: typeof runDdfDatabaseMigrations;
   readonly makeSink: typeof makeDdfDatabaseSyncSink;
-  readonly loadOpenHouseListingScopes: () => Effect.Effect<ReadonlyArray<OpenHouseListingScope>, unknown, DdfDatabase>;
-  readonly recordRun: (summary: SyncDdfDatabaseOnceSummary, destinationId?: number) => Effect.Effect<void, unknown, DdfDatabase>;
+  readonly loadOpenHouseListingScopes: () => Effect.Effect<
+    ReadonlyArray<OpenHouseListingScope>,
+    DdfDatabaseSyncError,
+    DdfDatabase
+  >;
+  readonly recordRun: (
+    summary: SyncDdfDatabaseOnceSummary,
+    destinationId?: number,
+  ) => Effect.Effect<void, DdfDatabaseSyncError, DdfDatabase>;
 }
 
 export interface DdfDatabaseResourceSummary {
@@ -112,7 +134,8 @@ const loadOpenHouseListingScopes = Effect.fn(
       listingId: ddfProperties.listingId,
     })
     .from(ddfProperties)
-    .where(eq(ddfProperties.active, true));
+    .where(eq(ddfProperties.active, true))
+    .pipe(Effect.mapError(mapDatabaseSyncError("loadOpenHouseListingScopes")));
 });
 
 export interface DatabaseSyncWatermarks {
@@ -199,7 +222,8 @@ const recordRunSummary = Effect.fn("DdfDatabaseSync.recordRunSummary")(
           status: summary.status,
           summary,
         },
-      });
+      })
+      .pipe(Effect.mapError(mapDatabaseSyncError("recordRun")));
   },
 );
 

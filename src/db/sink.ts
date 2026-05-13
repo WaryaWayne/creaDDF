@@ -517,10 +517,10 @@ export const serializeSyncRecordError = (
 const mapSinkError = (operation: string) => (cause: unknown) =>
   new DdfDatabaseSinkError({ operation, cause });
 
-export type DdfDatabaseSyncSink = PropertySyncSink &
-  MemberSyncSink &
-  OfficeSyncSink &
-  OpenHouseSyncSink & {
+export type DdfDatabaseSyncSink = PropertySyncSink<DdfDatabaseSinkError> &
+  MemberSyncSink<DdfDatabaseSinkError> &
+  OfficeSyncSink<DdfDatabaseSinkError> &
+  OpenHouseSyncSink<DdfDatabaseSinkError> & {
     readonly upsertDestination: (
       destination: unknown,
     ) => Effect.Effect<void, DdfDatabaseSinkError>;
