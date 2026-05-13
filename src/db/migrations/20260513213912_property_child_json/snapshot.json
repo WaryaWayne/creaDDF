@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d5e5d306-7bc8-49f9-9c70-9217441d947e",
+  "id": "49d14817-6fbf-4482-9ed5-82cfa7aa05df",
   "prevIds": [
-    "ebe65c4e-da09-4b63-8a78-7c7e3ae7ca1b"
+    "d5e5d306-7bc8-49f9-9c70-9217441d947e"
   ],
   "ddl": [
     {
@@ -956,6 +956,19 @@
       "table": "ddf_members"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "media",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_members"
+    },
+    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -1276,6 +1289,19 @@
       "generated": null,
       "identity": null,
       "name": "office_status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_offices"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "media",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_offices"

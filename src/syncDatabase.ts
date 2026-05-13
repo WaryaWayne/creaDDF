@@ -67,6 +67,13 @@ export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorK
   const raw = value?.trim() ?? "";
   if (raw.length === 0) return [];
 
+  if (raw.startsWith("{")) {
+    throw new DdfChosenAorKeysConfigError({ value: raw, reason: "expected a JSON array or comma-separated list" });
+  }
+  if (!raw.startsWith("[") && (raw.includes("[") || raw.includes("]"))) {
+    throw new DdfChosenAorKeysConfigError({ value: raw, reason: "brackets are only allowed around a valid JSON array" });
+  }
+
   const values: ReadonlyArray<unknown> = raw.startsWith("[")
     ? (() => {
         try {
@@ -145,6 +152,11 @@ const withAorFilter = <Query extends { readonly filter?: string } | undefined>(
     filter: andFilters([filter, query?.filter]),
   } as Query;
 };
+
+// TODO(database-sync-watermarks): keep reset-on-AOR-change documented for this PR.
+// A safer cursor design should cap each resource cursor at that resource's sync start
+// timestamp, subtract a small lookback window to tolerate source clock/query races,
+// and persist richer DB runtime metadata before introducing scope-aware watermarks.
 
 export interface SyncDdfDatabaseOnceOptions {
   readonly runMigrations?: boolean;

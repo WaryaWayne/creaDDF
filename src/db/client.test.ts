@@ -4,6 +4,8 @@ import {
   DdfDbClientValidationError,
   coListAgentKeysFromRow,
   coListOfficeKeysFromRow,
+  embeddedMediaRows,
+  embeddedRoomRows,
   groupRowsBy,
   projectionPlan,
   propertyFieldPresets,
@@ -14,6 +16,7 @@ describe("database read client helpers", () => {
   it("keeps website field presets free of raw payloads by default", () => {
     assert.deepEqual(propertyFieldPresets.card, [
       "listingKey",
+      "primaryMediaUrl",
       "listPrice",
       "city",
       "province",
@@ -72,6 +75,43 @@ describe("database read client helpers", () => {
 
     assert.deepEqual(coListAgentKeysFromRow(propertyRow), ["agent-2", "agent-3"]);
     assert.deepEqual(coListOfficeKeysFromRow(propertyRow), ["office-2", "office-3"]);
+  });
+
+  it("builds property, member, and office media includes from embedded JSONB columns", () => {
+    const propertyRows = [{
+      listingKey: "listing-1",
+      media: [{ MediaKey: "property-media-1", MediaURL: "https://example.test/property.jpg", Order: 2 }],
+    }];
+    const memberRows = [{
+      memberKey: "member-1",
+      media: [{ MediaKey: "member-media-1", MediaURL: "https://example.test/member.jpg", Order: 1 }],
+    }];
+    const officeRows = [{
+      officeKey: "office-1",
+      media: [{ MediaKey: "office-media-1", MediaURL: "https://example.test/office.jpg", Order: 3 }],
+    }];
+
+    assert.deepEqual(embeddedMediaRows(propertyRows, "listingKey", "Property").get("listing-1"), [
+      { mediaKey: "property-media-1", mediaUrl: "https://example.test/property.jpg", sortOrder: 2 },
+    ]);
+    assert.deepEqual(embeddedMediaRows(memberRows, "memberKey", "Member").get("member-1"), [
+      { mediaKey: "member-media-1", mediaUrl: "https://example.test/member.jpg", sortOrder: 1 },
+    ]);
+    assert.deepEqual(embeddedMediaRows(officeRows, "officeKey", "Office").get("office-1"), [
+      { mediaKey: "office-media-1", mediaUrl: "https://example.test/office.jpg", sortOrder: 3 },
+    ]);
+  });
+
+  it("builds property room includes from embedded JSONB columns", () => {
+    const propertyRows = [{
+      listingKey: "listing-1",
+      listingId: "L1",
+      rooms: [{ RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main" }],
+    }];
+
+    assert.deepEqual(embeddedRoomRows(propertyRows).get("listing-1"), [
+      { roomKey: "room-1", roomType: "Kitchen", roomLevel: "Main" },
+    ]);
   });
 
   it.effect("validates pagination options as typed Effect failures", () =>

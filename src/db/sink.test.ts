@@ -84,6 +84,17 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.primaryMediaUrl, "https://example.test/first.jpg");
   });
 
+
+  it("maps member and office media into embedded JSONB rows", () => {
+    const memberMedia = [asMediaRecord({ MediaKey: "member-media-1", MediaURL: "https://example.test/member.jpg", Order: 1 })];
+    const officeMedia = [asMediaRecord({ MediaKey: "office-media-1", MediaURL: "https://example.test/office.jpg", Order: 1 })];
+
+    assert.deepEqual(memberRowFromRecord(asMemberRecord({ MemberKey: "member-1" }), memberMedia).media, memberMedia);
+    assert.deepEqual(officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" }), officeMedia).media, officeMedia);
+    assert.equal(memberRowFromRecord(asMemberRecord({ MemberKey: "member-1" })).media, null);
+    assert.equal(officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" })).media, null);
+  });
+
   it("derives stable room and media ownership keys", () => {
     const property = asPropertyRecord({ ListingKey: "listing-1" });
     const room = asRoomRecord({ RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main level" });

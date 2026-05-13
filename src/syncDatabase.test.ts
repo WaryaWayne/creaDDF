@@ -22,7 +22,6 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.equal("since" in options.openHouse, false);
   });
 
-
   it("adds chosen AOR filters to replication resources without touching OpenHouse query", () => {
     const options = databaseSyncOptionsFromWatermarks(
       {
@@ -60,6 +59,20 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.deepEqual(parseChosenAorKeys("[76,77,93]"), ["76", "77", "93"]);
     assert.deepEqual(parseChosenAorKeys('["76","77","93"]'), ["76", "77", "93"]);
     assert.deepEqual(parseChosenAorKeys(""), []);
+  });
+
+  it("rejects malformed chosen AOR syntax", () => {
+    for (const value of [
+      '{"0":"76"}',
+      "76]",
+      "[76",
+      "76,,77",
+      '["76",{}]',
+      "[null]",
+      "[Infinity]",
+    ]) {
+      assert.throws(() => parseChosenAorKeys(value), /Invalid CREA_CHOSEN_AOR_KEYS/);
+    }
   });
 
   it.effect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
