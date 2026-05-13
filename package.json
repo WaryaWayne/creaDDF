@@ -14,7 +14,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "pnpm run typecheck && tsc --noCheck && cp -R src/db/migrations dist/db/migrations",
+    "build": "pnpm run typecheck && tsc --noCheck && rm -rf dist/db/migrations && mkdir -p dist/db && cp -R src/db/migrations dist/db/migrations",
     "test": "pnpm run typecheck && vitest run",
     "check:metadata": "node scripts/check-metadata-parity.mjs",
     "prepare": "effect-language-service patch",
