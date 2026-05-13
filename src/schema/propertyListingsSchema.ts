@@ -2,9 +2,8 @@ import { DateTime, Effect, Schema } from "effect";
 import { RoomsSchema } from "./roomsSchema";
 import { MediaSchema } from "./mediaSchema";
 import { ODataListEnvelopeSchema } from "./odata";
-import { optionalStruct } from "./utils";
 
-export const PropertyListingSchema = optionalStruct(Schema.Struct({
+export const PropertyListingSchema = Schema.Struct({
   ListingKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for ListingKey.",
     description: "A unique identifier for this record.",
@@ -3397,7 +3396,7 @@ export const PropertyListingSchema = optionalStruct(Schema.Struct({
       "A collection of media resources (photos, videos, documents, etc.) associated with a Property, Member, or Office.",
     message: "Expected an array of Media objects.",
   }),
-}));
+});
 
 export const PropertyListingValidationSchema: ReturnType<
   typeof Schema.toStandardSchemaV1<typeof PropertyListingSchema>

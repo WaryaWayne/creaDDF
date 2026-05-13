@@ -1,8 +1,7 @@
 import { DateTime, Schema } from "effect"
-import { optionalStruct } from "./utils";
 
 export const MediaSchema = Schema.Array(
-  optionalStruct(Schema.Struct({
+  Schema.Struct({
     MediaKey: Schema.Union([Schema.String, Schema.Null]).annotate({
       message: "Value is invalid for MediaKey.",
       description:
@@ -111,7 +110,7 @@ export const MediaSchema = Schema.Array(
       identifier: "MediaCategory",
       examples: ["Floorplan", "Member Photo", "Office Logo", "Property Photo"],
     }),
-  })),
+  }),
 )
 
 export type MediaType = typeof MediaSchema.Type

@@ -1,5 +1,4 @@
 import { Schema } from "effect"
-import { optionalStruct } from "./utils"
 
 const NullableString = Schema.NullOr(Schema.String)
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString)
@@ -21,20 +20,20 @@ export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
 
 export const ODataUnknownListEnvelopeSchema = ODataListEnvelopeSchema(Schema.Unknown)
 
-export const PropertyReplicationIdentifierSchema = optionalStruct(Schema.Struct({
-  ListingKey: NullableString,
+export const PropertyReplicationIdentifierSchema = Schema.Struct({
+  ListingKey: Schema.optionalKey(NullableString),
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
-}))
+})
 
-export const MemberReplicationIdentifierSchema = optionalStruct(Schema.Struct({
-  MemberKey: NullableString,
+export const MemberReplicationIdentifierSchema = Schema.Struct({
+  MemberKey: Schema.optionalKey(NullableString),
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
-}))
+})
 
-export const OfficeReplicationIdentifierSchema = optionalStruct(Schema.Struct({
-  OfficeKey: NullableString,
+export const OfficeReplicationIdentifierSchema = Schema.Struct({
+  OfficeKey: Schema.optionalKey(NullableString),
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
-}))
+})
 
 export const PropertyReplicationIdentifierResponseSchema = ODataListEnvelopeSchema(
   PropertyReplicationIdentifierSchema,

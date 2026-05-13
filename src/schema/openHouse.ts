@@ -1,6 +1,5 @@
 import { Option, Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
-import { optionalStruct } from "./utils";
 
 const isLeapYear = (year: number) =>
   (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
@@ -56,7 +55,7 @@ const OpenHouseDateString = Schema.String.pipe(
   ),
 );
 
-export const OpenHouseSchema = optionalStruct(Schema.Struct({
+export const OpenHouseSchema = Schema.Struct({
   OpenHouseKey: Schema.NullOr(Schema.String).annotate({
     message: "Value is invalid for OpenHouseKey.",
     description:
@@ -149,7 +148,7 @@ export const OpenHouseSchema = optionalStruct(Schema.Struct({
     identifier: "LivestreamOpenHouseURL",
     examples: [null], // TODO: Add examples
   }),
-}));
+});
 
 export const OpenHouseType = OpenHouseSchema.Type;
 

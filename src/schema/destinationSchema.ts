@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { ODataListEnvelopeSchema } from "./odata";
-import { optionalStruct } from "./utils";
 
 const NullableString = Schema.NullOr(Schema.String);
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString);
@@ -9,7 +8,7 @@ const NullableDestinationType = Schema.NullOr(
 );
 const NullableDestinationStatus = Schema.NullOr(Schema.Literals([1, 2, 3]));
 
-export const DestinationSchema = optionalStruct(Schema.Struct({
+export const DestinationSchema = Schema.Struct({
   DestinationId: Schema.Number,
   DestinationName: NullableString,
   DestinationUrl: NullableString,
@@ -21,7 +20,7 @@ export const DestinationSchema = optionalStruct(Schema.Struct({
   OriginalEntryTimestamp: NullableDateTime,
   ModificationTimestamp: NullableDateTime,
   FullNSP: Schema.Boolean,
-}));
+});
 
 export const DestinationResponseSchema =
   ODataListEnvelopeSchema(DestinationSchema);
