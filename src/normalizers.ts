@@ -1,5 +1,5 @@
-import { Effect } from "effect";
-import type { MediaType } from "./schema/mediaSchema";
+import { Effect, Option, Schema } from "effect";
+import { MediaSchema, type MediaType } from "./schema/mediaSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 
 type UnknownRecord = Record<string, unknown>;
@@ -15,14 +15,17 @@ type PropertyWithNestedResources = ResourceWithMedia & {
 
 const emptyRooms: RoomsType = [];
 const emptyMedia: MediaType = [];
+const decodeMedia = Schema.decodeUnknownOption(MediaSchema);
 
 export const getPropertyRooms = (
   property: PropertyWithNestedResources,
 ): RoomsType =>
   Array.isArray(property.Rooms) ? (property.Rooms as RoomsType) : emptyRooms;
 
-export const getPropertyMedia = (property: ResourceWithMedia): MediaType =>
-  Array.isArray(property.Media) ? (property.Media as MediaType) : emptyMedia;
+export const getPropertyMedia = (property: ResourceWithMedia): MediaType => {
+  const decoded = decodeMedia(property.Media);
+  return Option.isSome(decoded) ? decoded.value : emptyMedia;
+};
 
 export const getMemberMedia = Effect.fn("getMemberMedia")(function* (
   member: ResourceWithMedia,

@@ -338,7 +338,7 @@ export const createLead = Effect.fn("DdfLead.createLead")(function* (
 ) {
   const http = yield* DdfHttp;
   const path =
-    options?.suppressEmail !== undefined
+    options?.suppressEmail === true
       ? "/v1/Lead/CreateLead?SuppressEmail=true"
       : "/v1/Lead/CreateLead";
   const body = yield* encodeLeadInputJson(input);

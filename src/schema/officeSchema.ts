@@ -17,6 +17,7 @@ const ResourceNameSchema = Schema.Literals(["Office", "Member", "Property"]);
 
 const OfficeTypeSchema = Schema.Literals([
   "Affiliate",
+  "Real Estate",
   "Firm",
   "Territorial Association",
   "Franchisor",
@@ -62,6 +63,7 @@ const StateOrProvinceSchema = Schema.Literals([
 ]);
 
 const AorSchema = Schema.Literals([
+  "Affiliate",
   "Alberta West",
   "AREA",
   "Barrie",
@@ -126,12 +128,12 @@ const AorSchema = Schema.Literals([
 ]);
 
 export const SocialMediaSchema = Schema.Struct({
-  SocialMediaKey: Schema.String,
-  ResourceRecordKey: Schema.String,
+  SocialMediaKey: Schema.NullOr(Schema.String),
+  ResourceRecordKey: Schema.NullOr(Schema.String),
   SocialMediaType: Schema.NullOr(SocialMediaTypeSchema),
   ModificationTimestamp: Schema.DateTimeUtcFromString,
   ResourceName: Schema.NullOr(ResourceNameSchema),
-  SocialMediaUrlOrId: Schema.String,
+  SocialMediaUrlOrId: Schema.NullOr(Schema.String),
 });
 
 export const OfficeSchema = Schema.Struct({

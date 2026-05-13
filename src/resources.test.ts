@@ -469,8 +469,8 @@ describe("selected resource decoding", () => {
         DestinationId: 123,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: "Technology Provider",
-        DestinationStatus: "Active",
+        DestinationType: 9,
+        DestinationStatus: 1,
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
         MemberKey: "member-1",
@@ -512,14 +512,14 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("decodes OData string enum values for Destination responses", () =>
+  it.effect("decodes OData integer enum values for Destination responses", () =>
     Effect.gen(function* () {
       const destinationRecord = {
         DestinationId: 456,
         DestinationName: "Website Feed",
         DestinationUrl: "https://example.test",
-        DestinationType: "Technology Provider",
-        DestinationStatus: "Active",
+        DestinationType: 9,
+        DestinationStatus: 1,
         MemberFirstName: "Ada",
         MemberLastName: "Lovelace",
         MemberKey: "member-1",
@@ -720,6 +720,31 @@ describe("lead resource", () => {
 
       assert.deepEqual(result, { success: true });
       assert.equal(requests[0]?.url, "/v1/Lead/CreateLead?SuppressEmail=true");
+      assert.equal(requests[0]?.init?.body, leadBody);
+    }),
+  );
+
+  it.effect("does not suppress lead email when explicitly disabled", () =>
+    Effect.gen(function* () {
+      const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
+      const response = <T>(value: unknown) => Effect.succeed(value as T);
+      const http: DdfHttpApi = {
+        requestJson: <T = unknown>(url: string, init?: DdfRequestOptions) => {
+          requests.push({ url, init });
+          return response<T>({ success: true });
+        },
+        listOData: <T = unknown>() => response<T>({ value: [] }),
+        getOData: <T = unknown>() => response<T>({ value: [] }),
+        replicateIdentifiers: <T = unknown>() => response<T>({ value: [] }),
+        paginateOData: () => Effect.succeed([]),
+      };
+
+      const result = yield* createLead(leadInput, {
+        suppressEmail: false,
+      }).pipe(Effect.provideService(DdfHttp, http));
+
+      assert.deepEqual(result, { success: true });
+      assert.equal(requests[0]?.url, "/v1/Lead/CreateLead");
       assert.equal(requests[0]?.init?.body, leadBody);
     }),
   );

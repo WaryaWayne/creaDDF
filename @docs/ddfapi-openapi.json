@@ -7453,13 +7453,4 @@
       ]
     }
   ]
-};
-    Redoc.init(model, {
-        hideLogo: true,
-        hideDownloadButton: true,
-        theme:{
-            spacing:{
-                sectionVertical: 5,
-            }
-        },
-    }, document.getElementById('redoc-container'))
+}

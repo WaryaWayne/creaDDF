@@ -572,12 +572,12 @@ export const MemberSchema = Schema.Struct({
   MemberSocialMedia: Schema.Union([
     Schema.Array(
       Schema.Struct({
-        SocialMediaKey: Schema.String,
-        ResourceRecordKey: Schema.String,
+        SocialMediaKey: Schema.NullOr(Schema.String),
+        ResourceRecordKey: Schema.NullOr(Schema.String),
         SocialMediaType: Schema.NullOr(SocialMediaTypeSchema),
         ModificationTimestamp: Schema.DateTimeUtcFromString,
         ResourceName: Schema.NullOr(ResourceNameSchema),
-        SocialMediaUrlOrId: Schema.String,
+        SocialMediaUrlOrId: Schema.NullOr(Schema.String),
       }),
     ),
     Schema.Null,
