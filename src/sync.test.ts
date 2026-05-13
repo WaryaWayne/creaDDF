@@ -431,6 +431,59 @@ describe("syncProperties", () => {
     }),
   );
 
+  it.effect("reports missing property replication keys without hydrating empty keys", () =>
+    Effect.gen(function* () {
+      const requestedKeys: Array<string> = [];
+      const savedWatermarks: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                {
+                  ListingKey: null,
+                  ModificationTimestamp: "2024-05-01T00:00:00.000Z",
+                },
+                {
+                  ModificationTimestamp: "2024-05-02T00:00:00.000Z",
+                },
+                {
+                  ListingKey: "listing-1",
+                  ModificationTimestamp: "2024-05-03T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(_path: string, key: string | number) => {
+          requestedKeys.push(String(key));
+          return response<T>(propertyFor(String(key)));
+        },
+      });
+
+      const result = yield* runWithHttp(
+        syncProperties({
+          sink: {
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => savedWatermarks.push(watermark)),
+          },
+        }),
+        http,
+      );
+
+      assert.deepEqual(requestedKeys, ["listing-1"]);
+      assert.deepEqual(result.errors.map((error) => error.key), [
+        "missing:ListingKey",
+        "missing:ListingKey",
+      ]);
+      assert.equal(result.counts.hydrated, 1);
+      assert.equal(result.counts.failed, 2);
+      assert.equal(result.nextWatermark, "2024-05-03T00:00:00.000Z");
+      assert.deepEqual(savedWatermarks, ["2024-05-03T00:00:00.000Z"]);
+    }),
+  );
+
   it.effect(
     "does not save a property watermark past a persistence failure",
     () =>
@@ -621,6 +674,78 @@ describe("syncMembers and syncOffices", () => {
           "office-watermark:2024-03-01T00:00:00.000Z",
         ]);
       }),
+  );
+
+  it.effect("reports missing member and office replication keys without hydrating empty keys", () =>
+    Effect.gen(function* () {
+      const requested: Array<string> = [];
+      const calls: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+            return response<T>({
+              value: [
+                { MemberKey: null, ModificationTimestamp: "2024-09-01T00:00:00.000Z" },
+                { MemberKey: "member-1", ModificationTimestamp: "2024-09-02T00:00:00.000Z" },
+              ],
+            });
+          }
+          if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+            return response<T>({
+              value: [
+                { ModificationTimestamp: "2024-10-01T00:00:00.000Z" },
+                { OfficeKey: "office-1", ModificationTimestamp: "2024-10-02T00:00:00.000Z" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) => {
+          requested.push(`${path}:${String(key)}`);
+          if (path === "/odata/v1/Member")
+            return response<T>({ MemberKey: key, Media: [] });
+          return response<T>({ OfficeKey: key, Media: [] });
+        },
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({
+          sink: {
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
+          },
+        }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({
+          sink: {
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
+          },
+        }),
+        http,
+      );
+
+      assert.deepEqual(requested, [
+        "/odata/v1/Member:member-1",
+        "/odata/v1/Office:office-1",
+      ]);
+      assert.deepEqual(members.errors.map((error) => error.key), [
+        "missing:MemberKey",
+      ]);
+      assert.deepEqual(offices.errors.map((error) => error.key), [
+        "missing:OfficeKey",
+      ]);
+      assert.equal(members.counts.hydrated, 1);
+      assert.equal(offices.counts.hydrated, 1);
+      assert.equal(members.nextWatermark, "2024-09-02T00:00:00.000Z");
+      assert.equal(offices.nextWatermark, "2024-10-02T00:00:00.000Z");
+      assert.deepEqual(calls, [
+        "member-watermark:2024-09-02T00:00:00.000Z",
+        "office-watermark:2024-10-02T00:00:00.000Z",
+      ]);
+    }),
   );
 
   it.effect("keeps member and office watermarks before failed records", () =>

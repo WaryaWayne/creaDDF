@@ -502,6 +502,17 @@ const hydrateOne = Effect.fn("DdfSync.hydrateOne")(function* <Record>(
   };
 });
 
+const missingReplicationKeyError = (
+  resource: SyncResource,
+  keyName: string,
+) =>
+  makeRecordError(
+    resource,
+    `missing:${keyName}`,
+    "hydrate",
+    new Error(`Missing ${keyName} in replication identifier`),
+  );
+
 const syncCounts = (
   identifiers: number,
   hydrated: number,
@@ -598,9 +609,19 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         batch,
         (identifier) =>
           Effect.gen(function* () {
+            if (identifier.ListingKey === null || identifier.ListingKey === undefined) {
+              return {
+                identifier,
+                result: {
+                  record: null,
+                  error: missingReplicationKeyError("Property", "ListingKey"),
+                },
+                affectsWatermark: false,
+              };
+            }
             const result = yield* hydrateOne(
               "Property",
-              identifier.ListingKey ?? "",
+              identifier.ListingKey,
               (key) => getProperty(key),
             );
             hydratedRecords += 1;
@@ -616,16 +637,16 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
                 total: identifiers.length,
               });
             }
-            return { identifier, result };
+            return { identifier, result, affectsWatermark: true };
           }),
         { concurrency },
       );
 
-      for (const { identifier, result } of hydrated) {
+      for (const { affectsWatermark, identifier, result } of hydrated) {
         processedRecords += 1;
         if (result.error !== null) {
           errors.push(result.error);
-          failedWatermarks.push(identifier.ModificationTimestamp);
+          if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
           yield* logPersistProgress(processedRecords);
           continue;
         }
@@ -786,9 +807,19 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
+          if (identifier.MemberKey === null || identifier.MemberKey === undefined) {
+            return {
+              identifier,
+              result: {
+                record: null,
+                error: missingReplicationKeyError("Member", "MemberKey"),
+              },
+              affectsWatermark: false,
+            };
+          }
           const result = yield* hydrateOne(
             "Member",
-            identifier.MemberKey ?? "",
+            identifier.MemberKey,
             getMember,
           );
           hydratedRecords += 1;
@@ -804,16 +835,16 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
               total: identifiers.length,
             });
           }
-          return { identifier, result };
+          return { identifier, result, affectsWatermark: true };
         }),
       { concurrency },
     );
 
-    for (const { identifier, result } of hydrated) {
+    for (const { affectsWatermark, identifier, result } of hydrated) {
       processedRecords += 1;
       if (result.error !== null) {
         errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
+        if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
         yield* logPersistProgress(processedRecords);
         continue;
       }
@@ -967,9 +998,19 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
       batch,
       (identifier) =>
         Effect.gen(function* () {
+          if (identifier.OfficeKey === null || identifier.OfficeKey === undefined) {
+            return {
+              identifier,
+              result: {
+                record: null,
+                error: missingReplicationKeyError("Office", "OfficeKey"),
+              },
+              affectsWatermark: false,
+            };
+          }
           const result = yield* hydrateOne(
             "Office",
-            identifier.OfficeKey ?? "",
+            identifier.OfficeKey,
             getOffice,
           );
           hydratedRecords += 1;
@@ -985,16 +1026,16 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
               total: identifiers.length,
             });
           }
-          return { identifier, result };
+          return { identifier, result, affectsWatermark: true };
         }),
       { concurrency },
     );
 
-    for (const { identifier, result } of hydrated) {
+    for (const { affectsWatermark, identifier, result } of hydrated) {
       processedRecords += 1;
       if (result.error !== null) {
         errors.push(result.error);
-        failedWatermarks.push(identifier.ModificationTimestamp);
+        if (affectsWatermark) failedWatermarks.push(identifier.ModificationTimestamp);
         yield* logPersistProgress(processedRecords);
         continue;
       }

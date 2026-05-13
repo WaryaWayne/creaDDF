@@ -239,6 +239,22 @@ describe("database sync sink row mapping", () => {
     });
   });
 
+  it("preserves omitted destination enum values as null", () => {
+    const destination = asDestination({
+      DestinationId: 456,
+      DestinationName: "Selected Website Feed",
+    });
+
+    assert.deepEqual(destinationRowFromRecord(destination), {
+      destinationId: 456,
+      destinationName: "Selected Website Feed",
+      destinationUrl: null,
+      destinationType: null,
+      destinationStatus: null,
+      raw: destination,
+    });
+  });
+
   it("serializes sync error causes into stable JSON DTOs", () => {
     const error = serializeSyncRecordError({
       resource: "Property",

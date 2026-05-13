@@ -396,8 +396,8 @@ export const destinationRowFromRecord = (destination: Destination) => ({
   destinationId: nullable(destination.DestinationId),
   destinationName: nullable(destination.DestinationName),
   destinationUrl: nullable(destination.DestinationUrl),
-  destinationType: destination.DestinationType === null ? null : String(destination.DestinationType),
-  destinationStatus: destination.DestinationStatus === null ? null : String(destination.DestinationStatus),
+  destinationType: destination.DestinationType == null ? null : String(destination.DestinationType),
+  destinationStatus: destination.DestinationStatus == null ? null : String(destination.DestinationStatus),
   raw: destination,
 });
 
