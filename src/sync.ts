@@ -30,6 +30,7 @@ import {
   normalizePropertyRooms,
 } from "./normalizers";
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
+import { listSchemaForSelect } from "./schema/select";
 import type { MediaType } from "./schema/mediaSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 import type {
@@ -50,39 +51,6 @@ import {
   ddfSyncPersistedCount,
 } from "./metrics";
 import { DdfWatermarkStore } from "./watermark";
-
-type SelectQuery = { readonly select?: ReadonlyArray<string> };
-
-const hasSelect = (query?: SelectQuery) =>
-  query?.select !== undefined && query.select.length > 0;
-
-const partialStruct = <Fields extends Schema.Struct.Fields>(
-  schema: Schema.Struct<Fields>,
-) =>
-  schema.mapFields(
-    (fields) =>
-      Object.fromEntries(
-        Object.entries(fields).map(([key, field]) => [
-          key,
-          Schema.optionalKey(field as Schema.Top),
-        ]),
-      ) as { readonly [Key in keyof Fields]: Schema.optionalKey<Fields[Key]> },
-  );
-
-const selectedOpenHouseResponseSchema = Schema.Struct({
-  "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  "@odata.count": Schema.optionalKey(Schema.Number),
-  "@odata.nextLink": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  value: Schema.Array(
-    Schema.Struct({
-      "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-      ...partialStruct(OpenHouseSchema).fields,
-    }),
-  ),
-});
-
-const openHousePageSchema = (query?: SelectQuery) =>
-  hasSelect(query) ? selectedOpenHouseResponseSchema : OpenHouseResponseSchema;
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([
@@ -1261,6 +1229,12 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
         }
 
         const http = yield* DdfHttp;
+        const pageSchema = yield* listSchemaForSelect(
+          "OpenHouse",
+          query,
+          OpenHouseResponseSchema,
+          OpenHouseSchema,
+        );
         let page = firstExit.value;
         let next: string | null = null;
         while (true) {
@@ -1285,7 +1259,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             http.requestJson<typeof firstExit.value>(
               next,
               undefined,
-              openHousePageSchema(query) as Schema.Decoder<
+              pageSchema as Schema.Decoder<
                 typeof firstExit.value,
                 never
               >,

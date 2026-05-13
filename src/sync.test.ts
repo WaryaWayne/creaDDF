@@ -932,12 +932,16 @@ describe("syncMembers and syncOffices", () => {
 describe("OpenHouse schema", () => {
   it.effect("accepts YYYY-MM-DD dates and rejects invalid calendar dates", () =>
     Effect.gen(function* () {
-      const valid = yield* Schema.decodeUnknownEffect(OpenHouseSchema)({
+      const OpenHouseDateSchema = Schema.Struct({
+        OpenHouseKey: OpenHouseSchema.fields.OpenHouseKey,
+        OpenHouseDate: OpenHouseSchema.fields.OpenHouseDate,
+      });
+      const valid = yield* Schema.decodeUnknownEffect(OpenHouseDateSchema)({
         OpenHouseKey: "open-house-1",
         OpenHouseDate: "2024-02-29",
       });
       const invalid = yield* Effect.exit(
-        Schema.decodeUnknownEffect(OpenHouseSchema)({
+        Schema.decodeUnknownEffect(OpenHouseDateSchema)({
           OpenHouseKey: "open-house-2",
           OpenHouseDate: "2024-02-30",
         }),

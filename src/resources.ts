@@ -1,6 +1,5 @@
 import { Data, Effect, Schema } from "effect";
 import { DdfHttp, encodeODataQuery } from "./client";
-import type { DdfResponseSchema } from "./client";
 import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema";
 import {
   DestinationResponseSchema,
@@ -15,10 +14,13 @@ import {
 } from "./schema/propertyListingsSchema";
 import {
   MemberReplicationIdentifierResponseSchema,
-  ODataListEnvelopeSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
 } from "./schema/odata";
+import {
+  entitySchemaForSelect,
+  listSchemaForSelect,
+} from "./schema/select";
 import type {
   LeadInput,
   ODataGetQuery,
@@ -34,39 +36,6 @@ const replicationPath = (
   destinationId === undefined
     ? `/odata/v1/${resource}/${replicationName}`
     : `/odata/v1/${resource}/${replicationName}(DestinationId=${destinationId})`;
-
-type SelectQuery = { readonly select?: ReadonlyArray<string> };
-
-const hasSelect = (query?: SelectQuery) =>
-  query?.select !== undefined && query.select.length > 0;
-
-const partialStruct = <Fields extends Schema.Struct.Fields>(
-  schema: Schema.Struct<Fields>,
-) =>
-  schema.mapFields(
-    (fields) =>
-      Object.fromEntries(
-        Object.entries(fields).map(([key, field]) => [
-          key,
-          Schema.optionalKey(field),
-        ]),
-      ) as { readonly [Key in keyof Fields]: Schema.optionalKey<Fields[Key]> },
-  );
-
-const selectedEntitySchema = <Fields extends Schema.Struct.Fields>(
-  schema: Schema.Struct<Fields>,
-) =>
-  Schema.Struct({
-    "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
-    ...partialStruct(schema).fields,
-  });
-
-const schemaForSelect = <Full>(
-  query: SelectQuery | undefined,
-  selectedSchema: DdfResponseSchema<unknown>,
-  fullSchema: DdfResponseSchema<Full>,
-) =>
-  (hasSelect(query) ? selectedSchema : fullSchema) as DdfResponseSchema<Full>;
 
 const withDefaultOrder = <Query extends ODataListQuery | ReplicationQuery>(
   query: Query | undefined,
@@ -125,38 +94,19 @@ const encodeLeadInputJson = (input: LeadInput) =>
     Effect.mapError((cause) => new DdfLeadInputEncodeError({ cause })),
   );
 
-const SelectedPropertyListingSchema = selectedEntitySchema(
-  PropertyListingSchema,
-);
-const SelectedPropertyListingResponseSchema = ODataListEnvelopeSchema(
-  SelectedPropertyListingSchema,
-);
-const SelectedMemberSchema = selectedEntitySchema(MemberSchema);
-const SelectedMemberResponseSchema =
-  ODataListEnvelopeSchema(SelectedMemberSchema);
-const SelectedOfficeSchema = selectedEntitySchema(OfficeSchema);
-const SelectedOfficeResponseSchema =
-  ODataListEnvelopeSchema(SelectedOfficeSchema);
-const SelectedOpenHouseSchema = selectedEntitySchema(OpenHouseSchema);
-const SelectedOpenHouseResponseSchema = ODataListEnvelopeSchema(
-  SelectedOpenHouseSchema,
-);
-const SelectedDestinationSchema = selectedEntitySchema(DestinationSchema);
-const SelectedDestinationResponseSchema = ODataListEnvelopeSchema(
-  SelectedDestinationSchema,
-);
-
 export const listProperties = Effect.fn("DdfProperty.listProperties")(
   function* (query?: ODataListQuery) {
     const http = yield* DdfHttp;
+    const schema = yield* listSchemaForSelect(
+      "Property",
+      query,
+      MultiplePropertyListingResponseSchema,
+      PropertyListingSchema,
+    );
     return yield* http.listOData(
       "/odata/v1/Property",
       withDefaultOrder(query, listOrder.Property),
-      schemaForSelect(
-        query,
-        SelectedPropertyListingResponseSchema,
-        MultiplePropertyListingResponseSchema,
-      ),
+      schema,
     );
   },
 );
@@ -165,15 +115,17 @@ export const getProperty = Effect.fn("DdfProperty.getProperty")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* entitySchemaForSelect(
+    "Property",
+    query,
+    SinglePropertyListingResponseSchema,
+    PropertyListingSchema,
+  );
   return yield* http.getOData(
     "/odata/v1/Property",
     propertyKey,
     query,
-    schemaForSelect(
-      query,
-      SelectedPropertyListingSchema,
-      SinglePropertyListingResponseSchema,
-    ),
+    schema,
   );
 });
 
@@ -201,10 +153,16 @@ export const listMembers = Effect.fn("DdfMember.listMembers")(function* (
   query?: ODataListQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* listSchemaForSelect(
+    "Member",
+    query,
+    MemberResponseSchema,
+    MemberSchema,
+  );
   return yield* http.listOData(
     "/odata/v1/Member",
     withDefaultOrder(query, listOrder.Member),
-    schemaForSelect(query, SelectedMemberResponseSchema, MemberResponseSchema),
+    schema,
   );
 });
 export const getMember = Effect.fn("DdfMember.getMember")(function* (
@@ -212,11 +170,17 @@ export const getMember = Effect.fn("DdfMember.getMember")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* entitySchemaForSelect(
+    "Member",
+    query,
+    MemberSchema,
+    MemberSchema,
+  );
   return yield* http.getOData(
     "/odata/v1/Member",
     memberKey,
     query,
-    schemaForSelect(query, SelectedMemberSchema, MemberSchema),
+    schema,
   );
 });
 export const replicateMembers = Effect.fn("DdfMember.replicateMembers")(
@@ -243,10 +207,16 @@ export const listOffices = Effect.fn("DdfOffice.listOffices")(function* (
   query?: ODataListQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* listSchemaForSelect(
+    "Office",
+    query,
+    OfficeResponseSchema,
+    OfficeSchema,
+  );
   return yield* http.listOData(
     "/odata/v1/Office",
     withDefaultOrder(query, listOrder.Office),
-    schemaForSelect(query, SelectedOfficeResponseSchema, OfficeResponseSchema),
+    schema,
   );
 });
 export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
@@ -254,11 +224,17 @@ export const getOffice = Effect.fn("DdfOffice.getOffice")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* entitySchemaForSelect(
+    "Office",
+    query,
+    OfficeSchema,
+    OfficeSchema,
+  );
   return yield* http.getOData(
     "/odata/v1/Office",
     officeKey,
     query,
-    schemaForSelect(query, SelectedOfficeSchema, OfficeSchema),
+    schema,
   );
 });
 export const replicateOffices = Effect.fn("DdfOffice.replicateOffices")(
@@ -284,14 +260,16 @@ export const replicateOfficesForDestination = Effect.fn(
 export const listOpenHouses = Effect.fn("DdfOpenHouse.listOpenHouses")(
   function* (query?: ODataListQuery) {
     const http = yield* DdfHttp;
+    const schema = yield* listSchemaForSelect(
+      "OpenHouse",
+      query,
+      OpenHouseResponseSchema,
+      OpenHouseSchema,
+    );
     return yield* http.listOData(
       "/odata/v1/OpenHouse",
       withDefaultOrder(query, listOrder.OpenHouse),
-      schemaForSelect(
-        query,
-        SelectedOpenHouseResponseSchema,
-        OpenHouseResponseSchema,
-      ),
+      schema,
     );
   },
 );
@@ -300,35 +278,49 @@ export const getOpenHouse = Effect.fn("DdfOpenHouse.getOpenHouse")(function* (
   query?: ODataGetQuery,
 ) {
   const http = yield* DdfHttp;
+  const schema = yield* entitySchemaForSelect(
+    "OpenHouse",
+    query,
+    OpenHouseSchema,
+    OpenHouseSchema,
+  );
   return yield* http.getOData(
     "/odata/v1/OpenHouse",
     openHouseKey,
     query,
-    schemaForSelect(query, SelectedOpenHouseSchema, OpenHouseSchema),
+    schema,
   );
 });
 export const listDestinations = Effect.fn("DdfDestination.listDestinations")(
   function* (query?: ODataListQuery) {
     const http = yield* DdfHttp;
+    const schema = yield* listSchemaForSelect(
+      "Destination",
+      query,
+      DestinationResponseSchema,
+      DestinationSchema,
+    );
     return yield* http.listOData(
       "/odata/v1/Destination",
       withDefaultOrder(query, listOrder.Destination),
-      schemaForSelect(
-        query,
-        SelectedDestinationResponseSchema,
-        DestinationResponseSchema,
-      ),
+      schema,
     );
   },
 );
 export const getDestination = Effect.fn("DdfDestination.getDestination")(
   function* (destinationId: number, query?: ODataGetQuery) {
     const http = yield* DdfHttp;
+    const schema = yield* entitySchemaForSelect(
+      "Destination",
+      query,
+      DestinationSchema,
+      DestinationSchema,
+    );
     return yield* http.getOData(
       "/odata/v1/Destination",
       destinationId,
       query,
-      schemaForSelect(query, SelectedDestinationSchema, DestinationSchema),
+      schema,
     );
   },
 );

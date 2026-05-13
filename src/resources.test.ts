@@ -1,5 +1,5 @@
 import { assert, describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, Exit, Layer } from "effect";
+import { Cause, DateTime, Effect, Exit, Layer, Schema } from "effect";
 import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "./client";
 import type {
   DdfClientConfig,
@@ -29,6 +29,10 @@ import {
   replicateProperties,
   replicatePropertiesForDestination,
 } from "./resources";
+import { DestinationSchema } from "./schema/destinationSchema";
+import { MemberSchema } from "./schema/memberSchema";
+import { OfficeSchema } from "./schema/officeSchema";
+import { PropertyListingSchema } from "./schema/propertyListingsSchema";
 import type {
   LeadInput,
   ODataGetQuery,
@@ -59,6 +63,17 @@ const configFor = (): DdfClientConfig => ({
   identityUrl: "https://identity.test/connect/token",
   baseUrl: "https://ddf.test",
 });
+
+const assertDecodeFailureMentions = <S extends Schema.Top>(
+  schema: S,
+  payload: unknown,
+  expected: RegExp,
+) =>
+  Effect.gen(function* () {
+    const exit = yield* Effect.exit(Schema.decodeUnknownEffect(schema)(payload));
+    if (Exit.isSuccess(exit)) assert.fail("expected schema decode to fail");
+    assert.match(Cause.pretty(exit.cause), expected);
+  });
 
 const bodyFromRequest = (request: HttpClientRequest.HttpClientRequest) => {
   if (request.body._tag !== "Uint8Array") return undefined;
@@ -252,7 +267,119 @@ describe("odata resource paths", () => {
   );
 });
 
+describe("canonical resource schema decoding", () => {
+  it.effect("requires ListingKey on full Property payloads", () =>
+    assertDecodeFailureMentions(PropertyListingSchema, {}, /ListingKey/),
+  );
+
+  it.effect("requires MemberKey on full Member payloads", () =>
+    assertDecodeFailureMentions(MemberSchema, {}, /MemberKey/),
+  );
+
+  it.effect("requires OfficeKey on full Office payloads", () =>
+    assertDecodeFailureMentions(OfficeSchema, {}, /OfficeKey/),
+  );
+
+  it.effect("requires DestinationId on full Destination payloads", () =>
+    assertDecodeFailureMentions(DestinationSchema, {}, /DestinationId/),
+  );
+});
+
 describe("selected resource decoding", () => {
+  it.effect("decodes a selected property list with only ListingKey", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+        if (url === "https://identity.test/connect/token")
+          return tokenResponse.clone();
+        if (
+          url ===
+          "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+        )
+          return Response.json({ value: [{ ListingKey: "x" }] });
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      const result = yield* listProperties({
+        select: ["ListingKey"],
+        top: 1,
+      }).pipe(Effect.provide(layerFor(httpHandler)));
+
+      assert.equal(result.value[0]?.ListingKey, "x");
+    }),
+  );
+
+  it.effect("requires selected ListingKey on selected property lists", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+        if (url === "https://identity.test/connect/token")
+          return tokenResponse.clone();
+        if (
+          url ===
+          "https://ddf.test/odata/v1/Property?%24select=ListingKey&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+        )
+          return Response.json({ value: [{}] });
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      const exit = yield* Effect.exit(
+        listProperties({ select: ["ListingKey"], top: 1 }).pipe(
+          Effect.provide(layerFor(httpHandler)),
+        ),
+      );
+
+      if (Exit.isSuccess(exit)) assert.fail("expected selected decode to fail");
+      assert.match(Cause.pretty(exit.cause), /ListingKey/);
+    }),
+  );
+
+  it.effect("preserves nullability for selected Property fields", () =>
+    Effect.gen(function* () {
+      const httpHandler = httpHandlerFrom((input) => {
+        const url = String(input);
+        if (url === "https://identity.test/connect/token")
+          return tokenResponse.clone();
+        if (
+          url ===
+          "https://ddf.test/odata/v1/Property?%24select=ListingKey%2CCity&%24top=1&%24orderby=ModificationTimestamp%20desc%2CListingKey%20asc"
+        )
+          return Response.json({
+            value: [{ ListingKey: "x", City: null }],
+          });
+        throw new Error(`Unexpected request: ${url}`);
+      });
+
+      const result = yield* listProperties({
+        select: ["ListingKey", "City"],
+        top: 1,
+      }).pipe(Effect.provide(layerFor(httpHandler)));
+
+      assert.equal(result.value[0]?.ListingKey, "x");
+      assert.equal(result.value[0]?.City, null);
+    }),
+  );
+
+  it.effect("fails before the request when a selected Property field is unknown", () =>
+    Effect.gen(function* () {
+      let requests = 0;
+      const httpHandler = httpHandlerFrom((input) => {
+        requests += 1;
+        throw new Error(`Unexpected request: ${String(input)}`);
+      });
+
+      const exit = yield* Effect.exit(
+        listProperties({ select: ["ListingKey", "NotAField"], top: 1 }).pipe(
+          Effect.provide(layerFor(httpHandler)),
+        ),
+      );
+
+      if (Exit.isSuccess(exit)) assert.fail("expected unknown $select to fail");
+      assert.equal(requests, 0);
+      assert.match(Cause.pretty(exit.cause), /NotAField/);
+    }),
+  );
+
   it.effect(
     "decodes selected property, member, and office list rows as partial resources",
     () =>
