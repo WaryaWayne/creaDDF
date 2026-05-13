@@ -143,7 +143,7 @@ export const ddfProperties = pgTable(
     propertyCondition: jsonb("property_condition").$type<PropertyRecord["PropertyCondition"]>(),
     roof: jsonb("roof").$type<PropertyRecord["Roof"]>(),
     constructionMaterials: jsonb("construction_materials").$type<PropertyRecord["ConstructionMaterials"]>(),
-    stories: integer("stories"),
+    stories: doublePrecision("stories"),
     propertyAttached: boolean("property_attached"),
     accessibilityFeatures: jsonb("accessibility_features").$type<PropertyRecord["AccessibilityFeatures"]>(),
     zoning: text("zoning"),
@@ -390,12 +390,21 @@ export const ddfDestinations = pgTable(
     destinationId: integer("destination_id").primaryKey(),
     destinationName: text("destination_name"),
     destinationUrl: text("destination_url"),
-    destinationType: integer("destination_type"),
-    destinationStatus: integer("destination_status"),
+    destinationType: text("destination_type"),
+    destinationStatus: text("destination_status"),
+    memberFirstName: text("member_first_name"),
+    memberLastName: text("member_last_name"),
+    memberKey: text("member_key"),
+    originalEntryTimestamp: timestamp("original_entry_timestamp", { withTimezone: true }),
+    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
+    fullNsp: boolean("full_nsp"),
     raw: jsonb("raw").$type<Destination>().notNull(),
     ...timestamps,
   },
-  (table) => [index("ddf_destinations_status_idx").on(table.destinationStatus)],
+  (table) => [
+    index("ddf_destinations_status_idx").on(table.destinationStatus),
+    index("ddf_destinations_member_idx").on(table.memberKey),
+  ],
 );
 
 export const ddfWatermarks = pgTable("ddf_watermarks", {

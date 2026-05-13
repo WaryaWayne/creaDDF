@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Schema, SchemaTransformation } from "effect"
 
 const NullableString = Schema.NullOr(Schema.String)
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString)
@@ -9,11 +9,20 @@ export type ODataListEnvelope<Item> = {
   readonly "@odata.nextLink"?: string | null
   readonly value: ReadonlyArray<Item>
 }
+const ReplicationKeySchema = Schema.NullOr(Schema.String).pipe(
+  Schema.decodeTo(
+    Schema.String,
+    SchemaTransformation.transform({
+      decode: (value) => value ?? "",
+      encode: (value) => value,
+    }),
+  ),
+)
 
 export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
   Schema.Struct({
     "@odata.context": Schema.optionalKey(NullableString),
-    "@odata.count": Schema.optionalKey(Schema.Number),
+    "@odata.count": Schema.optionalKey(Schema.NullOr(Schema.Int)),
     "@odata.nextLink": Schema.optionalKey(NullableString),
     value: Schema.Array(item),
   }) as unknown as Schema.Decoder<ODataListEnvelope<Item["Type"]>, never>
@@ -21,17 +30,17 @@ export const ODataListEnvelopeSchema = <Item extends Schema.Top>(item: Item) =>
 export const ODataUnknownListEnvelopeSchema = ODataListEnvelopeSchema(Schema.Unknown)
 
 export const PropertyReplicationIdentifierSchema = Schema.Struct({
-  ListingKey: Schema.optionalKey(NullableString),
+  ListingKey: ReplicationKeySchema,
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
 })
 
 export const MemberReplicationIdentifierSchema = Schema.Struct({
-  MemberKey: Schema.optionalKey(NullableString),
+  MemberKey: ReplicationKeySchema,
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
 })
 
 export const OfficeReplicationIdentifierSchema = Schema.Struct({
-  OfficeKey: Schema.optionalKey(NullableString),
+  OfficeKey: ReplicationKeySchema,
   ModificationTimestamp: Schema.optionalKey(NullableDateTime),
 })
 

@@ -11,7 +11,6 @@ import type {
   DdfResponseSchema,
 } from "./client";
 import {
-  DdfReplicationIdentifierError,
   diffLocalKeysAgainstMasterList,
   getMemberMasterList,
   getOfficeMasterList,
@@ -377,6 +376,48 @@ describe("syncProperties", () => {
       }),
   );
 
+
+  it.effect("skips null or empty replication keys without hydrating or advancing watermarks", () =>
+    Effect.gen(function* () {
+      const requestedKeys: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                { ListingKey: null, ModificationTimestamp: "2024-01-01T00:00:00.000Z" },
+                { ListingKey: "", ModificationTimestamp: "2024-01-02T00:00:00.000Z" },
+                { ListingKey: "listing-ok", ModificationTimestamp: "2024-01-03T00:00:00.000Z" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(_path: string, key: string | number) => {
+          requestedKeys.push(String(key));
+          return response<T>(propertyFor(String(key)));
+        },
+      });
+
+      const result = yield* runWithHttp(
+        syncProperties({ sink: { upsertProperty: () => Effect.void } }),
+        http,
+      );
+
+      assert.deepEqual(requestedKeys, ["listing-ok"]);
+      assert.equal(result.counts.identifiers, 1);
+      assert.equal(result.counts.hydrated, 1);
+      assert.equal(result.counts.persisted, 1);
+      assert.equal(result.counts.failed, 2);
+      assert.equal(result.nextWatermark, null);
+      assert.deepEqual(
+        result.errors.map((error) => error.key),
+        ["page:first:row:0", "page:first:row:1"],
+      );
+      assert.match(result.errors.map((error) => error.message).join("\n"), /ListingKey/);
+    }),
+  );
+
   it.effect("does not save a property watermark past a hydration failure", () =>
     Effect.gen(function* () {
       const savedWatermarks: Array<string> = [];
@@ -476,8 +517,8 @@ describe("syncProperties", () => {
 
       assert.deepEqual(requestedKeys, ["listing-1"]);
       assert.deepEqual(result.errors.map((error) => error.key), [
-        "missing:ListingKey",
-        "missing:ListingKey",
+        "page:first:row:0",
+        "page:first:row:1",
       ]);
       assert.equal(result.counts.hydrated, 1);
       assert.equal(result.counts.failed, 2);
@@ -680,39 +721,42 @@ describe("syncMembers and syncOffices", () => {
 
   it.effect("reports missing member and office replication keys without hydrating empty keys", () =>
     Effect.gen(function* () {
-      const requested: Array<string> = [];
+      const requestedKeys: Array<string> = [];
       const calls: Array<string> = [];
       const http = emptyHttp({
         requestJson: <T = unknown>(path: string) => {
           if (path.startsWith("/odata/v1/Member/MemberReplication")) {
             return response<T>({
               value: [
-                { MemberKey: null, ModificationTimestamp: "2024-09-01T00:00:00.000Z" },
-                { MemberKey: "member-1", ModificationTimestamp: "2024-09-02T00:00:00.000Z" },
+                { MemberKey: null, ModificationTimestamp: "2024-02-01T00:00:00.000Z" },
+                { MemberKey: "", ModificationTimestamp: "2024-02-02T00:00:00.000Z" },
+                { MemberKey: "member-ok", ModificationTimestamp: "2024-02-03T00:00:00.000Z" },
               ],
             });
           }
           if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
             return response<T>({
               value: [
-                { ModificationTimestamp: "2024-10-01T00:00:00.000Z" },
-                { OfficeKey: "office-1", ModificationTimestamp: "2024-10-02T00:00:00.000Z" },
+                { OfficeKey: null, ModificationTimestamp: "2024-03-01T00:00:00.000Z" },
+                { OfficeKey: "", ModificationTimestamp: "2024-03-02T00:00:00.000Z" },
+                { OfficeKey: "office-ok", ModificationTimestamp: "2024-03-03T00:00:00.000Z" },
               ],
             });
           }
           return response<T>({ value: [] });
         },
         getOData: <T = unknown>(path: string, key: string | number) => {
-          requested.push(`${path}:${String(key)}`);
-          if (path === "/odata/v1/Member")
-            return response<T>({ MemberKey: key, Media: [] });
-          return response<T>({ OfficeKey: key, Media: [] });
+          requestedKeys.push(`${path}:${key}`);
+          return path === "/odata/v1/Member"
+            ? response<T>({ MemberKey: key, Media: [], MemberSocialMedia: [] })
+            : response<T>({ OfficeKey: key, Media: [], OfficeSocialMedia: [] });
         },
       });
 
       const members = yield* runWithHttp(
         syncMembers({
           sink: {
+            upsertMember: () => Effect.void,
             saveWatermark: (_resource, watermark) =>
               Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
           },
@@ -722,6 +766,7 @@ describe("syncMembers and syncOffices", () => {
       const offices = yield* runWithHttp(
         syncOffices({
           sink: {
+            upsertOffice: () => Effect.void,
             saveWatermark: (_resource, watermark) =>
               Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
           },
@@ -729,21 +774,115 @@ describe("syncMembers and syncOffices", () => {
         http,
       );
 
-      assert.deepEqual(requested, [
-        "/odata/v1/Member:member-1",
-        "/odata/v1/Office:office-1",
+      assert.deepEqual(requestedKeys, [
+        "/odata/v1/Member:member-ok",
+        "/odata/v1/Office:office-ok",
       ]);
-      assert.deepEqual(members.errors.map((error) => error.key), [
-        "missing:MemberKey",
-      ]);
-      assert.deepEqual(offices.errors.map((error) => error.key), [
-        "missing:OfficeKey",
-      ]);
+      assert.equal(members.counts.identifiers, 1);
       assert.equal(members.counts.hydrated, 1);
-      assert.equal(offices.counts.hydrated, 1);
+      assert.equal(members.counts.persisted, 1);
+      assert.equal(members.counts.failed, 2);
       assert.equal(members.nextWatermark, null);
+      assert.match(members.errors.map((error) => error.message).join("\n"), /MemberKey/);
+      assert.equal(offices.counts.identifiers, 1);
+      assert.equal(offices.counts.hydrated, 1);
+      assert.equal(offices.counts.persisted, 1);
+      assert.equal(offices.counts.failed, 2);
       assert.equal(offices.nextWatermark, null);
+      assert.match(offices.errors.map((error) => error.message).join("\n"), /OfficeKey/);
       assert.deepEqual(calls, []);
+    }),
+  );
+
+  it.effect("runs social-media hooks alongside compound member and office sinks", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication"))
+            return response<T>({ value: [{ MemberKey: "member-social" }] });
+          if (path.startsWith("/odata/v1/Office/OfficeReplication"))
+            return response<T>({ value: [{ OfficeKey: "office-social" }] });
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) =>
+          path === "/odata/v1/Member"
+            ? response<T>({
+                MemberKey: key,
+                Media: [],
+                MemberSocialMedia: [
+                  {
+                    SocialMediaKey: "member-social-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-02-01T00:00:00.000Z",
+                    ResourceName: "Member",
+                    SocialMediaUrlOrId: "https://member.example.test",
+                  },
+                ],
+              })
+            : response<T>({
+                OfficeKey: key,
+                Media: [],
+                OfficeSocialMedia: [
+                  {
+                    SocialMediaKey: "office-social-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-03-01T00:00:00.000Z",
+                    ResourceName: "Office",
+                    SocialMediaUrlOrId: "https://office.example.test",
+                  },
+                ],
+              }),
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({
+          sink: {
+            upsertMemberWithMedia: (member, media) =>
+              Effect.sync(() =>
+                calls.push(
+                  `member-compound:${member.MemberKey}:${media.length}`,
+                ),
+              ),
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
+          },
+        }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({
+          sink: {
+            upsertOfficeWithMedia: (office, media) =>
+              Effect.sync(() => {
+                const officeKey = (office as { OfficeKey: string }).OfficeKey;
+                calls.push(`office-compound:${officeKey}:${media.length}`);
+              }),
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
+          },
+        }),
+        http,
+      );
+
+      assert.equal(members.counts.persisted, 1);
+      assert.equal(offices.counts.persisted, 1);
+      assert.deepEqual(calls, [
+        "member-compound:member-social:0",
+        "Member:member-social:member-social-1",
+        "office-compound:office-social:0",
+        "Office:office-social:office-social-1",
+      ]);
     }),
   );
 
@@ -1304,7 +1443,6 @@ describe("master list prune helpers", () => {
       assert.equal(Exit.isFailure(exit), true);
       assert.equal(failure._tag, "Some");
       if (failure._tag === "Some") {
-        assert.equal(failure.value instanceof DdfReplicationIdentifierError, true);
         assert.match(failure.value.message, /missing ListingKey/);
       }
       assert.deepEqual(marked, []);
@@ -1345,6 +1483,33 @@ describe("master list prune helpers", () => {
         assert.deepEqual(diff.missingLocalKeys, ["stale-1"]);
         assert.deepEqual(marked, [["stale-1"]]);
       }),
+  );
+
+  it.effect("fails property master lists on invalid replication keys", () =>
+    Effect.gen(function* () {
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+            return response<T>({
+              value: [
+                { ListingKey: null },
+                { ListingKey: "master-1" },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+      });
+
+      const exit = yield* Effect.exit(
+        runWithHttp(getPropertyMasterList(), http),
+      );
+
+      assert.equal(Exit.isFailure(exit), true);
+      if (Exit.isFailure(exit)) {
+        assert.match(String(exit.cause), /ListingKey/);
+      }
+    }),
   );
 
   it.effect("fails member and office pruning on malformed master-list keys", () =>
@@ -1391,11 +1556,9 @@ describe("master list prune helpers", () => {
       assert.equal(Exit.isFailure(memberExit), true);
       assert.equal(Exit.isFailure(officeExit), true);
       if (memberFailure._tag === "Some") {
-        assert.equal(memberFailure.value instanceof DdfReplicationIdentifierError, true);
         assert.match(memberFailure.value.message, /missing MemberKey/);
       }
       if (officeFailure._tag === "Some") {
-        assert.equal(officeFailure.value instanceof DdfReplicationIdentifierError, true);
         assert.match(officeFailure.value.message, /missing OfficeKey/);
       }
       assert.deepEqual(markedMembers, []);

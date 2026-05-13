@@ -32,25 +32,18 @@ const isEdmDateString = (value: string) => {
   );
 };
 
-const dateTimePattern =
-  /^(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const isEdmDateTimeString = (value: string) =>
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value);
 
-const isStrictIsoDateTimeString = (value: string) => {
-  const match = dateTimePattern.exec(value);
-  if (match === null) return false;
+const isEdmDateOrDateTimeString = (value: string) =>
+  isEdmDateString(value) || isEdmDateTimeString(value);
 
-  const datePart = `${match[1]}-${match[2]}-${match[3]}`;
-  if (!isEdmDateString(datePart)) return false;
-
-  return Option.isSome(Schema.decodeUnknownOption(Schema.DateTimeUtcFromString)(value));
-};
-
-const OpenHouseDateString = Schema.String.pipe(
+const EdmDateOrDateTimeString = Schema.String.pipe(
   Schema.check(
     Schema.makeFilter((value) =>
-      isEdmDateString(value) || isStrictIsoDateTimeString(value)
+      isEdmDateOrDateTimeString(value)
         ? undefined
-        : { path: [], issue: "Expected a valid YYYY-MM-DD date or strict ISO/RFC3339 date-time string." },
+        : { path: [], issue: "Expected an Edm.Date or date-time string." },
     ),
   ),
 );
@@ -80,12 +73,12 @@ export const OpenHouseSchema = Schema.Struct({
     identifier: "ListingId",
     examples: ["X9465223", "SK015977", "X12348197"],
   }),
-  OpenHouseDate: Schema.NullOr(OpenHouseDateString).annotate({
+  OpenHouseDate: Schema.NullOr(EdmDateOrDateTimeString).annotate({
     message: "Value is invalid for OpenHouseDate.",
-    description: "The date on which the open house will occur.",
+    description: "The date or date-time on which the open house will occur.",
     title: "Open House Date",
     identifier: "OpenHouseDate",
-    examples: ["2025-07-15", "2025-12-12", "2026-09-12"],
+    examples: ["2025-07-15", "2025-12-12T00:00:00.000Z", "2026-09-12"],
   }),
   OpenHouseStartTime: Schema.Union([Schema.String, Schema.Null]).annotate({
     message: "Value is invalid for OpenHouseStartTime.",

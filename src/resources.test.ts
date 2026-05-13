@@ -57,6 +57,21 @@ const tokenResponse = Response.json({
   expires_in: 3600,
 });
 
+
+const resourceTypeChecks = () => {
+  const selectedProperties = listProperties({ select: ["ListingKey"] });
+  const selectedProperty = getProperty("property-1", { select: ["ListingKey"] });
+  // @ts-expect-error select fields must be valid Property fields.
+  const invalidPropertySelect = listProperties({ select: ["NotAPropertyField"] });
+  // @ts-expect-error get select fields must be valid Member fields.
+  const invalidMemberSelect = getMember("member-1", { select: ["NotAMemberField"] });
+  void selectedProperties;
+  void selectedProperty;
+  void invalidPropertySelect;
+  void invalidMemberSelect;
+};
+void resourceTypeChecks;
+
 const configFor = (): DdfClientConfig => ({
   clientId: "client-id",
   clientSecret: "client-secret",
@@ -369,7 +384,11 @@ describe("selected resource decoding", () => {
       });
 
       const exit = yield* Effect.exit(
-        listProperties({ select: ["ListingKey", "NotAField"], top: 1 }).pipe(
+        listProperties(
+          { select: ["ListingKey", "NotAField"], top: 1 } as Parameters<
+            typeof listProperties
+          >[0],
+        ).pipe(
           Effect.provide(layerFor(httpHandler)),
         ),
       );
@@ -681,8 +700,8 @@ describe("selected resource decoding", () => {
         "Website Feed",
       );
       assert.equal(result.destination.MemberKey, "member-1");
-      assert.equal(result.destination.DestinationType, 9);
-      assert.equal(result.destination.DestinationStatus, 1);
+      assert.equal(result.destination.DestinationType, "Technology Provider");
+      assert.equal(result.destination.DestinationStatus, "Active");
       const destinationTimestamp = result.destination.ModificationTimestamp;
       if (!DateTime.isDateTime(destinationTimestamp) || !DateTime.isUtc(destinationTimestamp)) {
         assert.fail("expected destination ModificationTimestamp to decode as Effect DateTime.Utc");
@@ -718,8 +737,8 @@ describe("selected resource decoding", () => {
         Effect.provide(layerFor(httpHandler)),
       );
 
-      assert.equal(destination.DestinationType, 9);
-      assert.equal(destination.DestinationStatus, 1);
+      assert.equal(destination.DestinationType, "Technology Provider");
+      assert.equal(destination.DestinationStatus, "Active");
     }),
   );
 
@@ -898,6 +917,31 @@ describe("lead resource", () => {
 
       assert.deepEqual(result, { success: true });
       assert.equal(requests[0]?.url, "/v1/Lead/CreateLead?SuppressEmail=true");
+      assert.equal(requests[0]?.init?.body, leadBody);
+    }),
+  );
+
+  it.effect("does not suppress lead email when explicitly disabled", () =>
+    Effect.gen(function* () {
+      const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
+      const response = <T>(value: unknown) => Effect.succeed(value as T);
+      const http: DdfHttpApi = {
+        requestJson: <T = unknown>(url: string, init?: DdfRequestOptions) => {
+          requests.push({ url, init });
+          return response<T>({ success: true });
+        },
+        listOData: <T = unknown>() => response<T>({ value: [] }),
+        getOData: <T = unknown>() => response<T>({ value: [] }),
+        replicateIdentifiers: <T = unknown>() => response<T>({ value: [] }),
+        paginateOData: () => Effect.succeed([]),
+      };
+
+      const result = yield* createLead(leadInput, {
+        suppressEmail: false,
+      }).pipe(Effect.provideService(DdfHttp, http));
+
+      assert.deepEqual(result, { success: true });
+      assert.equal(requests[0]?.url, "/v1/Lead/CreateLead");
       assert.equal(requests[0]?.init?.body, leadBody);
     }),
   );

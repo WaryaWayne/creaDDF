@@ -32,6 +32,7 @@ import {
 import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
 import { listSchemaForSelect } from "./schema/select";
 import type { MediaType } from "./schema/mediaSchema";
+import type { SocialMedia } from "./schema/officeSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 import type {
   MemberReplicationIdentifier,
@@ -69,6 +70,79 @@ export type OfficeRecord = EffectSuccess<ReturnType<typeof getOffice>>;
 export type OpenHouseRecord = EffectSuccess<ReturnType<typeof getOpenHouse>>;
 export type RoomRecord = RoomsType[number];
 export type MediaRecord = MediaType[number];
+
+
+export class DdfReplicationIdentifierKeyError extends Data.TaggedError(
+  "DdfReplicationIdentifierKeyError",
+)<{
+  readonly resource: SyncResource;
+  readonly keyField: string;
+  readonly page: string;
+  readonly index: number;
+}> {
+  override get message() {
+    return `${this.resource} replication identifier at ${this.page}[${this.index}] has a missing ${this.keyField}`;
+  }
+}
+
+const replicationKeyField = (resource: "Property" | "Member" | "Office") => {
+  switch (resource) {
+    case "Property":
+      return "ListingKey";
+    case "Member":
+      return "MemberKey";
+    case "Office":
+      return "OfficeKey";
+  }
+};
+
+const nonEmptyString = (value: unknown): string | null =>
+  typeof value === "string" && value.length > 0 ? value : null;
+
+const partitionReplicationIdentifiers = <Identifier>(
+  resource: "Property" | "Member" | "Office",
+  page: string,
+  identifiers: ReadonlyArray<Identifier>,
+) => {
+  const keyField = replicationKeyField(resource);
+  const valid: Array<Identifier> = [];
+  const errors: Array<SyncRecordError> = [];
+
+  identifiers.forEach((identifier, index) => {
+    const key = nonEmptyString((identifier as Record<string, unknown>)[keyField]);
+    if (key !== null) {
+      valid.push(identifier);
+      return;
+    }
+
+    errors.push(
+      makeRecordError(
+        resource,
+        `${page}:row:${index}`,
+        "hydrate",
+        new DdfReplicationIdentifierKeyError({
+          resource,
+          keyField,
+          page,
+          index,
+        }),
+      ),
+    );
+  });
+
+  return { valid, errors };
+};
+
+const failOnReplicationIdentifierErrors = <Identifier>(
+  partition: ReturnType<typeof partitionReplicationIdentifiers<Identifier>>,
+): Effect.Effect<void, DdfReplicationIdentifierKeyError> => {
+  const [firstError] = partition.errors;
+  if (firstError === undefined) return Effect.void;
+  const cause = firstError.cause;
+  return cause instanceof DdfReplicationIdentifierKeyError
+    ? Effect.fail(cause)
+    : Effect.die(cause);
+};
 
 export interface SyncOwner {
   readonly resource: SyncResource;
@@ -160,6 +234,10 @@ export interface MemberSyncSink<SinkError = never> {
     media: MediaRecord,
     owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
+  readonly upsertSocialMedia?: (
+    socialMedia: SocialMedia,
+    owner: SyncOwner,
+  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Member",
     watermark: string,
@@ -179,6 +257,10 @@ export interface OfficeSyncSink<SinkError = never> {
   ) => Effect.Effect<void, SinkError>;
   readonly upsertMedia?: (
     media: MediaRecord,
+    owner: SyncOwner,
+  ) => Effect.Effect<void, SinkError>;
+  readonly upsertSocialMedia?: (
+    socialMedia: SocialMedia,
     owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
@@ -368,6 +450,16 @@ const incrementalQuery = (options: BaseSyncOptions | undefined) => {
   };
 };
 
+
+const asPropertyReplicationQuery = (query: ReplicationQuery | undefined) =>
+  query as Parameters<typeof replicateProperties>[0];
+const asMemberReplicationQuery = (query: ReplicationQuery | undefined) =>
+  query as Parameters<typeof replicateMembers>[0];
+const asOfficeReplicationQuery = (query: ReplicationQuery | undefined) =>
+  query as Parameters<typeof replicateOffices>[0];
+const asOpenHouseListQuery = (query: ODataListQuery) =>
+  query as Parameters<typeof listOpenHouses>[0];
+
 const causeMessage = (cause: unknown) =>
   Cause.isCause(cause)
     ? Cause.pretty(cause)
@@ -390,16 +482,29 @@ const makeRecordError = (
 
 const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
   function* <Identifier>(
+    resource: "Property" | "Member" | "Office",
     first: ODataListEnvelope<Identifier>,
     schema: Schema.Decoder<ODataListEnvelope<Identifier>, never>,
   ) {
     const http = yield* DdfHttp;
-    const out: Array<Identifier> = [...first.value];
+    const firstPage = partitionReplicationIdentifiers(
+      resource,
+      "page:first",
+      first.value,
+    );
+    yield* failOnReplicationIdentifierErrors(firstPage);
+    const out: Array<Identifier> = [...firstPage.valid];
     let next = first["@odata.nextLink"] ?? null;
 
     while (next !== null) {
       const page = yield* http.requestJson(next, undefined, schema);
-      out.push(...page.value);
+      const pageIdentifiers = partitionReplicationIdentifiers(
+        resource,
+        `page:${next}`,
+        page.value,
+      );
+      yield* failOnReplicationIdentifierErrors(pageIdentifiers);
+      out.push(...pageIdentifiers.valid);
       next = page["@odata.nextLink"] ?? null;
     }
 
@@ -410,20 +515,25 @@ const collectPagedIdentifiers = Effect.fn("DdfSync.collectPagedIdentifiers")(
 const collectPagedIdentifiersWithErrors = Effect.fn(
   "DdfSync.collectPagedIdentifiersWithErrors",
 )(function* <Identifier>(
-  resource: SyncResource,
+  resource: "Property" | "Member" | "Office",
   first: ODataListEnvelope<Identifier>,
   schema: Schema.Decoder<ODataListEnvelope<Identifier>, never>,
 ) {
   const http = yield* DdfHttp;
-  const identifiers: Array<Identifier> = [...first.value];
-  const errors: Array<SyncRecordError> = [];
+  const firstPage = partitionReplicationIdentifiers(
+    resource,
+    "page:first",
+    first.value,
+  );
+  const identifiers: Array<Identifier> = [...firstPage.valid];
+  const errors: Array<SyncRecordError> = [...firstPage.errors];
   let next = first["@odata.nextLink"] ?? null;
   let pageCount = 1;
 
   yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
     pages: pageCount,
     identifiers: identifiers.length,
-    pageSize: first.value.length,
+    pageSize: first.value?.length ?? 0,
     hasNextPage: next !== null,
   });
 
@@ -443,8 +553,15 @@ const collectPagedIdentifiersWithErrors = Effect.fn(
       break;
     }
     pageCount += 1;
-    const pageSize = pageExit.value.value.length;
-    identifiers.push(...pageExit.value.value);
+    const pageValue = pageExit.value.value;
+    const pageIdentifiers = partitionReplicationIdentifiers(
+      resource,
+      pageKey,
+      pageValue,
+    );
+    const pageSize = pageValue.length;
+    identifiers.push(...pageIdentifiers.valid);
+    errors.push(...pageIdentifiers.errors);
     next = pageExit.value["@odata.nextLink"] ?? null;
     if (shouldLogPageProgress(pageCount, next !== null)) {
       yield* Effect.logInfo(`${resource} sync: collected identifier page`, {
@@ -536,10 +653,10 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     );
     const first =
       options?.destinationId === undefined
-        ? yield* replicateProperties(query)
+        ? yield* replicateProperties(asPropertyReplicationQuery(query))
         : yield* replicatePropertiesForDestination(
             options.destinationId,
-            query,
+            asPropertyReplicationQuery(query),
           );
     const collected = yield* collectPagedIdentifiersWithErrors(
       "Property",
@@ -737,10 +854,10 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
   );
   const first =
     options?.destinationId === undefined
-      ? yield* replicateMembers(query)
+      ? yield* replicateMembers(asMemberReplicationQuery(query))
       : yield* replicateMembersForDestination(
           options.destinationId,
-          query,
+          asMemberReplicationQuery(query),
         );
   const collected = yield* collectPagedIdentifiersWithErrors(
     "Member",
@@ -769,7 +886,8 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
   const hasRecordSink =
     options?.sink?.upsertMemberWithMedia !== undefined ||
     options?.sink?.upsertMember !== undefined ||
-    options?.sink?.upsertMedia !== undefined;
+    options?.sink?.upsertMedia !== undefined ||
+    options?.sink?.upsertSocialMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -844,6 +962,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
           ? ((result.record as Record<string, unknown>).Media as MediaType)
           : []
       ).map((media) => normalizeMedia("Member", memberKey, media));
+      const memberSocialMedia = result.record.MemberSocialMedia ?? [];
       hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertMemberWithMedia !== undefined) {
@@ -851,15 +970,26 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
             result.record,
             memberMedia,
           );
-          return;
+        } else {
+          if (options?.sink?.upsertMember !== undefined)
+            yield* options.sink.upsertMember(result.record);
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              memberMedia,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Member",
+                  key: memberKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
         }
-        if (options?.sink?.upsertMember !== undefined)
-          yield* options.sink.upsertMember(result.record);
-        if (options?.sink?.upsertMedia !== undefined) {
+        if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
-            memberMedia,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
+            memberSocialMedia,
+            (socialMedia) =>
+              options.sink?.upsertSocialMedia?.(socialMedia, {
                 resource: "Member",
                 key: memberKey,
               }) ?? Effect.void,
@@ -929,10 +1059,10 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
   );
   const first =
     options?.destinationId === undefined
-      ? yield* replicateOffices(query)
+      ? yield* replicateOffices(asOfficeReplicationQuery(query))
       : yield* replicateOfficesForDestination(
           options.destinationId,
-          query,
+          asOfficeReplicationQuery(query),
         );
   const collected = yield* collectPagedIdentifiersWithErrors(
     "Office",
@@ -961,7 +1091,8 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
   const hasRecordSink =
     options?.sink?.upsertOfficeWithMedia !== undefined ||
     options?.sink?.upsertOffice !== undefined ||
-    options?.sink?.upsertMedia !== undefined;
+    options?.sink?.upsertMedia !== undefined ||
+    options?.sink?.upsertSocialMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -1035,6 +1166,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
       const officeMedia = (
         Array.isArray(office.Media) ? (office.Media as MediaType) : []
       ).map((media) => normalizeMedia("Office", officeKey, media));
+      const officeSocialMedia = result.record.OfficeSocialMedia ?? [];
       hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertOfficeWithMedia !== undefined) {
@@ -1042,15 +1174,26 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
             result.record,
             officeMedia,
           );
-          return;
+        } else {
+          if (options?.sink?.upsertOffice !== undefined)
+            yield* options.sink.upsertOffice(result.record);
+          if (options?.sink?.upsertMedia !== undefined) {
+            yield* Effect.forEach(
+              officeMedia,
+              (media) =>
+                options.sink?.upsertMedia?.(media, {
+                  resource: "Office",
+                  key: officeKey,
+                }) ?? Effect.void,
+              { discard: true },
+            );
+          }
         }
-        if (options?.sink?.upsertOffice !== undefined)
-          yield* options.sink.upsertOffice(result.record);
-        if (options?.sink?.upsertMedia !== undefined) {
+        if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
-            officeMedia,
-            (media) =>
-              options.sink?.upsertMedia?.(media, {
+            officeSocialMedia,
+            (socialMedia) =>
+              options.sink?.upsertSocialMedia?.(socialMedia, {
                 resource: "Office",
                 key: officeKey,
               }) ?? Effect.void,
@@ -1212,7 +1355,9 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
 
     const collectQuery = (query: ODataListQuery, queryIndex: number) =>
       Effect.gen(function* () {
-        const firstExit = yield* Effect.exit(listOpenHouses(query));
+        const firstExit = yield* Effect.exit(
+          listOpenHouses(asOpenHouseListQuery(query)),
+        );
         if (Exit.isFailure(firstExit)) {
           yield* Effect.logWarning("OpenHouse sync: failed to collect first page", {
             queryIndex,
@@ -1243,12 +1388,13 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
           yield* Effect.logInfo("OpenHouse sync: collected page", {
             queryIndex,
             pages: pageCount,
-            records: processedRecords + page.value.length,
-            pageSize: page.value.length,
+            records: processedRecords + (page.value?.length ?? 0),
+            pageSize: page.value?.length ?? 0,
             hasNextPage: next !== null,
           });
-          yield* persistPage(page.value);
-          yield* logPersistProgress(page.value.length, next !== null);
+          const pageValue = page.value ?? [];
+          yield* persistPage(pageValue as ReadonlyArray<OpenHouseRecord>);
+          yield* logPersistProgress(pageValue.length, next !== null);
 
           if (next === null) break;
 
@@ -1310,12 +1456,13 @@ export const getPropertyMasterList = Effect.fn(
 )(function* (options?: Pick<PropertySyncOptions, "destinationId" | "query">) {
   const first =
     options?.destinationId === undefined
-      ? yield* replicateProperties(options?.query)
+      ? yield* replicateProperties(asPropertyReplicationQuery(options?.query))
       : yield* replicatePropertiesForDestination(
           options.destinationId,
-          options.query,
+          asPropertyReplicationQuery(options.query),
         );
   return yield* collectPagedIdentifiers(
+    "Property",
     first,
     PropertyReplicationIdentifierResponseSchema,
   );
@@ -1392,12 +1539,13 @@ export const getMemberMasterList = Effect.fn(
 )(function* (options?: Pick<MemberSyncOptions, "destinationId" | "query">) {
   const first =
     options?.destinationId === undefined
-      ? yield* replicateMembers(options?.query)
+      ? yield* replicateMembers(asMemberReplicationQuery(options?.query))
       : yield* replicateMembersForDestination(
           options.destinationId,
-          options.query,
+          asMemberReplicationQuery(options.query),
         );
   return yield* collectPagedIdentifiers(
+    "Member",
     first,
     MemberReplicationIdentifierResponseSchema,
   );
@@ -1408,12 +1556,13 @@ export const getOfficeMasterList = Effect.fn(
 )(function* (options?: Pick<OfficeSyncOptions, "destinationId" | "query">) {
   const first =
     options?.destinationId === undefined
-      ? yield* replicateOffices(options?.query)
+      ? yield* replicateOffices(asOfficeReplicationQuery(options?.query))
       : yield* replicateOfficesForDestination(
           options.destinationId,
-          options.query,
+          asOfficeReplicationQuery(options.query),
         );
   return yield* collectPagedIdentifiers(
+    "Office",
     first,
     OfficeReplicationIdentifierResponseSchema,
   );
