@@ -304,6 +304,35 @@ describe("syncProperties", () => {
   );
 
   it.effect(
+    "composes replication query filters before the incremental watermark filter",
+    () =>
+      Effect.gen(function* () {
+        const paths: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            paths.push(path);
+            return response<T>({ value: [] });
+          },
+        });
+
+        yield* runWithHttp(
+          syncProperties({
+            mode: "incremental",
+            since: "2024-01-01T00:00:00.000Z",
+            query: {
+              filter: "(ListAORKey in ('76','77')) and (StandardStatus eq 'Active')",
+            },
+          }),
+          http,
+        );
+
+        assert.deepEqual(paths, [
+          "/odata/v1/Property/PropertyReplication?%24filter=%28%28ListAORKey%20in%20%28%2776%27%2C%2777%27%29%29%20and%20%28StandardStatus%20eq%20%27Active%27%29%29%20and%20ModificationTimestamp%20gt%202024-01-01T00%3A00%3A00.000Z&%24orderby=ModificationTimestamp%20asc%2CListingKey%20asc",
+        ]);
+      }),
+  );
+
+  it.effect(
     "collects per-record hydration, schema decode, and persistence errors",
     () =>
       Effect.gen(function* () {
