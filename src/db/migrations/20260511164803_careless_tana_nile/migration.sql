@@ -1,7 +1,7 @@
 CREATE TABLE "ddf_media" (
 	"media_key" text,
-	"resource" text,
-	"resource_key" text,
+	"resource" text NOT NULL,
+	"resource_key" text NOT NULL,
 	"modification_timestamp" timestamp with time zone,
 	"media_url" text,
 	"media_category" text,
@@ -65,7 +65,7 @@ CREATE TABLE "ddf_properties" (
 );
 --> statement-breakpoint
 CREATE TABLE "ddf_property_rooms" (
-	"listing_key" text,
+	"listing_key" text NOT NULL,
 	"room_key" text,
 	"room_type" text,
 	"room_level" text,

@@ -11,6 +11,7 @@ import type {
 } from "../sync";
 import { DdfDatabase } from "./layer";
 import {
+  ddfDestinations,
   ddfMedia,
   ddfMemberDesignations,
   ddfMemberLanguages,
@@ -108,6 +109,16 @@ const requireKey = (operation: string, key: string | null) =>
       )
     : Effect.succeed(key);
 
+const requireNumberKey = (operation: string, key: number | null) =>
+  key === null
+    ? Effect.fail(
+        new DdfDatabaseSinkError({
+          operation,
+          cause: new Error(`Missing stable key for ${operation}`),
+        }),
+      )
+    : Effect.succeed(key);
+
 export const propertyRowFromRecord = (property: unknown) => {
   const record = asRecord(property);
   return {
@@ -127,7 +138,7 @@ export const propertyRowFromRecord = (property: unknown) => {
     leaseAmount: numberField(record, "LeaseAmount"),
     leaseAmountFrequency: stringField(record, "LeaseAmountFrequency"),
     leasePerUnit: stringField(record, "LeasePerUnit"),
-    pricePerUnit: numberField(record, "PricePerUnit"),
+    pricePerUnit: stringField(record, "PricePerUnit"),
     associationFee: numberField(record, "AssociationFee"),
     associationFeeFrequency: stringField(record, "AssociationFeeFrequency"),
     associationName: stringField(record, "AssociationName"),
@@ -138,10 +149,18 @@ export const propertyRowFromRecord = (property: unknown) => {
     coListOfficeKey: stringField(record, "CoListOfficeKey"),
     coListOfficeKey2: stringField(record, "CoListOfficeKey2"),
     coListOfficeKey3: stringField(record, "CoListOfficeKey3"),
+    listOfficeNationalAssociationId: stringField(record, "ListOfficeNationalAssociationId"),
+    coListOfficeNationalAssociationId: stringField(record, "CoListOfficeNationalAssociationId"),
+    coListOfficeNationalAssociationId2: stringField(record, "CoListOfficeNationalAssociationId2"),
+    coListOfficeNationalAssociationId3: stringField(record, "CoListOfficeNationalAssociationId3"),
     listAgentKey: stringField(record, "ListAgentKey"),
     coListAgentKey: stringField(record, "CoListAgentKey"),
     coListAgentKey2: stringField(record, "CoListAgentKey2"),
     coListAgentKey3: stringField(record, "CoListAgentKey3"),
+    listAgentNationalAssociationId: stringField(record, "ListAgentNationalAssociationId"),
+    coListAgentNationalAssociationId: stringField(record, "CoListAgentNationalAssociationId"),
+    coListAgentNationalAssociationId2: stringField(record, "CoListAgentNationalAssociationId2"),
+    coListAgentNationalAssociationId3: stringField(record, "CoListAgentNationalAssociationId3"),
     listingUrl: stringField(record, "ListingURL"),
     originatingSystemName: stringField(record, "OriginatingSystemName"),
     photosCount: numberField(record, "PhotosCount"),
@@ -331,7 +350,6 @@ export const memberRowFromRecord = (member: unknown) => {
     tollFreePhone: stringField(record, "MemberTollFreePhone"),
     status: stringField(record, "MemberStatus"),
     type: stringField(record, "MemberType"),
-    email: stringField(record, "MemberEmail"),
     emailYn: booleanField(record, "MemberEmailYN"),
     active: true,
     raw: member,
@@ -405,6 +423,18 @@ export const officeRowFromRecord = (office: unknown) => {
     officeStatus: stringField(record, "OfficeStatus"),
     active: true,
     raw: office,
+  };
+};
+
+export const destinationRowFromRecord = (destination: unknown) => {
+  const record = asRecord(destination);
+  return {
+    destinationId: numberField(record, "DestinationId"),
+    destinationName: stringField(record, "DestinationName"),
+    destinationUrl: stringField(record, "DestinationUrl"),
+    destinationType: stringField(record, "DestinationType"),
+    destinationStatus: stringField(record, "DestinationStatus"),
+    raw: destination,
   };
 };
 
@@ -491,6 +521,9 @@ export type DdfDatabaseSyncSink = PropertySyncSink &
   MemberSyncSink &
   OfficeSyncSink &
   OpenHouseSyncSink & {
+    readonly upsertDestination: (
+      destination: unknown,
+    ) => Effect.Effect<void, DdfDatabaseSinkError>;
     readonly recordSyncError: (
       error: SyncRecordError,
     ) => Effect.Effect<void, DdfDatabaseSinkError>;
@@ -500,6 +533,20 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
   function* (options?: { readonly runId?: string }) {
     const { db } = yield* DdfDatabase;
     return {
+      upsertDestination: Effect.fn("DdfDatabaseSyncSink.upsertDestination")(
+        function* (destination: unknown) {
+          const row = destinationRowFromRecord(destination);
+          const destinationId = yield* requireNumberKey("upsertDestination", row.destinationId);
+          yield* db
+            .insert(ddfDestinations)
+            .values({ ...row, destinationId })
+            .onConflictDoUpdate({
+              target: ddfDestinations.destinationId,
+              set: { ...row, destinationId, ...touchUpdatedAt },
+            })
+            .pipe(Effect.mapError(mapSinkError("upsertDestination")));
+        },
+      ),
       upsertPropertyGraph: Effect.fn("DdfDatabaseSyncSink.upsertPropertyGraph")(
         function* (graph: PropertyGraph) {
           const propertyRow = propertyRowFromRecord(graph.property);
