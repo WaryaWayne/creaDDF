@@ -17,7 +17,6 @@ describe("database read client helpers", () => {
       "listPrice",
       "city",
       "province",
-      "propertyType",
       "propertySubType",
       "bedroomsTotal",
       "bathroomsTotalInteger",
