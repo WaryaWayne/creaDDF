@@ -67,6 +67,13 @@ export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorK
   const raw = value?.trim() ?? "";
   if (raw.length === 0) return [];
 
+  if (raw.startsWith("{") || raw.endsWith("}")) {
+    throw new DdfChosenAorKeysConfigError({ value: raw, reason: "expected a comma-separated list or JSON array, not an object" });
+  }
+  if (!raw.startsWith("[") && (raw.includes("[") || raw.includes("]"))) {
+    throw new DdfChosenAorKeysConfigError({ value: raw, reason: "stray JSON array bracket" });
+  }
+
   const values: ReadonlyArray<unknown> = raw.startsWith("[")
     ? (() => {
         try {
@@ -81,6 +88,10 @@ export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorK
         }
       })()
     : raw.split(",");
+
+  if (!raw.startsWith("[") && values.some((entry) => typeof entry === "string" && entry.trim().length === 0)) {
+    throw new DdfChosenAorKeysConfigError({ value: raw, reason: "comma-separated entries must not be empty" });
+  }
 
   const keys = values.map(normalizeChosenAorKey);
   const invalidIndex = keys.findIndex((key) => key === null);
@@ -158,8 +169,8 @@ export interface SyncDdfDatabaseOnceOptions {
   readonly openHouseListingChunkSize?: number;
   /**
    * Limits Property/Member/Office replication and OpenHouse listing scopes to these AOR keys.
-   * Existing rows outside this scope are not pruned automatically; reset or run an explicit cleanup
-   * if an existing database must be physically narrowed after changing scope.
+   * AOR scope changes require a user-managed database reset because watermarks are intentionally
+   * resource-wide for now; existing rows outside this scope are not pruned automatically.
    */
   readonly chosenAorKeys?: ChosenAorKeys;
   readonly dependencies?: Partial<SyncDdfDatabaseDependencies>;
@@ -305,6 +316,9 @@ export const databaseSyncOptionsFromWatermarks = (
     listingChunkSize: options?.openHouseListingChunkSize,
   } satisfies Omit<OpenHouseSyncOptions, "sink">,
 });
+// TODO: Use safer cursoring after #24: compute the next cursor from source modification timestamps,
+// cap it by each resource sync start time, apply a small lookback window, and persist richer DB
+// runtime metadata (including AOR scope) so future scope-aware reset/guardrails can be explicit.
 const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
   saveWatermark: SyncDdfDatabaseDependencies["saveWatermark"],
   resource: Parameters<typeof saveDatabaseWatermark>[0],

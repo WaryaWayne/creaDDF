@@ -62,6 +62,20 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.deepEqual(parseChosenAorKeys(""), []);
   });
 
+  it("rejects malformed chosen AOR config shapes", () => {
+    for (const value of [
+      '{"keys":["76"]}',
+      "76,",
+      "76,,77",
+      "76]",
+      "[76,]",
+      '["76",{}]',
+      '["76",null]',
+    ]) {
+      assert.throws(() => parseChosenAorKeys(value));
+    }
+  });
+
   it.effect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({

@@ -4,6 +4,9 @@ import {
   DdfDbClientValidationError,
   coListAgentKeysFromRow,
   coListOfficeKeysFromRow,
+  embeddedJsonbRows,
+  embeddedMediaRow,
+  embeddedRoomRow,
   groupRowsBy,
   projectionPlan,
   propertyFieldPresets,
@@ -21,6 +24,7 @@ describe("database read client helpers", () => {
       "bedroomsTotal",
       "bathroomsTotalInteger",
       "modificationTimestamp",
+      "primaryMediaUrl",
     ]);
     assert.equal(propertyFieldPresets.card.join(",").includes("raw"), false);
   });
@@ -37,6 +41,39 @@ describe("database read client helpers", () => {
     assert.equal(defaultPlan.includesRaw, false);
     assert.deepEqual(rawPlan.fields, ["listingKey", "raw"]);
     assert.equal(rawPlan.includesRaw, true);
+  });
+
+  it("projects property, member, and office media includes from embedded JSONB payloads", () => {
+    const mediaJsonb = [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      { MediaKey: "media-1", MediaURL: "https://example.test/first.jpg", Order: 1 },
+    ];
+
+    assert.deepEqual(
+      embeddedJsonbRows(mediaJsonb, embeddedMediaRow, ["mediaKey", "mediaUrl", "sortOrder"]),
+      [
+        { mediaKey: "media-1", mediaUrl: "https://example.test/first.jpg", sortOrder: 1 },
+        { mediaKey: "media-2", mediaUrl: "https://example.test/second.jpg", sortOrder: 2 },
+      ],
+    );
+    assert.deepEqual(
+      embeddedJsonbRows(mediaJsonb, embeddedMediaRow, ["mediaKey"], { select: ["mediaUrl"] }),
+      [
+        { mediaUrl: "https://example.test/first.jpg" },
+        { mediaUrl: "https://example.test/second.jpg" },
+      ],
+    );
+  });
+
+  it("projects property room includes from embedded JSONB payloads", () => {
+    assert.deepEqual(
+      embeddedJsonbRows(
+        [{ RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main" }],
+        embeddedRoomRow,
+        ["roomKey", "roomType", "roomLevel"],
+      ),
+      [{ roomKey: "room-1", roomType: "Kitchen", roomLevel: "Main" }],
+    );
   });
 
   it("groups related rows by parent key for batched include assembly", () => {

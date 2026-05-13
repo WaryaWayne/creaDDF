@@ -120,6 +120,16 @@ describe("database sync sink row mapping", () => {
     });
   });
 
+
+  it("maps member and office media to embedded JSONB columns", () => {
+    const media = [
+      asMediaRecord({ MediaKey: "media-1", MediaURL: "https://example.test/member.jpg", Order: 1 }),
+    ];
+
+    assert.deepEqual(memberRowFromRecord(asMemberRecord({ MemberKey: "member-1" }), media).media, media);
+    assert.deepEqual(officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" }), media).media, media);
+  });
+
   it("derives fallback room and media keys when DDF omits child keys", () => {
     const property = asPropertyRecord({ ListingKey: "listing-1" });
     const room = asRoomRecord({ RoomKey: null, RoomType: "Kitchen", RoomLevel: "Main level" });
