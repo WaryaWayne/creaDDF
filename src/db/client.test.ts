@@ -6,6 +6,8 @@ import {
   coListOfficeKeysFromRow,
   groupRowsBy,
   projectionPlan,
+  embeddedMediaRowsFromColumn,
+  embeddedRoomRowsFromColumn,
   propertyFieldPresets,
   validateListOptions,
 } from "./client";
@@ -20,9 +22,73 @@ describe("database read client helpers", () => {
       "propertySubType",
       "bedroomsTotal",
       "bathroomsTotalInteger",
+      "primaryMediaUrl",
       "modificationTimestamp",
     ]);
     assert.equal(propertyFieldPresets.card.join(",").includes("raw"), false);
+  });
+
+
+  it("projects embedded JSONB property/member/office media and property rooms for includes", () => {
+    const media = [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      { MediaKey: "media-1", MediaURL: "https://example.test/first.jpg", Order: 1 },
+    ];
+
+    assert.deepEqual(embeddedMediaRowsFromColumn(media, "Property", "listing-1"), [
+      {
+        mediaKey: "media-1",
+        resource: "Property",
+        resourceKey: "listing-1",
+        resourceRecordId: null,
+        resourceRecordKey: null,
+        resourceName: null,
+        modificationTimestamp: null,
+        mediaUrl: "https://example.test/first.jpg",
+        mediaCategory: null,
+        longDescription: null,
+        preferredPhoto: null,
+        sortOrder: 1,
+        raw: media[1],
+      },
+      {
+        mediaKey: "media-2",
+        resource: "Property",
+        resourceKey: "listing-1",
+        resourceRecordId: null,
+        resourceRecordKey: null,
+        resourceName: null,
+        modificationTimestamp: null,
+        mediaUrl: "https://example.test/second.jpg",
+        mediaCategory: null,
+        longDescription: null,
+        preferredPhoto: null,
+        sortOrder: 2,
+        raw: media[0],
+      },
+    ]);
+    assert.equal(embeddedMediaRowsFromColumn(media, "Member", "member-1")[0]?.resourceKey, "member-1");
+    assert.equal(embeddedMediaRowsFromColumn(media, "Office", "office-1")[0]?.resourceKey, "office-1");
+    assert.deepEqual(
+      embeddedRoomRowsFromColumn([{ RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main" }], {
+        listingKey: "listing-1",
+        listingId: "L123",
+      }),
+      [{
+        roomKey: "room-1",
+        listingKey: "listing-1",
+        listingId: "L123",
+        modificationTimestamp: null,
+        roomDescription: null,
+        roomDimensions: null,
+        roomLength: null,
+        roomLevel: "Main",
+        roomWidth: null,
+        roomLengthWidthUnits: null,
+        roomType: "Kitchen",
+        raw: { RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main" },
+      }],
+    );
   });
 
   it("only includes raw when explicitly requested", () => {

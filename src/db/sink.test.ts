@@ -241,6 +241,25 @@ describe("database sync sink row mapping", () => {
     assert.equal(openHouseRowFromRecord(openHouse).livestreamOpenHouseUrl, "https://example.test/live");
   });
 
+
+  it("maps member and office media into parent JSONB columns", () => {
+    const memberMedia = [
+      asMediaRecord({ MediaKey: "member-media-1", MediaURL: "https://example.test/member.jpg", Order: 1 }),
+    ];
+    const officeMedia = [
+      asMediaRecord({ MediaKey: "office-media-1", MediaURL: "https://example.test/office.jpg", Order: 1 }),
+    ];
+
+    assert.deepEqual(
+      memberRowFromRecord(asMemberRecord({ MemberKey: "member-1" }), memberMedia).media as unknown,
+      memberMedia,
+    );
+    assert.deepEqual(
+      officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" }), officeMedia).media as unknown,
+      officeMedia,
+    );
+  });
+
   it("maps destination rows for the DB query surface", () => {
     const destination = asDestination({
       DestinationId: 123,

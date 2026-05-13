@@ -62,6 +62,22 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.deepEqual(parseChosenAorKeys(""), []);
   });
 
+
+  it("rejects malformed chosen AOR env syntax", () => {
+    for (const value of [
+      "{\"0\":76}",
+      "76,[77]",
+      "76,",
+      "76,,77",
+      "[76,]",
+      "[76,{}]",
+      "[76,null]",
+      "[76,true]",
+    ]) {
+      assert.throws(() => parseChosenAorKeys(value), /Invalid CREA_CHOSEN_AOR_KEYS/);
+    }
+  });
+
   it.effect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({

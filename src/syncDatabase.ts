@@ -63,32 +63,49 @@ const normalizeChosenAorKey = (value: unknown): string | null => {
   return null;
 };
 
+const invalidChosenAorKeys = (value: string, reason: string) =>
+  new DdfChosenAorKeysConfigError({ value, reason });
+
+const parseJsonChosenAorKeys = (raw: string): ReadonlyArray<unknown> => {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      throw new Error("expected a JSON array, not an object or scalar");
+    }
+    return parsed;
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    throw invalidChosenAorKeys(raw, reason);
+  }
+};
+
 export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorKeys => {
   const raw = value?.trim() ?? "";
   if (raw.length === 0) return [];
 
-  const values: ReadonlyArray<unknown> = raw.startsWith("[")
-    ? (() => {
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          if (!Array.isArray(parsed)) {
-            throw new Error("expected a JSON array");
-          }
-          return parsed;
-        } catch (cause) {
-          const reason = cause instanceof Error ? cause.message : String(cause);
-          throw new DdfChosenAorKeysConfigError({ value: raw, reason });
-        }
-      })()
-    : raw.split(",");
+  const values: ReadonlyArray<unknown> = (() => {
+    if (raw.startsWith("[")) return parseJsonChosenAorKeys(raw);
+    if (raw.startsWith("{") || raw.endsWith("}")) {
+      throw invalidChosenAorKeys(raw, "JSON object syntax is not supported; use a JSON array or comma-separated list");
+    }
+    if (raw.includes("[") || raw.includes("]")) {
+      throw invalidChosenAorKeys(raw, "stray bracket in comma-separated list; use a valid JSON array or remove brackets");
+    }
+    const entries = raw.split(",");
+    const emptyIndex = entries.findIndex((entry) => entry.trim().length === 0);
+    if (emptyIndex >= 0) {
+      throw invalidChosenAorKeys(raw, `entry at index ${emptyIndex} must not be empty`);
+    }
+    return entries;
+  })();
 
   const keys = values.map(normalizeChosenAorKey);
   const invalidIndex = keys.findIndex((key) => key === null);
   if (invalidIndex >= 0) {
-    throw new DdfChosenAorKeysConfigError({
-      value: raw,
-      reason: `entry at index ${invalidIndex} must be a non-empty string or finite number`,
-    });
+    throw invalidChosenAorKeys(
+      raw,
+      `entry at index ${invalidIndex} must be a non-empty string or finite number`,
+    );
   }
 
   return [...new Set(keys as Array<string>)];
@@ -158,8 +175,8 @@ export interface SyncDdfDatabaseOnceOptions {
   readonly openHouseListingChunkSize?: number;
   /**
    * Limits Property/Member/Office replication and OpenHouse listing scopes to these AOR keys.
-   * Existing rows outside this scope are not pruned automatically; reset or run an explicit cleanup
-   * if an existing database must be physically narrowed after changing scope.
+   * AOR key changes require a user-managed database reset because watermarks are intentionally
+   * not scope-aware yet; existing rows outside this scope are not pruned automatically.
    */
   readonly chosenAorKeys?: ChosenAorKeys;
   readonly dependencies?: Partial<SyncDdfDatabaseDependencies>;
@@ -390,6 +407,10 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     }
 
     const startedAt = yield* DateTime.nowAsDate;
+    // TODO: design safer incremental cursoring before changing watermark semantics:
+    // cap source timestamps by each resource sync start time, apply a small lookback,
+    // and persist richer DB runtime metadata alongside reset-on-AOR-change guidance.
+
     yield* Effect.logInfo("DDF database sync: preparing database sink", {
       runId,
     });
