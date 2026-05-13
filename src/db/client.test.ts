@@ -6,6 +6,8 @@ import {
   coListOfficeKeysFromRow,
   groupRowsBy,
   projectionPlan,
+  embeddedMediaIncludeRows,
+  embeddedRoomIncludeRows,
   propertyFieldPresets,
   validateListOptions,
 } from "./client";
@@ -21,6 +23,7 @@ describe("database read client helpers", () => {
       "bedroomsTotal",
       "bathroomsTotalInteger",
       "modificationTimestamp",
+      "primaryMediaUrl",
     ]);
     assert.equal(propertyFieldPresets.card.join(",").includes("raw"), false);
   });
@@ -58,6 +61,32 @@ describe("database read client helpers", () => {
       { listingKey: "listing-2", mediaKey: "media-3" },
     ]);
     assert.equal(grouped.has("ignored"), false);
+  });
+
+  it("projects property/member/office media includes from JSONB columns", () => {
+    const media = [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      { MediaKey: "media-1", MediaURL: "https://example.test/first.jpg", Order: 1 },
+    ];
+
+    assert.deepEqual(embeddedMediaIncludeRows({ listingKey: "listing-1", media }, "Property", "listingKey"), [
+      { mediaKey: "media-1", mediaUrl: "https://example.test/first.jpg", sortOrder: 1 },
+      { mediaKey: "media-2", mediaUrl: "https://example.test/second.jpg", sortOrder: 2 },
+    ]);
+    assert.deepEqual(embeddedMediaIncludeRows({ memberKey: "member-1", media }, "Member", "memberKey", { select: ["mediaUrl"] }), [
+      { mediaUrl: "https://example.test/first.jpg" },
+      { mediaUrl: "https://example.test/second.jpg" },
+    ]);
+    assert.deepEqual(embeddedMediaIncludeRows({ officeKey: "office-1", media }, "Office", "officeKey", { select: ["resource", "resourceKey", "mediaKey"] }), [
+      { resource: "Office", resourceKey: "office-1", mediaKey: "media-1" },
+      { resource: "Office", resourceKey: "office-1", mediaKey: "media-2" },
+    ]);
+  });
+
+  it("projects property room includes from JSONB columns", () => {
+    assert.deepEqual(embeddedRoomIncludeRows({ listingKey: "listing-1", rooms: [{ RoomKey: "room-1", RoomType: "Kitchen", RoomLevel: "Main" }] }), [
+      { roomKey: "room-1", roomType: "Kitchen", roomLevel: "Main" },
+    ]);
   });
 
   it("reads property co-list keys from typed row columns", () => {

@@ -62,6 +62,19 @@ describe("syncDdfDatabaseOnce planning", () => {
     assert.deepEqual(parseChosenAorKeys(""), []);
   });
 
+  it.each([
+    ["JSON objects", "{\"aor\":[76]}"] as const,
+    ["malformed arrays", "[76,"] as const,
+    ["stray opening brackets", "76,[77]"] as const,
+    ["stray closing brackets", "76,77]"] as const,
+    ["empty comma entries", "76,,77"] as const,
+    ["JSON object array entries", "[{\"key\":76}]"] as const,
+    ["JSON array entries", "[[76]]"] as const,
+    ["non-finite JSON numbers", "[1e999]"] as const,
+  ])("rejects malformed chosen AOR config: %s", (_label, raw) => {
+    assert.throws(() => parseChosenAorKeys(raw), /Invalid CREA_CHOSEN_AOR_KEYS/);
+  });
+
   it.effect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({

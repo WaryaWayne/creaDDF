@@ -72,6 +72,27 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.raw, property);
   });
 
+  it("maps property graph children and member/office media into JSONB row columns", () => {
+    const property = asPropertyRecord({
+      ListingKey: "listing-1",
+      Rooms: [{ RoomKey: "room-1", RoomType: "Kitchen" }],
+      Media: [{ MediaKey: "property-media-1", MediaURL: "https://example.test/property.jpg" }],
+    });
+    const member = asMemberRecord({ MemberKey: "member-1" });
+    const office = asOfficeRecord({ OfficeKey: "office-1" });
+    const memberMedia = [asMediaRecord({ MediaKey: "member-media-1", MediaURL: "https://example.test/member.jpg" })];
+    const officeMedia = [asMediaRecord({ MediaKey: "office-media-1", MediaURL: "https://example.test/office.jpg" })];
+
+    const propertyRow = propertyRowFromRecord(property);
+    const memberRow = memberRowFromRecord(member, memberMedia);
+    const officeRow = officeRowFromRecord(office, officeMedia);
+
+    assert.deepEqual(propertyRow.rooms as unknown, [{ RoomKey: "room-1", RoomType: "Kitchen" }]);
+    assert.deepEqual(propertyRow.media as unknown, [{ MediaKey: "property-media-1", MediaURL: "https://example.test/property.jpg" }]);
+    assert.deepEqual(memberRow.media, memberMedia);
+    assert.deepEqual(officeRow.media, officeMedia);
+  });
+
   it("uses ordered property media as the listing-card helper when no preferred photo is present", () => {
     const row = propertyRowFromRecord(asPropertyRecord({
       ListingKey: "listing-1",

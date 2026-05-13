@@ -19,6 +19,7 @@ import {
 type DbValue = string | number | boolean | Date | unknown | null;
 export type DbRow = Readonly<Record<string, DbValue>>;
 type DbRows = ReadonlyArray<DbRow>;
+type EmbeddedRecord = Readonly<Record<string, unknown>>;
 type Direction = "asc" | "desc";
 type RowSelect<Field extends string> = ReadonlyArray<Field>;
 
@@ -121,6 +122,7 @@ export const propertyFieldPresets = {
     "bedroomsTotal",
     "bathroomsTotalInteger",
     "modificationTimestamp",
+    "primaryMediaUrl",
   ],
   detail: [
     "listingKey",
@@ -136,6 +138,7 @@ export const propertyFieldPresets = {
     "listAgentKey",
     "listOfficeKey",
     "modificationTimestamp",
+    "primaryMediaUrl",
   ],
 } as const satisfies Record<string, RowSelect<PropertyField>>;
 
@@ -250,6 +253,85 @@ const groupByKey = (rows: DbRows, key: string) => {
 
 export const groupRowsBy = groupByKey;
 
+
+const embeddedRecords = (value: DbValue): ReadonlyArray<EmbeddedRecord> =>
+  Array.isArray(value)
+    ? value.filter((record): record is EmbeddedRecord => typeof record === "object" && record !== null && !Array.isArray(record))
+    : [];
+
+const embeddedString = (record: EmbeddedRecord, field: string): string | null => {
+  const value = record[field];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+};
+
+const embeddedNumber = (record: EmbeddedRecord, field: string): number | null => {
+  const value = record[field];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+};
+
+const embeddedBoolean = (record: EmbeddedRecord, field: string): boolean | null => {
+  const value = record[field];
+  return typeof value === "boolean" ? value : null;
+};
+
+const embeddedTimestamp = (record: EmbeddedRecord, field: string): Date | string | null => {
+  const value = record[field];
+  if (value instanceof Date) return value;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+};
+
+const embeddedMediaRow = (record: EmbeddedRecord, resource: "Property" | "Member" | "Office", resourceKey: string, index: number): DbRow => ({
+  mediaKey: embeddedString(record, "MediaKey") ?? `${resource}:${resourceKey}:${embeddedString(record, "MediaURL") ?? "media"}:${embeddedNumber(record, "Order") ?? index}`,
+  resource,
+  resourceKey,
+  resourceRecordId: embeddedString(record, "ResourceRecordId"),
+  resourceRecordKey: embeddedString(record, "ResourceRecordKey"),
+  resourceName: embeddedString(record, "ResourceName"),
+  modificationTimestamp: embeddedTimestamp(record, "ModificationTimestamp"),
+  mediaUrl: embeddedString(record, "MediaURL"),
+  mediaCategory: embeddedString(record, "MediaCategory"),
+  longDescription: embeddedString(record, "LongDescription"),
+  preferredPhoto: embeddedBoolean(record, "PreferredPhotoYN"),
+  sortOrder: embeddedNumber(record, "Order"),
+  raw: record,
+});
+
+const embeddedRoomRow = (record: EmbeddedRecord, row: DbRow, index: number): DbRow => {
+  const listingKey = typeof row.listingKey === "string" ? row.listingKey : embeddedString(record, "ListingKey");
+  const listingId = typeof row.listingId === "string" ? row.listingId : embeddedString(record, "ListingId");
+  return {
+    roomKey: embeddedString(record, "RoomKey") ?? `${listingKey ?? "listing"}:${embeddedString(record, "RoomType") ?? "room"}:${embeddedString(record, "RoomLevel") ?? index}`,
+    listingKey,
+    listingId,
+    modificationTimestamp: embeddedTimestamp(record, "ModificationTimestamp"),
+    roomDescription: embeddedString(record, "RoomDescription"),
+    roomDimensions: embeddedString(record, "RoomDimensions"),
+    roomLength: embeddedNumber(record, "RoomLength"),
+    roomLevel: embeddedString(record, "RoomLevel"),
+    roomWidth: embeddedNumber(record, "RoomWidth"),
+    roomLengthWidthUnits: embeddedString(record, "RoomLengthWidthUnits"),
+    roomType: embeddedString(record, "RoomType"),
+    raw: record,
+  };
+};
+
+export const embeddedMediaIncludeRows = (
+  row: DbRow,
+  resource: "Property" | "Member" | "Office",
+  keyField: "listingKey" | "memberKey" | "officeKey",
+  options?: RelatedSelect<MediaField>,
+): DbRows => {
+  const resourceKey = row[keyField];
+  if (typeof resourceKey !== "string") return [];
+  return embeddedRecords(row.media)
+    .map((record, index) => embeddedMediaRow(record, resource, resourceKey, index))
+    .sort((left, right) => (typeof left.sortOrder === "number" ? left.sortOrder : Number.MAX_SAFE_INTEGER) - (typeof right.sortOrder === "number" ? right.sortOrder : Number.MAX_SAFE_INTEGER))
+    .map((mediaRow) => pickVirtual(mediaRow, ["mediaKey", "mediaUrl", "sortOrder"], options));
+};
+
+export const embeddedRoomIncludeRows = (row: DbRow, options?: RelatedSelect<PropertyRoomField>): DbRows =>
+  embeddedRecords(row.rooms).map((record, index) => pickVirtual(embeddedRoomRow(record, row, index), ["roomKey", "roomType", "roomLevel"], options));
+
 const stringValues = (rows: DbRows, key: string) =>
   Array.from(new Set(rows.flatMap((row) => typeof row[key] === "string" ? [row[key]] : [])));
 
@@ -331,6 +413,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
     const include = options?.include;
     const hidden: PropertyField[] = [];
     if (include?.openHouses !== undefined || include?.media !== undefined || include?.rooms !== undefined) hidden.push("listingKey");
+    if (include?.media !== undefined) hidden.push("media");
+    if (include?.rooms !== undefined) hidden.push("rooms");
     if (include?.listAgent !== undefined) hidden.push("listAgentKey");
     if (include?.listOffice !== undefined) hidden.push("listOfficeKey");
     if (include?.coListAgents !== undefined) hidden.push("coListAgentKey", "coListAgentKey2", "coListAgentKey3");
@@ -350,17 +434,15 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
     let result = rows;
     if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const listingKeys = stringValues(rows, "listingKey");
-    if (include.media !== undefined && listingKeys.length > 0) {
-      const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Property"), inArray(ddfMedia.resourceKey, listingKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("properties.media")));
-      result = appendGroup(result, "media", groupByKey(mediaRows, "resourceKey"));
+    if (include.media !== undefined) {
+      result = result.map((row) => ({ ...row, media: embeddedMediaIncludeRows(row, "Property", "listingKey", include.media) }));
     }
     if (include.openHouses !== undefined && listingKeys.length > 0) {
       const openHouseRows = yield* db.select(selectionFor(openHouseColumns, openHouseFieldPresets.card, include.openHouses, ["listingKey"])).from(ddfOpenHouses).where(inArray(ddfOpenHouses.listingKey, listingKeys)).pipe(Effect.mapError(mapClientError("properties.openHouses")));
       result = appendGroup(result, "openHouses", groupByKey(openHouseRows, "listingKey"));
     }
-    if (include.rooms !== undefined && listingKeys.length > 0) {
-      const roomRows = yield* db.select(selectionFor(roomColumns, ["roomKey", "roomType", "roomLevel"], include.rooms, ["listingKey"])).from(ddfPropertyRooms).where(inArray(ddfPropertyRooms.listingKey, listingKeys)).pipe(Effect.mapError(mapClientError("properties.rooms")));
-      result = appendGroup(result, "rooms", groupByKey(roomRows, "listingKey"));
+    if (include.rooms !== undefined) {
+      result = result.map((row) => ({ ...row, rooms: embeddedRoomIncludeRows(row, include.rooms) }));
     }
     if (include.listAgent !== undefined) {
       const agentKeys = stringValues(rows, "listAgentKey");
@@ -393,9 +475,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
     let result = rows;
     if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const memberKeys = stringValues(rows, "memberKey");
-    if (include.media !== undefined && memberKeys.length > 0) {
-      const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Member"), inArray(ddfMedia.resourceKey, memberKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("members.media")));
-      result = appendGroup(result, "media", groupByKey(mediaRows, "resourceKey"), "memberKey");
+    if (include.media !== undefined) {
+      result = result.map((row) => ({ ...row, media: embeddedMediaIncludeRows(row, "Member", "memberKey", include.media) }));
     }
     if (include.office !== undefined) {
       const officeKeys = stringValues(rows, "officeKey");
@@ -434,9 +515,8 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
     let result = rows;
     if (rows.length === 0 || include === undefined) return result.map((row) => withoutHiddenRaw(row, includeRaw));
     const officeKeys = stringValues(rows, "officeKey");
-    if (include.media !== undefined && officeKeys.length > 0) {
-      const mediaRows = yield* db.select(selectionFor(mediaColumns, ["mediaKey", "mediaUrl", "sortOrder"], include.media, ["resourceKey"])).from(ddfMedia).where(and(eq(ddfMedia.resource, "Office"), inArray(ddfMedia.resourceKey, officeKeys))).orderBy(asc(ddfMedia.sortOrder)).pipe(Effect.mapError(mapClientError("offices.media")));
-      result = appendGroup(result, "media", groupByKey(mediaRows, "resourceKey"), "officeKey");
+    if (include.media !== undefined) {
+      result = result.map((row) => ({ ...row, media: embeddedMediaIncludeRows(row, "Office", "officeKey", include.media) }));
     }
     if (include.members !== undefined && officeKeys.length > 0) {
       const memberRows = yield* db.select(selectionFor(memberColumns, memberFieldPresets.card, include.members, ["officeKey"])).from(ddfMembers).where(inArray(ddfMembers.officeKey, officeKeys)).pipe(Effect.mapError(mapClientError("offices.members")));
@@ -508,6 +588,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       get: Effect.fn("DdfDbClient.members.get")(function* (memberKey: string, options?: GetOptions<MemberField, MemberInclude>) {
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
+        if (include?.media !== undefined) hidden.push("media");
 
         const rows = yield* simpleList("members.get", ddfMembers, memberColumns, memberFieldPresets.detail, eq(ddfMembers.memberKey, memberKey), { ...options, limit: 1, select: options?.select, includeRaw: options?.includeRaw, include: undefined }, hidden);
         const included = yield* withMemberIncludes(rows, include, options?.includeRaw);
@@ -520,6 +601,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         if (filters?.officeKey !== undefined) clauses.push(eq(ddfMembers.officeKey, filters.officeKey));
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
+        if (include?.media !== undefined) hidden.push("media");
 
         const rows = yield* simpleList("members.list", ddfMembers, memberColumns, memberFieldPresets.card, clauses.length > 0 ? and(...clauses) : undefined, { ...options, include: undefined }, hidden);
         return yield* withMemberIncludes(rows, include, options?.includeRaw);
@@ -529,6 +611,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       get: Effect.fn("DdfDbClient.offices.get")(function* (officeKey: string, options?: GetOptions<OfficeField, OfficeInclude>) {
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
+        if (include?.media !== undefined) hidden.push("media");
 
         const rows = yield* simpleList("offices.get", ddfOffices, officeColumns, officeFieldPresets.detail, eq(ddfOffices.officeKey, officeKey), { ...options, limit: 1, include: undefined }, hidden);
         const included = yield* withOfficeIncludes(rows, include, options?.includeRaw);
@@ -542,6 +625,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         if (filters?.province !== undefined) clauses.push(eq(ddfOffices.province, filters.province));
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
+        if (include?.media !== undefined) hidden.push("media");
 
         const rows = yield* simpleList("offices.list", ddfOffices, officeColumns, officeFieldPresets.card, clauses.length > 0 ? and(...clauses) : undefined, { ...options, include: undefined }, hidden);
         return yield* withOfficeIncludes(rows, include, options?.includeRaw);

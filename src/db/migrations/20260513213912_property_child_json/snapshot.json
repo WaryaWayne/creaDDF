@@ -956,6 +956,19 @@
       "table": "ddf_members"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "media",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_members"
+    },
+    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -1276,6 +1289,19 @@
       "generated": null,
       "identity": null,
       "name": "office_status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_offices"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "media",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_offices"

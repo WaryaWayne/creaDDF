@@ -7,6 +7,8 @@ ALTER TABLE "ddf_destinations" ADD COLUMN "full_nsp" boolean;--> statement-break
 ALTER TABLE "ddf_properties" ADD COLUMN "rooms" jsonb;--> statement-breakpoint
 ALTER TABLE "ddf_properties" ADD COLUMN "media" jsonb;--> statement-breakpoint
 ALTER TABLE "ddf_properties" ADD COLUMN "primary_media_url" text;--> statement-breakpoint
+ALTER TABLE "ddf_members" ADD COLUMN "media" jsonb;--> statement-breakpoint
+ALTER TABLE "ddf_offices" ADD COLUMN "media" jsonb;--> statement-breakpoint
 ALTER TABLE "ddf_properties" DROP COLUMN "property_type";--> statement-breakpoint
 ALTER TABLE "ddf_destinations" ALTER COLUMN "destination_type" SET DATA TYPE text USING "destination_type"::text;--> statement-breakpoint
 ALTER TABLE "ddf_destinations" ALTER COLUMN "destination_status" SET DATA TYPE text USING "destination_status"::text;--> statement-breakpoint

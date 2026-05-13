@@ -67,6 +67,21 @@ export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorK
   const raw = value?.trim() ?? "";
   if (raw.length === 0) return [];
 
+  if (raw.startsWith("{")) {
+    throw new DdfChosenAorKeysConfigError({
+      value: raw,
+      reason: "expected a comma-separated list or JSON array, not a JSON object",
+    });
+  }
+
+  const hasBracket = raw.includes("[") || raw.includes("]");
+  if (hasBracket && !(raw.startsWith("[") && raw.endsWith("]"))) {
+    throw new DdfChosenAorKeysConfigError({
+      value: raw,
+      reason: "brackets are only valid around a complete JSON array",
+    });
+  }
+
   const values: ReadonlyArray<unknown> = raw.startsWith("[")
     ? (() => {
         try {
@@ -80,7 +95,17 @@ export const parseChosenAorKeys = (value: string | null | undefined): ChosenAorK
           throw new DdfChosenAorKeysConfigError({ value: raw, reason });
         }
       })()
-    : raw.split(",");
+    : (() => {
+        const entries = raw.split(",");
+        const emptyIndex = entries.findIndex((entry) => entry.trim().length === 0);
+        if (emptyIndex >= 0) {
+          throw new DdfChosenAorKeysConfigError({
+            value: raw,
+            reason: `entry at index ${emptyIndex} must not be empty`,
+          });
+        }
+        return entries;
+      })();
 
   const keys = values.map(normalizeChosenAorKey);
   const invalidIndex = keys.findIndex((key) => key === null);
@@ -305,6 +330,10 @@ export const databaseSyncOptionsFromWatermarks = (
     listingChunkSize: options?.openHouseListingChunkSize,
   } satisfies Omit<OpenHouseSyncOptions, "sink">,
 });
+// TODO: design safer database cursoring before changing watermark semantics. Prefer a
+// source ModificationTimestamp cursor capped by each resource sync start time, plus a
+// small lookback window and richer DB runtime metadata. AOR scope changes remain a
+// user-managed database reset until scope-aware watermarks are introduced.
 const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
   saveWatermark: SyncDdfDatabaseDependencies["saveWatermark"],
   resource: Parameters<typeof saveDatabaseWatermark>[0],
