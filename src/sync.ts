@@ -55,6 +55,7 @@ import { DdfWatermarkStore } from "./watermark";
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([
+  "Destination",
   "Property",
   "Member",
   "Office",
