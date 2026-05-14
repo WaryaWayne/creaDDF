@@ -275,12 +275,13 @@ CREATE TABLE "ddf_sync_runs" (
 );
 --> statement-breakpoint
 CREATE TABLE "ddf_watermarks" (
-	"resource" text PRIMARY KEY,
+	"resource" text,
 	"watermark" text NOT NULL,
-	"cursor_kind" text DEFAULT 'processed_replication_stream' NOT NULL,
-	"scope_hash" text DEFAULT 'global' NOT NULL,
+	"cursor_kind" text DEFAULT 'processed_replication_stream',
+	"scope_hash" text DEFAULT 'global',
 	"scope" jsonb DEFAULT '{"destinationId":null,"chosenAorKeys":[]}' NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ddf_watermarks_pkey" PRIMARY KEY("resource","cursor_kind","scope_hash")
 );
 --> statement-breakpoint
 CREATE INDEX "ddf_destinations_status_idx" ON "ddf_destinations" ("destination_status");--> statement-breakpoint

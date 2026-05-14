@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "99418976-bfe2-476d-9a7f-d193e7594719",
+  "id": "a0abd27a-0721-4120-8aa8-87e5ccb58e42",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -3911,6 +3911,18 @@
     },
     {
       "columns": [
+        "resource",
+        "cursor_kind",
+        "scope_hash"
+      ],
+      "nameExplicit": false,
+      "name": "ddf_watermarks_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "ddf_watermarks"
+    },
+    {
+      "columns": [
         "destination_id"
       ],
       "nameExplicit": false,
@@ -3977,16 +3989,6 @@
       "name": "ddf_sync_runs_pkey",
       "schema": "public",
       "table": "ddf_sync_runs",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "resource"
-      ],
-      "nameExplicit": false,
-      "name": "ddf_watermarks_pkey",
-      "schema": "public",
-      "table": "ddf_watermarks",
       "entityType": "pks"
     }
   ],
