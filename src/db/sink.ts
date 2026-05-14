@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { Cause, Data, DateTime, Effect } from "effect";
 import type {
   MediaRecord,
@@ -730,6 +730,33 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           .set({ active: false, ...touchUpdatedAt })
           .where(inArray(ddfProperties.listingKey, keys))
           .pipe(Effect.mapError(mapSinkError("markMissingPropertiesInactive")));
+      }),
+      deleteOpenHousesForListings: Effect.fn(
+        "DdfDatabaseSyncSink.deleteOpenHousesForListings",
+      )(function* (listings) {
+        const listingKeys = [
+          ...new Set(listings.map((listing) => listing.listingKey)),
+        ];
+        const listingIds = [
+          ...new Set(
+            listings.flatMap((listing) =>
+              listing.listingId === null ? [] : [listing.listingId],
+            ),
+          ),
+        ];
+        const filter = or(
+          listingKeys.length > 0
+            ? inArray(ddfOpenHouses.listingKey, listingKeys)
+            : undefined,
+          listingIds.length > 0
+            ? inArray(ddfOpenHouses.listingId, listingIds)
+            : undefined,
+        );
+        if (filter === undefined) return;
+        yield* db
+          .delete(ddfOpenHouses)
+          .where(filter)
+          .pipe(Effect.mapError(mapSinkError("deleteOpenHousesForListings")));
       }),
       markMissingMembersInactive: Effect.fn(
         "DdfDatabaseSyncSink.markMissingMembersInactive",
