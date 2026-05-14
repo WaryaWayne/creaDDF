@@ -1,6 +1,51 @@
 import { assert, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
-import { chosenAorKeysFromEnv, databaseSyncOptionsFromWatermarks, parseChosenAorKeys } from "./syncDatabase";
+import { DdfHttp } from "./client";
+import type { DdfHttpApi } from "./client";
+import type { DdfWatermarkScope } from "./db/schema";
+import type { Destination } from "./schema/destinationSchema";
+import type { SyncResource, SyncResult } from "./sync";
+import {
+  chosenAorKeysFromEnv,
+  databaseSyncOptionsFromWatermarks,
+  parseChosenAorKeys,
+  syncDdfDatabaseOnce,
+  syncDestinations,
+  type SyncDdfDatabaseDependencies,
+  type SyncDdfDatabaseOnceSummary,
+} from "./syncDatabase";
+
+const response = <T>(value: unknown) => Effect.succeed(value as T);
+
+const emptyHttp = (overrides: Partial<DdfHttpApi>): DdfHttpApi => ({
+  requestJson: <T = unknown>() => response<T>({ value: [] }),
+  listOData: <T = unknown>() => response<T>({ value: [] }),
+  getOData: <T = unknown>() => response<T>({}),
+  replicateIdentifiers: <T = unknown>() => response<T>({ value: [] }),
+  paginateOData: () => Effect.succeed([]),
+  ...overrides,
+});
+
+const runWithHttp = <A, E>(
+  effect: Effect.Effect<A, E, DdfHttp>,
+  http: DdfHttpApi,
+) => effect.pipe(Effect.provideService(DdfHttp, http));
+
+const syncResult = (
+  resource: SyncResult["resource"],
+  nextWatermark: string | null,
+): SyncResult => ({
+  resource,
+  identifiers: [],
+  errors: [],
+  counts: {
+    identifiers: 0,
+    hydrated: 0,
+    persisted: 0,
+    failed: 0,
+  },
+  nextWatermark,
+});
 
 describe("syncDdfDatabaseOnce planning", () => {
   it("turns database watermarks into since options for replication resources only", () => {
@@ -127,6 +172,205 @@ describe("syncDdfDatabaseOnce planning", () => {
       if (Exit.isFailure(exit)) {
         assert.include(String(exit.cause), "Invalid CREA_CHOSEN_AOR_KEYS");
       }
+    }),
+  );
+
+  it.effect("pages destinations and persists each destination before returning counts", () =>
+    Effect.gen(function* () {
+      const persisted: Array<number> = [];
+      const http = emptyHttp({
+        listOData: <T = unknown>(path: string) => {
+          assert.equal(path, "/odata/v1/Destination");
+          return response<T>({
+            value: [
+              {
+                DestinationId: 1,
+                DestinationName: "First",
+                DestinationUrl: null,
+                DestinationType: "Technology Provider",
+                DestinationStatus: "Active",
+                MemberFirstName: null,
+                MemberLastName: null,
+                MemberKey: null,
+                OriginalEntryTimestamp: null,
+                ModificationTimestamp: null,
+                FullNSP: false,
+              },
+            ],
+            "@odata.nextLink": "https://ddf.test/odata/v1/Destination?$skip=1",
+          });
+        },
+        requestJson: <T = unknown>(path: string) => {
+          assert.equal(path, "https://ddf.test/odata/v1/Destination?$skip=1");
+          return response<T>({
+            value: [
+              {
+                DestinationId: 2,
+                DestinationName: "Second",
+                DestinationUrl: null,
+                DestinationType: "Technology Provider",
+                DestinationStatus: "Active",
+                MemberFirstName: null,
+                MemberLastName: null,
+                MemberKey: null,
+                OriginalEntryTimestamp: null,
+                ModificationTimestamp: null,
+                FullNSP: false,
+              },
+            ],
+          });
+        },
+      });
+
+      const result = yield* runWithHttp(
+        syncDestinations({
+          upsertDestination: (destination: Destination) =>
+            Effect.sync(() => persisted.push(destination.DestinationId)),
+        }),
+        http,
+      );
+
+      assert.deepEqual(persisted, [1, 2]);
+      assert.deepEqual(result.counts, {
+        identifiers: 2,
+        hydrated: 2,
+        persisted: 2,
+        failed: 0,
+      });
+    }),
+  );
+
+  it.effect("syncs destinations and saves replication watermarks with the current DB scope", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const savedScopes: Array<{
+        readonly resource: string;
+        readonly watermark: string;
+        readonly destinationId: number | null;
+        readonly chosenAorKeys: ReadonlyArray<string>;
+      }> = [];
+      let recorded: SyncDdfDatabaseOnceSummary | undefined;
+      const destination = {
+        DestinationId: 7,
+        DestinationName: "Website Feed",
+        DestinationUrl: null,
+        DestinationType: "Technology Provider",
+        DestinationStatus: "Active",
+        MemberFirstName: null,
+        MemberLastName: null,
+        MemberKey: null,
+        OriginalEntryTimestamp: null,
+        ModificationTimestamp: null,
+        FullNSP: false,
+      } as Destination;
+      const destinationResult: SyncResult<Destination> = {
+        resource: "Destination",
+        identifiers: [destination],
+        errors: [],
+        counts: {
+          identifiers: 1,
+          hydrated: 1,
+          persisted: 1,
+          failed: 0,
+        },
+        nextWatermark: null,
+      };
+      const dependencies = {
+        syncDestinations: (
+          _sink: Parameters<typeof syncDestinations>[0],
+          query: Parameters<typeof syncDestinations>[1],
+        ) =>
+          Effect.sync(() => {
+            calls.push(`destinations:${query?.top ?? "all"}`);
+            return destinationResult;
+          }),
+        syncProperties: () =>
+          Effect.sync(() => {
+            calls.push("properties");
+            return syncResult("Property", "2024-01-01T00:00:00.000Z");
+          }),
+        syncMembers: () =>
+          Effect.sync(() => {
+            calls.push("members");
+            return syncResult("Member", "2024-01-02T00:00:00.000Z");
+          }),
+        syncOffices: () =>
+          Effect.sync(() => {
+            calls.push("offices");
+            return syncResult("Office", "2024-01-03T00:00:00.000Z");
+          }),
+        syncOpenHouses: () =>
+          Effect.sync(() => {
+            calls.push("openHouses");
+            return syncResult("OpenHouse", null);
+          }),
+        loadWatermark: (resource: SyncResource, scope?: DdfWatermarkScope) =>
+          Effect.sync(() => {
+            calls.push(`load:${resource}:${scope?.destinationId ?? "global"}:${scope?.chosenAorKeys.join(",") ?? ""}`);
+            return null;
+          }),
+        saveWatermark: (
+          resource: SyncResource,
+          watermark: string,
+          scope?: DdfWatermarkScope,
+        ) =>
+          Effect.sync(() => {
+            savedScopes.push({
+              resource,
+              watermark,
+              destinationId: scope?.destinationId ?? null,
+              chosenAorKeys: scope?.chosenAorKeys ?? [],
+            });
+          }),
+        runMigrations: () => Effect.void,
+        makeSink: () =>
+          Effect.succeed({
+            upsertDestination: () => Effect.void,
+            recordSyncError: () => Effect.void,
+          }),
+        loadOpenHouseListingScopes: () => Effect.succeed([]),
+        recordRun: (summary: SyncDdfDatabaseOnceSummary) =>
+          Effect.sync(() => {
+            recorded = summary;
+          }),
+      } as unknown as Partial<SyncDdfDatabaseDependencies>;
+
+      const sync = syncDdfDatabaseOnce({
+        runMigrations: false,
+        destinationId: 7,
+        destinationQuery: { top: 50 },
+        chosenAorKeys: ["93", "76"],
+        dependencies,
+      }) as Effect.Effect<SyncDdfDatabaseOnceSummary>;
+      const summary = yield* sync;
+
+      assert.equal(calls[0], "destinations:50");
+      assert.include(calls, "properties");
+      assert.include(calls, "members");
+      assert.include(calls, "offices");
+      assert.include(calls, "openHouses");
+      assert.deepEqual(savedScopes, [
+        {
+          resource: "Property",
+          watermark: "2024-01-01T00:00:00.000Z",
+          destinationId: 7,
+          chosenAorKeys: ["93", "76"],
+        },
+        {
+          resource: "Member",
+          watermark: "2024-01-02T00:00:00.000Z",
+          destinationId: 7,
+          chosenAorKeys: ["93", "76"],
+        },
+        {
+          resource: "Office",
+          watermark: "2024-01-03T00:00:00.000Z",
+          destinationId: 7,
+          chosenAorKeys: ["93", "76"],
+        },
+      ]);
+      assert.equal(summary.destination.counts.persisted, 1);
+      assert.equal(recorded?.destination.counts.persisted, 1);
     }),
   );
 

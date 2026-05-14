@@ -1,6 +1,11 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { Config, Data, DateTime, Effect } from "effect";
+import { Cause, Config, Data, DateTime, Effect, Exit } from "effect";
 import { randomUUID } from "node:crypto";
+import { DdfHttp } from "./client";
+import { listDestinations } from "./resources";
+import type { Destination } from "./schema/destinationSchema";
+import { DestinationResponseSchema } from "./schema/destinationSchema";
+import type { ODataListEnvelope } from "./schema/odata";
 import type {
   MemberRecord,
   MemberSyncOptions,
@@ -11,6 +16,7 @@ import type {
   PropertyRecord,
   PropertySyncOptions,
   SyncRecordError,
+  SyncResource,
   SyncResult,
 } from "./sync";
 import {
@@ -22,12 +28,14 @@ import {
 import { DdfDatabase } from "./db/layer";
 import { runDdfDatabaseMigrations } from "./db/runMigrations";
 import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "./db/sink";
+import type { DdfDatabaseSyncSink } from "./db/sink";
 import type { SerializedSyncRecordError } from "./db/sink";
 import { ddfProperties, ddfSyncRuns } from "./db/schema";
 import {
   loadDatabaseWatermark,
   saveDatabaseWatermark,
 } from "./db/watermarks";
+import type { DdfWatermarkScope } from "./db/schema";
 
 export class DdfDatabaseSyncError extends Data.TaggedError(
   "DdfDatabaseSyncError",
@@ -174,6 +182,7 @@ export interface SyncDdfDatabaseOnceOptions {
   readonly runMigrations?: boolean;
   readonly destinationId?: number;
   readonly concurrency?: number;
+  readonly destinationQuery?: Parameters<typeof listDestinations>[0];
   readonly propertyQuery?: PropertySyncOptions["query"];
   readonly memberQuery?: MemberSyncOptions["query"];
   readonly officeQuery?: OfficeSyncOptions["query"];
@@ -183,15 +192,16 @@ export interface SyncDdfDatabaseOnceOptions {
   /**
    * Limits persisted Property/Member/Office rows and OpenHouse listing scopes to these AOR keys.
    * Property replication is destination-scoped and is not AOR-filtered because replication
-   * identifier rows do not expose ListAORKey. AOR key changes require a user-managed database
-   * reset because watermarks are intentionally not scope-aware yet; existing rows outside this
-   * scope are not pruned automatically.
+   * identifier rows do not expose ListAORKey. Database watermarks are stored with destination
+   * and AOR scope metadata, so changing either scope starts a fresh processed-stream cursor.
+   * Existing rows outside this scope are not pruned automatically.
    */
   readonly chosenAorKeys?: ChosenAorKeys;
   readonly dependencies?: Partial<SyncDdfDatabaseDependencies>;
 }
 
 export interface SyncDdfDatabaseDependencies {
+  readonly syncDestinations: typeof syncDestinations;
   readonly syncProperties: typeof syncProperties;
   readonly syncMembers: typeof syncMembers;
   readonly syncOffices: typeof syncOffices;
@@ -224,6 +234,7 @@ export interface SyncDdfDatabaseOnceSummary {
   readonly status: "success" | "partial_failure";
   readonly startedAt: Date;
   readonly completedAt: Date;
+  readonly destination: DdfDatabaseResourceSummary;
   readonly property: DdfDatabaseResourceSummary;
   readonly member: DdfDatabaseResourceSummary;
   readonly office: DdfDatabaseResourceSummary;
@@ -248,6 +259,98 @@ const syncResultLogDetails = (result: {
   errors: result.errors.length,
   nextWatermark: result.nextWatermark,
 });
+
+const causeMessage = (cause: unknown) =>
+  Cause.isCause(cause)
+    ? Cause.pretty(cause)
+    : cause instanceof Error
+      ? cause.message
+      : String(cause);
+
+const makeSyncRecordError = (
+  resource: SyncResource,
+  key: string,
+  stage: SyncRecordError["stage"],
+  cause: unknown,
+): SyncRecordError => ({
+  resource,
+  key,
+  stage,
+  cause,
+  message: causeMessage(cause),
+});
+
+const collectPagedDestinations = Effect.fn(
+  "DdfDatabaseSync.collectPagedDestinations",
+)(function* (first: ODataListEnvelope<Destination>) {
+  const http = yield* DdfHttp;
+  const destinations: Array<Destination> = [...first.value];
+  let next = first["@odata.nextLink"] ?? null;
+  let pageCount = 1;
+
+  yield* Effect.logInfo("DDF database sync: collected destination page", {
+    pages: pageCount,
+    destinations: destinations.length,
+    pageSize: first.value.length,
+    hasNextPage: next !== null,
+  });
+
+  while (next !== null) {
+    const page = yield* http.requestJson(
+      next,
+      undefined,
+      DestinationResponseSchema,
+    );
+    pageCount += 1;
+    destinations.push(...page.value);
+    next = page["@odata.nextLink"] ?? null;
+    yield* Effect.logInfo("DDF database sync: collected destination page", {
+      pages: pageCount,
+      destinations: destinations.length,
+      pageSize: page.value.length,
+      hasNextPage: next !== null,
+    });
+  }
+
+  return destinations;
+});
+
+export const syncDestinations = Effect.fn("DdfDatabaseSync.syncDestinations")(
+  function* (
+    sink: Pick<DdfDatabaseSyncSink, "upsertDestination">,
+    query?: Parameters<typeof listDestinations>[0],
+  ) {
+    const first = yield* listDestinations(query);
+    const destinations = yield* collectPagedDestinations(first);
+    const errors: Array<SyncRecordError> = [];
+    let persisted = 0;
+
+    for (const destination of destinations) {
+      const destinationKey = String(destination.DestinationId);
+      const exit = yield* Effect.exit(sink.upsertDestination(destination));
+      if (Exit.isFailure(exit)) {
+        errors.push(makeSyncRecordError("Destination", destinationKey, "persist", exit.cause));
+      } else {
+        persisted += 1;
+      }
+    }
+
+    const counts = {
+      identifiers: destinations.length,
+      hydrated: destinations.length,
+      persisted,
+      failed: errors.length,
+    };
+    const result: SyncResult<Destination> = {
+      resource: "Destination",
+      identifiers: destinations,
+      counts,
+      errors,
+      nextWatermark: null,
+    };
+    return result;
+  },
+);
 
 const openHouseQueryForDatabaseSync = (
   query: OpenHouseSyncOptions["query"],
@@ -334,10 +437,20 @@ export const databaseSyncOptionsFromWatermarks = (
     listingChunkSize: options?.openHouseListingChunkSize,
   } satisfies Omit<OpenHouseSyncOptions, "sink">,
 });
+
+const databaseWatermarkScope = (
+  options: Pick<SyncDdfDatabaseOnceOptions, "destinationId"> | undefined,
+  chosenAorKeys: ChosenAorKeys,
+): DdfWatermarkScope => ({
+  destinationId: options?.destinationId ?? null,
+  chosenAorKeys,
+});
+
 const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
   saveWatermark: SyncDdfDatabaseDependencies["saveWatermark"],
   resource: Parameters<typeof saveDatabaseWatermark>[0],
   watermark: string | null,
+  scope: DdfWatermarkScope,
 ) {
   if (watermark === null) {
     yield* Effect.logInfo("DDF database sync: watermark unchanged", { resource });
@@ -348,7 +461,7 @@ const saveIfAdvanced = Effect.fn("DdfDatabaseSync.saveIfAdvanced")(function* (
     resource,
     watermark,
   });
-  yield* saveWatermark(resource, watermark);
+  yield* saveWatermark(resource, watermark, scope);
 });
 
 const recordRunSummary = Effect.fn("DdfDatabaseSync.recordRunSummary")(
@@ -377,6 +490,7 @@ const recordRunSummary = Effect.fn("DdfDatabaseSync.recordRunSummary")(
 );
 
 const defaultDependencies: SyncDdfDatabaseDependencies = {
+  syncDestinations,
   syncProperties,
   syncMembers,
   syncOffices,
@@ -419,7 +533,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     }
 
     const startedAt = yield* DateTime.nowAsDate;
-    // TODO: design safer incremental cursoring before changing watermark semantics:
+    // TODO: harden processed-stream cursoring further:
     // cap source timestamps by each resource sync start time, apply a small lookback,
     // and persist richer DB runtime metadata alongside reset-on-AOR-change guidance.
 
@@ -427,13 +541,26 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       runId,
     });
     const sink = yield* dependencies.makeSink({ runId });
+    const watermarkScope = databaseWatermarkScope(options, chosenAorKeys);
+
+    yield* Effect.logInfo("DDF database sync: syncing destinations", {
+      runId,
+    });
+    const destination = yield* dependencies.syncDestinations(
+      sink,
+      options?.destinationQuery,
+    );
+    yield* Effect.logInfo(
+      "DDF database sync: destinations complete",
+      syncResultLogDetails(destination),
+    );
 
     yield* Effect.logInfo("DDF database sync: loading watermarks", { runId });
     const [propertyWatermark, memberWatermark, officeWatermark] =
       yield* Effect.all([
-        dependencies.loadWatermark("Property"),
-        dependencies.loadWatermark("Member"),
-        dependencies.loadWatermark("Office"),
+        dependencies.loadWatermark("Property", watermarkScope),
+        dependencies.loadWatermark("Member", watermarkScope),
+        dependencies.loadWatermark("Office", watermarkScope),
       ]);
     yield* Effect.logInfo("DDF database sync: loaded watermarks", {
       runId,
@@ -472,6 +599,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       dependencies.saveWatermark,
       "Property",
       property.nextWatermark,
+      watermarkScope,
     );
 
     yield* Effect.logInfo("DDF database sync: syncing members", {
@@ -487,7 +615,12 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       "DDF database sync: members complete",
       syncResultLogDetails(member),
     );
-    yield* saveIfAdvanced(dependencies.saveWatermark, "Member", member.nextWatermark);
+    yield* saveIfAdvanced(
+      dependencies.saveWatermark,
+      "Member",
+      member.nextWatermark,
+      watermarkScope,
+    );
 
     yield* Effect.logInfo("DDF database sync: syncing offices", {
       runId,
@@ -502,7 +635,12 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       "DDF database sync: offices complete",
       syncResultLogDetails(office),
     );
-    yield* saveIfAdvanced(dependencies.saveWatermark, "Office", office.nextWatermark);
+    yield* saveIfAdvanced(
+      dependencies.saveWatermark,
+      "Office",
+      office.nextWatermark,
+      watermarkScope,
+    );
 
     const openHouseListingScopes = yield* dependencies.loadOpenHouseListingScopes(chosenAorKeys);
     const openHouseDateWindow = options?.openHouseDateWindow ?? (yield* defaultOpenHouseDateWindow());
@@ -523,6 +661,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       syncResultLogDetails(openHouse),
     );
     const syncErrors = [
+      ...destination.errors,
       ...property.errors,
       ...member.errors,
       ...office.errors,
@@ -541,6 +680,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     const completedAt = yield* DateTime.nowAsDate;
     const hasErrors =
       property.errors.length +
+        destination.errors.length +
         member.errors.length +
         office.errors.length +
         openHouse.errors.length >
@@ -556,6 +696,7 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       status: hasErrors ? "partial_failure" : "success",
       startedAt,
       completedAt,
+      destination: resourceSummary(destination),
       property: resourceSummary(property),
       member: resourceSummary(member),
       office: resourceSummary(office),
