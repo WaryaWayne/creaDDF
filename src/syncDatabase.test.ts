@@ -23,7 +23,7 @@ describe("syncDdfDatabaseOnce planning", () => {
   });
 
 
-  it("adds chosen AOR filters to replication resources without touching OpenHouse query", () => {
+  it("keeps chosen AOR keys out of replication filters and builds hydrated record predicates", () => {
     const options = databaseSyncOptionsFromWatermarks(
       {
         property: "2024-01-01T00:00:00.000Z",
@@ -42,16 +42,37 @@ describe("syncDdfDatabaseOnce planning", () => {
 
     assert.equal(
       options.property.query?.filter,
-      "(ListAORKey in ('76','77','93')) and (StandardStatus eq 'Active')",
+      "StandardStatus eq 'Active'",
     );
     assert.equal(
       options.member.query?.filter,
-      "(MemberAORKey in ('76','77','93')) and (MemberStatus eq 'Active')",
+      "MemberStatus eq 'Active'",
     );
     assert.equal(
       options.office.query?.filter,
-      "(OfficeAORKey in ('76','77','93')) and (OfficeStatus eq 'Active')",
+      "OfficeStatus eq 'Active'",
     );
+    const includeProperty = options.property.includeProperty;
+    const includeMember = options.member.includeMember;
+    const includeOffice = options.office.includeOffice;
+    assert.notEqual(includeProperty, undefined);
+    assert.notEqual(includeMember, undefined);
+    assert.notEqual(includeOffice, undefined);
+    if (includeProperty !== undefined) {
+      type IncludedProperty = Parameters<typeof includeProperty>[0];
+      assert.equal(includeProperty({ ListAORKey: "77" } as IncludedProperty), true);
+      assert.equal(includeProperty({ ListAORKey: "999" } as IncludedProperty), false);
+    }
+    if (includeMember !== undefined) {
+      type IncludedMember = Parameters<typeof includeMember>[0];
+      assert.equal(includeMember({ MemberAORKey: "76" } as IncludedMember), true);
+      assert.equal(includeMember({ MemberAORKey: "999" } as IncludedMember), false);
+    }
+    if (includeOffice !== undefined) {
+      type IncludedOffice = Parameters<typeof includeOffice>[0];
+      assert.equal(includeOffice({ OfficeAORKey: "93" } as IncludedOffice), true);
+      assert.equal(includeOffice({ OfficeAORKey: null } as IncludedOffice), false);
+    }
     assert.equal(options.openHouse.query?.filter, "ListingKey ne null");
   });
 

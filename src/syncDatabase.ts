@@ -2,10 +2,13 @@ import { and, eq, inArray } from "drizzle-orm";
 import { Config, Data, DateTime, Effect } from "effect";
 import { randomUUID } from "node:crypto";
 import type {
+  MemberRecord,
   MemberSyncOptions,
+  OfficeRecord,
   OfficeSyncOptions,
   OpenHouseListingScope,
   OpenHouseSyncOptions,
+  PropertyRecord,
   PropertySyncOptions,
   SyncRecordError,
   SyncResult,
@@ -139,28 +142,32 @@ const loadChosenAorKeys = Effect.fn("DdfDatabaseSync.loadChosenAorKeys")(
   },
 );
 
-const odataString = (value: string) => `'${value.replaceAll("'", "''")}'`;
+const includeAorKey = (chosenAorKeys: ChosenAorKeys) => {
+  if (chosenAorKeys.length === 0) return undefined;
+  const keySet = new Set(chosenAorKeys);
+  return (value: string | null | undefined) =>
+    value !== null && value !== undefined && keySet.has(value);
+};
 
-const aorFilter = (field: "ListAORKey" | "MemberAORKey" | "OfficeAORKey", chosenAorKeys: ChosenAorKeys) =>
-  chosenAorKeys.length === 0
+const includeMemberForAorKeys = (chosenAorKeys: ChosenAorKeys) => {
+  const includes = includeAorKey(chosenAorKeys);
+  return includes === undefined
     ? undefined
-    : `${field} in (${chosenAorKeys.map(odataString).join(",")})`;
+    : (member: MemberRecord) => includes(member.MemberAORKey);
+};
 
-const andFilters = (filters: ReadonlyArray<string | undefined>) =>
-  filters
-    .filter((filter): filter is string => filter !== undefined && filter.length > 0)
-    .map((filter) => `(${filter})`)
-    .join(" and ") || undefined;
+const includePropertyForAorKeys = (chosenAorKeys: ChosenAorKeys) => {
+  const includes = includeAorKey(chosenAorKeys);
+  return includes === undefined
+    ? undefined
+    : (property: PropertyRecord) => includes(property.ListAORKey);
+};
 
-const withAorFilter = <Query extends { readonly filter?: string } | undefined>(
-  query: Query,
-  filter: string | undefined,
-): Query => {
-  if (filter === undefined) return query;
-  return {
-    ...(query ?? {}),
-    filter: andFilters([filter, query?.filter]),
-  } as Query;
+const includeOfficeForAorKeys = (chosenAorKeys: ChosenAorKeys) => {
+  const includes = includeAorKey(chosenAorKeys);
+  return includes === undefined
+    ? undefined
+    : (office: OfficeRecord) => includes(office.OfficeAORKey);
 };
 
 export interface SyncDdfDatabaseOnceOptions {
@@ -174,9 +181,11 @@ export interface SyncDdfDatabaseOnceOptions {
   readonly openHouseDateWindow?: OpenHouseSyncOptions["dateWindow"];
   readonly openHouseListingChunkSize?: number;
   /**
-   * Limits Property/Member/Office replication and OpenHouse listing scopes to these AOR keys.
-   * AOR key changes require a user-managed database reset because watermarks are intentionally
-   * not scope-aware yet; existing rows outside this scope are not pruned automatically.
+   * Limits persisted Property/Member/Office rows and OpenHouse listing scopes to these AOR keys.
+   * Property replication is destination-scoped and is not AOR-filtered because replication
+   * identifier rows do not expose ListAORKey. AOR key changes require a user-managed database
+   * reset because watermarks are intentionally not scope-aware yet; existing rows outside this
+   * scope are not pruned automatically.
    */
   readonly chosenAorKeys?: ChosenAorKeys;
   readonly dependencies?: Partial<SyncDdfDatabaseDependencies>;
@@ -300,21 +309,24 @@ export const databaseSyncOptionsFromWatermarks = (
     since: watermarks.property ?? undefined,
     destinationId: options?.destinationId,
     concurrency: options?.concurrency,
-    query: withAorFilter(options?.propertyQuery, aorFilter("ListAORKey", options?.chosenAorKeys ?? [])),
+    query: options?.propertyQuery,
+    includeProperty: includePropertyForAorKeys(options?.chosenAorKeys ?? []),
   } satisfies Omit<PropertySyncOptions, "sink">,
   member: {
     mode: watermarks.member === null ? "initial" : "incremental",
     since: watermarks.member ?? undefined,
     destinationId: options?.destinationId,
     concurrency: options?.concurrency,
-    query: withAorFilter(options?.memberQuery, aorFilter("MemberAORKey", options?.chosenAorKeys ?? [])),
+    query: options?.memberQuery,
+    includeMember: includeMemberForAorKeys(options?.chosenAorKeys ?? []),
   } satisfies Omit<MemberSyncOptions, "sink">,
   office: {
     mode: watermarks.office === null ? "initial" : "incremental",
     since: watermarks.office ?? undefined,
     destinationId: options?.destinationId,
     concurrency: options?.concurrency,
-    query: withAorFilter(options?.officeQuery, aorFilter("OfficeAORKey", options?.chosenAorKeys ?? [])),
+    query: options?.officeQuery,
+    includeOffice: includeOfficeForAorKeys(options?.chosenAorKeys ?? []),
   } satisfies Omit<OfficeSyncOptions, "sink">,
   openHouse: {
     query: openHouseQueryForDatabaseSync(options?.openHouseQuery),
