@@ -21,7 +21,6 @@ import { DdfDatabase } from "./layer";
 import type { DdfSerializedCause } from "./schema";
 import {
   ddfDestinations,
-  ddfMedia,
   ddfMemberDesignations,
   ddfMemberLanguages,
   ddfMembers,
@@ -141,10 +140,8 @@ const primaryMediaUrlFromMedia = (media: ReadonlyArray<MediaRecord> | null | und
   const preferred = records.find((record) => record.PreferredPhotoYN === true && stableKey(record.MediaURL) !== null);
   if (preferred !== undefined) return preferred.MediaURL ?? null;
 
-  const ordered = [...records]
-    .filter((record) => stableKey(record.MediaURL) !== null)
-    .sort((left, right) => (left.Order ?? Number.MAX_SAFE_INTEGER) - (right.Order ?? Number.MAX_SAFE_INTEGER));
-  return ordered[0]?.MediaURL ?? null;
+  const orderedPrimary = records.find((record) => record.Order === 1 && stableKey(record.MediaURL) !== null);
+  return orderedPrimary?.MediaURL ?? null;
 };
 
 export const propertyRowFromRecord = (property: PropertyRecord) => ({
@@ -690,52 +687,6 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           ).pipe(Effect.mapError(mapSinkError("upsertOfficeWithMedia")));
         },
       ),
-      upsertProperty: Effect.fn("DdfDatabaseSyncSink.upsertProperty")(
-        function* (property) {
-          const row = propertyRowFromRecord(property);
-          const listingKey = yield* requireKey("upsertProperty", row.listingKey);
-          yield* db
-            .insert(ddfProperties)
-            .values({ ...row, listingKey })
-            .onConflictDoUpdate({
-              target: ddfProperties.listingKey,
-              set: { ...row, listingKey, ...touchUpdatedAt },
-            })
-            .pipe(Effect.mapError(mapSinkError("upsertProperty")));
-        },
-      ),
-      upsertRoom: Effect.fn("DdfDatabaseSyncSink.upsertRoom")(function* (
-        _room,
-        _property,
-      ) {
-        // Property rooms are persisted through upsertPropertyGraph into ddf_properties.rooms.
-        // Keep the legacy hook as a no-op so old callers do not repopulate ddf_property_rooms.
-        yield* Effect.void;
-      }),
-      upsertMedia: Effect.fn("DdfDatabaseSyncSink.upsertMedia")(function* (
-        media,
-        owner,
-      ) {
-        if (owner.resource === "Property" || owner.resource === "Member" || owner.resource === "Office") {
-          // Embedded media is persisted on the owning row by compound graph/member/office upserts.
-          // Do not maintain ddf_media for these resources going forward.
-          yield* Effect.void;
-          return;
-        }
-        const row = mediaRowFromRecord(media, owner);
-        const mediaKey = yield* requireKey(
-          "upsertMedia",
-          row.mediaKey.length > 0 ? row.mediaKey : null,
-        );
-        yield* db
-          .insert(ddfMedia)
-          .values({ ...row, mediaKey })
-          .onConflictDoUpdate({
-            target: ddfMedia.mediaKey,
-            set: { ...row, mediaKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertMedia")));
-      }),
       upsertSocialMedia: Effect.fn("DdfDatabaseSyncSink.upsertSocialMedia")(
         function* (socialMedia, owner) {
           const row = socialMediaRowFromRecord(socialMedia, owner);
@@ -753,34 +704,6 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
             .pipe(Effect.mapError(mapSinkError("upsertSocialMedia")));
         },
       ),
-      upsertMember: Effect.fn("DdfDatabaseSyncSink.upsertMember")(function* (
-        member,
-      ) {
-        const row = memberRowFromRecord(member);
-        const memberKey = yield* requireKey("upsertMember", row.memberKey);
-        yield* db
-          .insert(ddfMembers)
-          .values({ ...row, memberKey })
-          .onConflictDoUpdate({
-            target: ddfMembers.memberKey,
-            set: { ...row, memberKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertMember")));
-      }),
-      upsertOffice: Effect.fn("DdfDatabaseSyncSink.upsertOffice")(function* (
-        office,
-      ) {
-        const row = officeRowFromRecord(office);
-        const officeKey = yield* requireKey("upsertOffice", row.officeKey);
-        yield* db
-          .insert(ddfOffices)
-          .values({ ...row, officeKey })
-          .onConflictDoUpdate({
-            target: ddfOffices.officeKey,
-            set: { ...row, officeKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertOffice")));
-      }),
       upsertOpenHouse: Effect.fn("DdfDatabaseSyncSink.upsertOpenHouse")(
         function* (openHouse) {
           const row = openHouseRowFromRecord(openHouse);

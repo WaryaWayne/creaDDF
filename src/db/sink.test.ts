@@ -72,16 +72,37 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.raw, property);
   });
 
-  it("uses ordered property media as the listing-card helper when no preferred photo is present", () => {
+  it("falls back to order one as the listing-card helper when no preferred photo is present", () => {
     const row = propertyRowFromRecord(asPropertyRecord({
       ListingKey: "listing-1",
       Media: [
-        { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
         { MediaKey: "media-1", MediaURL: "https://example.test/first.jpg", Order: 1 },
+        { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
       ],
     }));
 
     assert.equal(row.primaryMediaUrl, "https://example.test/first.jpg");
+  });
+
+  it("uses preferred photo as primary and falls back only to order one", () => {
+    const row = propertyRowFromRecord(asPropertyRecord({
+      ListingKey: "listing-1",
+      Media: [
+        { MediaKey: "media-1", MediaURL: "https://example.test/order-one.jpg", Order: 1, PreferredPhotoYN: false },
+        { MediaKey: "media-2", MediaURL: "https://example.test/preferred.jpg", Order: 2, PreferredPhotoYN: true },
+      ],
+    }));
+
+    assert.equal(row.primaryMediaUrl, "https://example.test/preferred.jpg");
+    assert.equal(
+      propertyRowFromRecord(asPropertyRecord({
+        ListingKey: "listing-2",
+        Media: [
+          { MediaKey: "media-3", MediaURL: "https://example.test/not-a-primary.jpg", Order: 2 },
+        ],
+      })).primaryMediaUrl,
+      null,
+    );
   });
 
   it("derives stable room and media ownership keys", () => {
