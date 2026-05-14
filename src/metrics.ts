@@ -47,6 +47,13 @@ export const ddfSyncPersistedCount = Metric.counter(
     incremental: true,
   },
 );
+export const ddfSyncSkippedCount = Metric.counter(
+  "crea_ddf_sync_skipped_total",
+  {
+    description: "CREA DDF sync hydrated records skipped by scope filters",
+    incremental: true,
+  },
+);
 export const ddfSyncFailedCount = Metric.counter("crea_ddf_sync_failed_total", {
   description: "CREA DDF sync record failures",
   incremental: true,
