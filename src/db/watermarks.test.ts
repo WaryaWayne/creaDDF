@@ -1,4 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
+import { getTableConfig } from "drizzle-orm/pg-core";
+import { ddfWatermarks } from "./schema";
 import { watermarkScopeHash } from "./watermarks";
 
 describe("database watermark scope", () => {
@@ -18,5 +20,14 @@ describe("database watermark scope", () => {
 
     assert.equal(left, right);
     assert.notEqual(left, otherDestination);
+  });
+
+  it("keys stored watermarks by resource, cursor kind, and scope hash", () => {
+    const [primaryKey] = getTableConfig(ddfWatermarks).primaryKeys;
+
+    assert.deepEqual(
+      primaryKey?.columns.map((column) => column.name),
+      ["resource", "cursor_kind", "scope_hash"],
+    );
   });
 });

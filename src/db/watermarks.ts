@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Data, Effect, Metric } from "effect";
 import type { SyncResource } from "../sync";
 import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "../metrics";
@@ -55,10 +55,13 @@ export const loadDatabaseWatermark = Effect.fn(
   const rows = yield* db
     .select({
       watermark: ddfWatermarks.watermark,
-      scopeHash: ddfWatermarks.scopeHash,
     })
     .from(ddfWatermarks)
-    .where(eq(ddfWatermarks.resource, resource))
+    .where(and(
+      eq(ddfWatermarks.resource, resource),
+      eq(ddfWatermarks.cursorKind, processedReplicationStreamCursorKind),
+      eq(ddfWatermarks.scopeHash, expectedScopeHash),
+    ))
     .limit(1)
     .pipe(
       Effect.mapError(
@@ -71,7 +74,7 @@ export const loadDatabaseWatermark = Effect.fn(
       ),
     );
   const row = rows[0];
-  if (row === undefined || row.scopeHash !== expectedScopeHash) return null;
+  if (row === undefined) return null;
   return row.watermark;
 });
 
@@ -96,7 +99,11 @@ export const saveDatabaseWatermark = Effect.fn(
       scope: normalizedScope,
     })
     .onConflictDoUpdate({
-      target: ddfWatermarks.resource,
+      target: [
+        ddfWatermarks.resource,
+        ddfWatermarks.cursorKind,
+        ddfWatermarks.scopeHash,
+      ],
       set: {
         watermark,
         cursorKind: processedReplicationStreamCursorKind,
