@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "481b6197-3bcd-4997-b2bf-682390be194c",
+  "id": "99418976-bfe2-476d-9a7f-d193e7594719",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -9,18 +9,6 @@
     {
       "isRlsEnabled": false,
       "name": "ddf_destinations",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "ddf_member_designations",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "ddf_member_languages",
       "entityType": "tables",
       "schema": "public"
     },
@@ -45,12 +33,6 @@
     {
       "isRlsEnabled": false,
       "name": "ddf_properties",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
-      "name": "ddf_social_media",
       "entityType": "tables",
       "schema": "public"
     },
@@ -253,110 +235,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_destinations"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "member_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_designations"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "designation",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_designations"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_designations"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_designations"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "member_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_languages"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "language",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_languages"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_languages"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_member_languages"
     },
     {
       "type": "text",
@@ -762,6 +640,45 @@
       "table": "ddf_members"
     },
     {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "member_languages",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_members"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "member_designation",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_members"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "member_social_media",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_members"
+    },
+    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -1095,6 +1012,19 @@
       "generated": null,
       "identity": null,
       "name": "media",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_offices"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'[]'",
+      "generated": null,
+      "identity": null,
+      "name": "office_social_media",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_offices"
@@ -3265,149 +3195,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "social_media_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "resource",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "resource_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "resource_record_key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "social_media_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "modification_timestamp",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "resource_name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "social_media_url_or_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "raw",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "updated_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "id",
       "entityType": "columns",
       "schema": "public",
@@ -3609,6 +3396,45 @@
       "table": "ddf_watermarks"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'processed_replication_stream'",
+      "generated": null,
+      "identity": null,
+      "name": "cursor_kind",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_watermarks"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'global'",
+      "generated": null,
+      "identity": null,
+      "name": "scope_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_watermarks"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{\"destinationId\":null,\"chosenAorKeys\":[]}'",
+      "generated": null,
+      "identity": null,
+      "name": "scope",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_watermarks"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -3662,48 +3488,6 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "ddf_destinations"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "member_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "ddf_member_designations_member_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "ddf_member_designations"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "member_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "ddf_member_languages_member_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "ddf_member_languages"
     },
     {
       "nameExplicit": true,
@@ -4059,55 +3843,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "resource",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "resource_key",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "ddf_social_media_owner_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "modification_timestamp",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": false,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "ddf_social_media_modified_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "ddf_social_media"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "run_id",
           "isExpression": false,
           "asc": true,
@@ -4222,16 +3957,6 @@
       "name": "ddf_properties_pkey",
       "schema": "public",
       "table": "ddf_properties",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "social_media_key"
-      ],
-      "nameExplicit": false,
-      "name": "ddf_social_media_pkey",
-      "schema": "public",
-      "table": "ddf_social_media",
       "entityType": "pks"
     },
     {
