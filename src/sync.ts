@@ -308,7 +308,7 @@ export interface MasterListDiff {
 }
 
 const boundedConcurrency = (concurrency: number | undefined) =>
-  Math.max(1, Math.floor(concurrency ?? 5));
+  Math.max(1, Math.floor(concurrency ?? 100));
 
 const progressLogInterval = (total: number) => {
   if (total >= 1_000) return 250;
@@ -318,7 +318,7 @@ const progressLogInterval = (total: number) => {
 };
 
 const hydrationBatchSize = (concurrency: number) =>
-  Math.max(concurrency, concurrency * 10);
+  Math.max(concurrency, Math.min(concurrency * 10, 100));
 
 function* batched<Item>(
   items: ReadonlyArray<Item>,
@@ -1310,7 +1310,7 @@ const openHouseQueriesForOptions = <SinkError>(
 
   if (options.listingScopes.length === 0) return [];
 
-  const chunkSize = Math.max(1, Math.floor(options.listingChunkSize ?? 25));
+  const chunkSize = Math.max(1, Math.floor(options.listingChunkSize ?? 5));
   return Array.from(batched(options.listingScopes, chunkSize), (chunk) => {
     const scopeFilter = chunk.map(listingScopeFilter).join(" or ");
     const filter = combineODataFilters([baseQuery.filter, scopeFilter, dateFilter]);
@@ -1451,7 +1451,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
     yield* Effect.forEach(
       queries,
       (query, index) => collectQuery(query, index + 1),
-      { discard: true },
+      { concurrency, discard: true },
     );
 
     const nextWatermark = options?.dateWindow?.startDate ?? null;

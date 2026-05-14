@@ -540,9 +540,9 @@ describe("client", () => {
     }),
   );
 
-  it.effect("retries bounded 408 and 503 responses", () =>
+  it.effect("retries bounded transient HTTP responses", () =>
     Effect.gen(function* () {
-      for (const status of [408, 503]) {
+      for (const status of [408, 500, 502, 503, 504]) {
         let tokenCalls = 0;
         let apiCalls = 0;
         const httpHandler = httpHandlerFrom((input) => {
@@ -563,6 +563,30 @@ describe("client", () => {
         assert.deepEqual(result, { ok: true, status });
         assert.equal(tokenCalls, 1);
         assert.equal(apiCalls, 3);
+      }
+    }),
+  );
+
+  it.effect("does not retry non-transient HTTP responses", () =>
+    Effect.gen(function* () {
+      for (const status of [400, 404]) {
+        let apiCalls = 0;
+        const httpHandler = httpHandlerFrom((input) => {
+          if (String(input) === "https://identity.test/connect/token")
+            return tokenResponse("token-123");
+
+          apiCalls += 1;
+          return new Response("no retry", { status });
+        });
+
+        const exit = yield* Effect.exit(
+          withClient(httpHandler, (http) =>
+            http.requestJson("/odata/v1/Property"),
+          ),
+        );
+
+        assert.equal(Exit.isFailure(exit), true);
+        assert.equal(apiCalls, 1);
       }
     }),
   );

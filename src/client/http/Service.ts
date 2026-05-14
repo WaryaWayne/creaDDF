@@ -51,7 +51,8 @@ import type {
 const DEFAULT_RETRY_POLICY = {
   maxRetries: 2,
   baseDelay: Duration.millis(100),
-  retryableStatuses: [408, 503] as const,
+  // TODO: include 429 once executeWithRetry honors the response Retry-After header.
+  retryableStatuses: [408, 500, 502, 503, 504] as const,
 } as const;
 
 const retryPolicyFor = (config: DdfClientConfig) => ({
