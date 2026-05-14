@@ -460,40 +460,6 @@ export type OpenHouseInclude = {
   readonly property?: RelatedSelect<PropertyField>;
 };
 
-const stableKey = (value: string | null | undefined): string | null =>
-  value != null && value.length > 0 ? value : null;
-
-const stableJson = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (typeof value === "object" && value !== null) {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-};
-
-const stableHash = (value: unknown): string => {
-  let hash = 0x811c9dc5;
-  const text = stableJson(value);
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return (hash >>> 0).toString(36);
-};
-
-const fallbackKey = (
-  scope: string,
-  parts: ReadonlyArray<string | number | null | undefined>,
-  raw: unknown,
-): string =>
-  [
-    ...parts.filter((part): part is string | number => part != null),
-    stableHash(raw),
-  ].join(":") || `${scope}:${stableHash(raw)}`;
-
 export const embeddedMediaRowsFromColumn = (
   media: unknown,
   resource: "Property" | "Member" | "Office",
