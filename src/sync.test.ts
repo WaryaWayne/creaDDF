@@ -899,6 +899,109 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
+  it.effect("does not count social-only member and office hooks as persisted records", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication"))
+            return response<T>({
+              value: [
+                {
+                  MemberKey: "member-social-only",
+                  ModificationTimestamp: "2024-02-01T00:00:00.000Z",
+                },
+              ],
+            });
+          if (path.startsWith("/odata/v1/Office/OfficeReplication"))
+            return response<T>({
+              value: [
+                {
+                  OfficeKey: "office-social-only",
+                  ModificationTimestamp: "2024-03-01T00:00:00.000Z",
+                },
+              ],
+            });
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) =>
+          path === "/odata/v1/Member"
+            ? response<T>({
+                MemberKey: key,
+                Media: [],
+                MemberSocialMedia: [
+                  {
+                    SocialMediaKey: "member-social-only-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-02-01T00:00:00.000Z",
+                    ResourceName: "Member",
+                    SocialMediaUrlOrId: "https://member.example.test",
+                  },
+                ],
+              })
+            : response<T>({
+                OfficeKey: key,
+                Media: [],
+                OfficeSocialMedia: [
+                  {
+                    SocialMediaKey: "office-social-only-1",
+                    ResourceRecordKey: String(key),
+                    SocialMediaType: "Website",
+                    ModificationTimestamp: "2024-03-01T00:00:00.000Z",
+                    ResourceName: "Office",
+                    SocialMediaUrlOrId: "https://office.example.test",
+                  },
+                ],
+              }),
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({
+          sink: {
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
+          },
+        }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({
+          sink: {
+            upsertSocialMedia: (socialMedia, owner) =>
+              Effect.sync(() =>
+                calls.push(
+                  `${owner.resource}:${owner.key}:${socialMedia.SocialMediaKey}`,
+                ),
+              ),
+          },
+        }),
+        http,
+      );
+
+      assert.deepEqual(members.counts, {
+        identifiers: 1,
+        hydrated: 1,
+        persisted: 0,
+        failed: 0,
+      });
+      assert.deepEqual(offices.counts, {
+        identifiers: 1,
+        hydrated: 1,
+        persisted: 0,
+        failed: 0,
+      });
+      assert.deepEqual(calls, [
+        "Member:member-social-only:member-social-only-1",
+        "Office:office-social-only:office-social-only-1",
+      ]);
+    }),
+  );
+
   it.effect("keeps member and office watermarks before failed records", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];

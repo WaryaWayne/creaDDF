@@ -658,7 +658,8 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const failedWatermarks: Array<unknown> =
       collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
-    const hasRecordSink = options?.sink?.upsertPropertyGraph !== undefined;
+    const hasParentRecordSink =
+      options?.sink?.upsertPropertyGraph !== undefined;
 
     yield* Effect.logInfo("Property sync: normalizing and persisting records", {
       identifiers: identifiers.length,
@@ -744,7 +745,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           errors.push(persistError);
           failedWatermarks.push(identifier.ModificationTimestamp);
         } else {
-          if (hasRecordSink) persistedRecords += 1;
+          if (hasParentRecordSink) persistedRecords += 1;
           successfulWatermarks.push(identifier.ModificationTimestamp);
         }
         yield* logPersistProgress(processedRecords);
@@ -831,9 +832,8 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
   const failedWatermarks: Array<unknown> =
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink =
-    options?.sink?.upsertMemberWithMedia !== undefined ||
-    options?.sink?.upsertSocialMedia !== undefined;
+  const hasParentRecordSink =
+    options?.sink?.upsertMemberWithMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -934,7 +934,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
-        if (hasRecordSink) persistedRecords += 1;
+        if (hasParentRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
       yield* logPersistProgress(processedRecords);
@@ -1020,9 +1020,8 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
   const failedWatermarks: Array<unknown> =
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink =
-    options?.sink?.upsertOfficeWithMedia !== undefined ||
-    options?.sink?.upsertSocialMedia !== undefined;
+  const hasParentRecordSink =
+    options?.sink?.upsertOfficeWithMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -1122,7 +1121,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
-        if (hasRecordSink) persistedRecords += 1;
+        if (hasParentRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
       yield* logPersistProgress(processedRecords);
