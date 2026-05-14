@@ -26,10 +26,10 @@ type FakeRows = {
 
 type FakeQuery = {
   readonly $dynamic: () => FakeQuery;
-  readonly where: (_condition: unknown) => FakeQuery;
+  readonly where: (condition: unknown) => FakeQuery;
   readonly limit: (value: number) => FakeQuery;
   readonly offset: (value: number) => FakeQuery;
-  readonly orderBy: (..._orders: ReadonlyArray<unknown>) => FakeQuery;
+  readonly orderBy: (...orders: ReadonlyArray<unknown>) => FakeQuery;
   readonly pipe: <Output>(
     fn: (effect: Effect.Effect<ReadonlyArray<DbRow>>) => Output,
   ) => Output;
@@ -56,12 +56,202 @@ const projectSelection = (
     return selected as DbRow;
   });
 
-const fakeQuery = (rows: ReadonlyArray<DbRow>): FakeQuery => {
+const constructorName = (value: unknown) =>
+  typeof value === "object" && value !== null
+    ? (value as { readonly constructor?: { readonly name?: string } })
+        .constructor?.name
+    : undefined;
+
+const queryChunks = (value: unknown): ReadonlyArray<unknown> | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const chunks = (value as { readonly queryChunks?: unknown }).queryChunks;
+  return Array.isArray(chunks) ? chunks : undefined;
+};
+
+const stringChunkText = (value: unknown) => {
+  if (constructorName(value) !== "StringChunk") return "";
+  const chunkValue = (value as { readonly value?: unknown }).value;
+  return Array.isArray(chunkValue)
+    ? chunkValue
+        .filter((text): text is string => typeof text === "string")
+        .join("")
+    : "";
+};
+
+const isColumnChunk = (
+  value: unknown,
+): value is { readonly name: string } =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { readonly name?: unknown }).name === "string" &&
+  queryChunks(value) === undefined &&
+  constructorName(value) !== "Param" &&
+  constructorName(value) !== "StringChunk";
+
+const isParamChunk = (value: unknown) => constructorName(value) === "Param";
+
+const paramValue = (value: unknown) =>
+  isParamChunk(value)
+    ? (value as { readonly value?: unknown }).value
+    : undefined;
+
+const columnFieldNames = new Map<unknown, string>();
+
+const registerColumnFields = (table: object) => {
+  for (const [field, column] of Object.entries(
+    table as Record<string, unknown>,
+  )) {
+    if (isColumnChunk(column)) columnFieldNames.set(column, field);
+  }
+};
+
+[
+  ddfProperties,
+  ddfMembers,
+  ddfOffices,
+  ddfOpenHouses,
+  ddfSocialMedia,
+].forEach(registerColumnFields);
+
+const snakeToCamel = (value: string) =>
+  value.replaceAll(/_([a-z])/g, (_match, letter: string) =>
+    letter.toUpperCase(),
+  );
+
+const fieldForColumn = (column: { readonly name: string }) =>
+  columnFieldNames.get(column) ?? snakeToCamel(column.name);
+
+const rowColumnValue = (
+  row: Readonly<Record<string, unknown>>,
+  column: { readonly name: string },
+) => {
+  const field = fieldForColumn(column);
+  return field in row ? row[field] : row[column.name];
+};
+
+const unwrapFakeSql = (value: unknown): unknown => {
+  const chunks = queryChunks(value);
+  if (chunks === undefined) return value;
+  const meaningful = chunks.filter((chunk) => stringChunkText(chunk) !== "");
+  if (meaningful.length === 1 && queryChunks(meaningful[0]) !== undefined) {
+    return unwrapFakeSql(meaningful[0]);
+  }
+  if (
+    meaningful.length === 3 &&
+    stringChunkText(meaningful[0]) === "(" &&
+    queryChunks(meaningful[1]) !== undefined &&
+    stringChunkText(meaningful[2]) === ")"
+  ) {
+    return unwrapFakeSql(meaningful[1]);
+  }
+  return value;
+};
+
+const compareFakeValues = (left: unknown, right: unknown) => {
+  if (left == null && right == null) return 0;
+  if (left == null) return 1;
+  if (right == null) return -1;
+
+  const leftComparable =
+    left instanceof Date
+      ? left.getTime()
+      : typeof left === "boolean"
+        ? Number(left)
+        : typeof left === "string" || typeof left === "number"
+          ? left
+          : null;
+  const rightComparable =
+    right instanceof Date
+      ? right.getTime()
+      : typeof right === "boolean"
+        ? Number(right)
+        : typeof right === "string" || typeof right === "number"
+          ? right
+          : null;
+
+  if (leftComparable == null && rightComparable == null) return 0;
+  if (leftComparable == null) return 1;
+  if (rightComparable == null) return -1;
+  return leftComparable < rightComparable
+    ? -1
+    : leftComparable > rightComparable
+      ? 1
+      : 0;
+};
+
+const evaluateFakeCondition = (
+  row: Readonly<Record<string, unknown>>,
+  condition: unknown,
+): boolean => {
+  const normalized = unwrapFakeSql(condition);
+  const chunks = queryChunks(normalized);
+  if (chunks === undefined) return true;
+
+  const operatorText = chunks.map(stringChunkText).join("");
+  const nestedSql = chunks.filter((chunk) => queryChunks(chunk) !== undefined);
+  if (operatorText.includes(" and ") && nestedSql.length > 1) {
+    return nestedSql.every((chunk) => evaluateFakeCondition(row, chunk));
+  }
+
+  const column = chunks.find(isColumnChunk);
+  if (column === undefined) {
+    return nestedSql.length === 0
+      ? true
+      : nestedSql.every((chunk) => evaluateFakeCondition(row, chunk));
+  }
+
+  const left = rowColumnValue(row, column);
+  if (operatorText.includes(" in ")) {
+    const values = chunks
+      .filter(Array.isArray)
+      .flatMap((items) => items.map(paramValue));
+    return values.some((value) => Object.is(left, value));
+  }
+
+  const right = paramValue(chunks.find(isParamChunk));
+  if (operatorText.includes(" = ")) return Object.is(left, right);
+  if (operatorText.includes(" >= ")) return compareFakeValues(left, right) >= 0;
+  if (operatorText.includes(" <= ")) return compareFakeValues(left, right) <= 0;
+  return true;
+};
+
+const orderFakeRows = (
+  rows: ReadonlyArray<Record<string, unknown>>,
+  orders: ReadonlyArray<unknown>,
+) => {
+  if (orders.length === 0) return rows;
+  return [...rows].sort((left, right) => {
+    for (const order of orders) {
+      const normalized = unwrapFakeSql(order);
+      const chunks = queryChunks(normalized) ?? [];
+      const column = chunks.find(isColumnChunk);
+      if (column === undefined) continue;
+      const operatorText = chunks.map(stringChunkText).join("");
+      const comparison = compareFakeValues(
+        rowColumnValue(left, column),
+        rowColumnValue(right, column),
+      );
+      if (comparison !== 0)
+        return operatorText.includes(" desc") ? -comparison : comparison;
+    }
+    return 0;
+  });
+};
+
+const fakeQuery = (
+  rows: ReadonlyArray<Record<string, unknown>>,
+  selection: Readonly<Record<string, unknown>>,
+): FakeQuery => {
   let take: number | undefined;
   let skip = 0;
+  const conditions: Array<unknown> = [];
+  let orders: ReadonlyArray<unknown> = [];
   const query: FakeQuery = {
     $dynamic: () => query,
-    where: () => query,
+    where: (condition) => {
+      conditions.push(condition);
+      return query;
+    },
     limit: (value) => {
       take = value;
       return query;
@@ -70,10 +260,19 @@ const fakeQuery = (rows: ReadonlyArray<DbRow>): FakeQuery => {
       skip = value;
       return query;
     },
-    orderBy: () => query,
+    orderBy: (...nextOrders) => {
+      orders = nextOrders;
+      return query;
+    },
     pipe: (fn) => {
       const end = take === undefined ? undefined : skip + take;
-      return fn(Effect.succeed(rows.slice(skip, end)));
+      const filtered = rows.filter((row) =>
+        conditions.every((condition) => evaluateFakeCondition(row, condition)),
+      );
+      const ordered = orderFakeRows(filtered, orders);
+      return fn(
+        Effect.succeed(projectSelection(ordered.slice(skip, end), selection)),
+      );
     },
   };
   return query;
@@ -85,7 +284,7 @@ const fakeDatabaseLayer = (rows: FakeRows) =>
     DdfDatabase.of({
       db: {
         select: (selection: Readonly<Record<string, unknown>>) => ({
-          from: (table: unknown) => fakeQuery(projectSelection(tableRows(rows, table), selection)),
+          from: (table: unknown) => fakeQuery(tableRows(rows, table), selection),
         }),
       } as unknown as DdfDrizzleDatabase,
       pg: {} as unknown as DdfDrizzleDatabase["$client"],
@@ -149,6 +348,86 @@ const dbRows: FakeRows = {
   ],
 };
 
+const queryRows: FakeRows = {
+  properties: [
+    {
+      listingKey: "listing-1",
+      city: "Ottawa",
+      listAgentKey: "member-1",
+      listOfficeKey: "office-1",
+      coListAgentKey: "member-3",
+      coListOfficeKey: "office-2",
+    },
+    {
+      listingKey: "listing-2",
+      city: "Toronto",
+      listAgentKey: "member-2",
+      listOfficeKey: "office-2",
+      coListAgentKey: "member-3",
+      coListOfficeKey: "office-1",
+    },
+  ],
+  members: [
+    {
+      memberKey: "member-1",
+      firstName: "Ada",
+      officeKey: "office-1",
+    },
+    {
+      memberKey: "member-2",
+      firstName: "Grace",
+      officeKey: "office-2",
+    },
+    {
+      memberKey: "member-3",
+      firstName: "Barbara",
+      officeKey: "office-2",
+    },
+  ],
+  offices: [
+    {
+      officeKey: "office-1",
+      officeName: "North Realty",
+    },
+    {
+      officeKey: "office-2",
+      officeName: "South Realty",
+    },
+  ],
+  openHouses: [
+    {
+      openHouseKey: "open-house-1",
+      listingKey: "listing-1",
+    },
+    {
+      openHouseKey: "open-house-2",
+      listingKey: "listing-2",
+    },
+  ],
+  socialMedia: [
+    {
+      socialMediaKey: "member-social-1",
+      resource: "Member",
+      resourceKey: "member-1",
+    },
+    {
+      socialMediaKey: "member-social-2",
+      resource: "Member",
+      resourceKey: "member-2",
+    },
+    {
+      socialMediaKey: "member-social-3",
+      resource: "Member",
+      resourceKey: "member-3",
+    },
+    {
+      socialMediaKey: "office-social-with-member-key",
+      resource: "Office",
+      resourceKey: "member-3",
+    },
+  ],
+};
+
 describe("database read client helpers", () => {
   it("keeps website field presets free of raw payloads by default", () => {
     assert.deepEqual(propertyFieldPresets.card, [
@@ -204,6 +483,61 @@ describe("database read client helpers", () => {
     assert.equal(roomRows[0]?.roomLevel, "Main level");
     assert.equal(roomRows[0]?.roomType, "Kitchen");
   });
+
+  effectLayer(clientLayer(queryRows))(
+    "database read client query behavior",
+    (it) => {
+      it.effect("applies get filters, list filters, ordering, and include grouping", () =>
+        Effect.gen(function* () {
+          const client = yield* DdfDbClient;
+          const property = yield* client.properties.get("listing-2", {
+            select: ["city"],
+            include: {
+              listAgent: { select: ["firstName"] },
+              listOffice: { select: ["officeName"] },
+              coListAgents: { select: ["memberKey"] },
+              coListOffices: { select: ["officeKey"] },
+              openHouses: { select: ["openHouseKey"] },
+            },
+          });
+
+          assert.deepEqual(property, {
+            city: "Toronto",
+            listAgent: { firstName: "Grace" },
+            listOffice: { officeName: "South Realty" },
+            coListAgents: [{ memberKey: "member-3" }],
+            coListOffices: [{ officeKey: "office-1" }],
+            openHouses: [{ openHouseKey: "open-house-2" }],
+          });
+
+          const members = yield* client.members.list({
+            select: ["memberKey", "firstName"],
+            filters: { officeKey: "office-2" },
+            orderBy: [{ field: "firstName", direction: "asc" }],
+            include: {
+              office: { select: ["officeName"] },
+              socialMedia: { select: ["socialMediaKey"] },
+            },
+          });
+
+          assert.deepEqual(members, [
+            {
+              memberKey: "member-3",
+              firstName: "Barbara",
+              office: { officeName: "South Realty" },
+              socialMedia: [{ socialMediaKey: "member-social-3" }],
+            },
+            {
+              memberKey: "member-2",
+              firstName: "Grace",
+              office: { officeName: "South Realty" },
+              socialMedia: [{ socialMediaKey: "member-social-2" }],
+            },
+          ]);
+        }),
+      );
+    },
+  );
 
   effectLayer(clientLayer(dbRows))("database read client service", (it) => {
     it.effect("assembles property include media and rooms without leaking helper fields", () =>
