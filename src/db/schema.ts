@@ -13,7 +13,6 @@ import {
 } from "drizzle-orm/pg-core";
 import type { Destination } from "../schema/destinationSchema";
 import type { MediaType } from "../schema/mediaSchema";
-import type { SocialMedia } from "../schema/officeSchema";
 import type { RoomsType } from "../schema/roomsSchema";
 import type { SyncDdfDatabaseOnceSummary } from "../syncDatabase";
 import type {
@@ -33,6 +32,13 @@ export interface DdfSerializedCause {
   readonly stack?: string;
   readonly pretty?: string;
 }
+
+export interface DdfWatermarkScope {
+  readonly destinationId: number | null;
+  readonly chosenAorKeys: ReadonlyArray<string>;
+}
+
+export type DdfWatermarkCursorKind = "processed_replication_stream";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -236,6 +242,18 @@ export const ddfMembers = pgTable(
     type: text("type"),
     emailYn: boolean("email_yn"),
     media: jsonb("media").$type<MediaType>(),
+    memberLanguages: jsonb("member_languages")
+      .$type<NonNullable<MemberRecord["MemberLanguages"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    memberDesignation: jsonb("member_designation")
+      .$type<NonNullable<MemberRecord["MemberDesignation"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    memberSocialMedia: jsonb("member_social_media")
+      .$type<NonNullable<MemberRecord["MemberSocialMedia"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<MemberRecord>().notNull(),
     ...timestamps,
@@ -244,46 +262,6 @@ export const ddfMembers = pgTable(
     index("ddf_members_modified_idx").on(table.modificationTimestamp),
     index("ddf_members_office_idx").on(table.officeKey),
     index("ddf_members_mls_id_idx").on(table.memberMlsId),
-  ],
-);
-
-export const ddfMemberLanguages = pgTable(
-  "ddf_member_languages",
-  {
-    memberKey: text("member_key").notNull(),
-    language: text("language").notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_member_languages_member_idx").on(table.memberKey)],
-);
-
-export const ddfMemberDesignations = pgTable(
-  "ddf_member_designations",
-  {
-    memberKey: text("member_key").notNull(),
-    designation: text("designation").notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_member_designations_member_idx").on(table.memberKey)],
-);
-
-export const ddfSocialMedia = pgTable(
-  "ddf_social_media",
-  {
-    socialMediaKey: text("social_media_key").primaryKey(),
-    resource: text("resource").$type<SyncResource>().notNull(),
-    resourceKey: text("resource_key").notNull(),
-    resourceRecordKey: text("resource_record_key"),
-    socialMediaType: text("social_media_type"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    resourceName: text("resource_name"),
-    socialMediaUrlOrId: text("social_media_url_or_id"),
-    raw: jsonb("raw").$type<SocialMedia>().notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    index("ddf_social_media_owner_idx").on(table.resource, table.resourceKey),
-    index("ddf_social_media_modified_idx").on(table.modificationTimestamp),
   ],
 );
 
@@ -312,6 +290,10 @@ export const ddfOffices = pgTable(
     officeType: text("office_type"),
     officeStatus: text("office_status"),
     media: jsonb("media").$type<MediaType>(),
+    officeSocialMedia: jsonb("office_social_media")
+      .$type<NonNullable<OfficeRecord["OfficeSocialMedia"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<OfficeRecord>().notNull(),
     ...timestamps,
@@ -372,6 +354,15 @@ export const ddfDestinations = pgTable(
 export const ddfWatermarks = pgTable("ddf_watermarks", {
   resource: text("resource").$type<SyncResource>().primaryKey(),
   watermark: text("watermark").notNull(),
+  cursorKind: text("cursor_kind")
+    .$type<DdfWatermarkCursorKind>()
+    .default("processed_replication_stream")
+    .notNull(),
+  scopeHash: text("scope_hash").default("global").notNull(),
+  scope: jsonb("scope")
+    .$type<DdfWatermarkScope>()
+    .default(sql`'{"destinationId":null,"chosenAorKeys":[]}'::jsonb`)
+    .notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
