@@ -235,6 +235,16 @@ describe("database sync sink row mapping", () => {
       MemberType: "Salesperson",
       MemberEmail: "agent@example.test",
       MemberEmailYN: true,
+      MemberLanguages: ["English", "French"],
+      MemberDesignation: ["Certified Residential Specialist®"],
+      MemberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     });
     const openHouse = asOpenHouseRecord({
       OpenHouseKey: "open-house-1",
@@ -255,6 +265,16 @@ describe("database sync sink row mapping", () => {
     const memberRow = memberRowFromRecord(member);
     assert.equal(memberRow.emailYn, true);
     assert.equal("email" in memberRow, false);
+    assert.deepEqual(memberRow.memberLanguages, ["English", "French"]);
+    assert.deepEqual(memberRow.memberDesignation, ["Certified Residential Specialist®"]);
+    assert.deepEqual(memberRow.memberSocialMedia as unknown, [
+      {
+        SocialMediaKey: "member-social-1",
+        SocialMediaType: "Website",
+        SocialMediaUrlOrId: "https://member.example.test",
+        ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+      },
+    ]);
     assert.equal(openHouseRowFromRecord(openHouse).listingId, "X123");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseDate, "2027-06-07");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseStartTime, "12:00:00");
@@ -278,6 +298,27 @@ describe("database sync sink row mapping", () => {
     assert.deepEqual(
       officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" }), officeMedia).media as unknown,
       officeMedia,
+    );
+    assert.deepEqual(
+      officeRowFromRecord(asOfficeRecord({
+        OfficeKey: "office-1",
+        OfficeSocialMedia: [
+          {
+            SocialMediaKey: "office-social-1",
+            SocialMediaType: "Website",
+            SocialMediaUrlOrId: "https://office.example.test",
+            ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+          },
+        ],
+      })).officeSocialMedia as unknown,
+      [
+        {
+          SocialMediaKey: "office-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://office.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     );
   });
 
