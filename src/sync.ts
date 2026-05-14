@@ -209,6 +209,9 @@ export interface PropertySyncSink<SinkError = never> {
   readonly markMissingPropertiesInactive?: (
     keys: ReadonlyArray<string>,
   ) => Effect.Effect<void, SinkError>;
+  readonly deleteOpenHousesForListings?: (
+    listings: ReadonlyArray<OpenHouseListingScope>,
+  ) => Effect.Effect<void, SinkError>;
 }
 
 export interface MemberSyncSink<SinkError = never> {
@@ -269,14 +272,17 @@ export interface OpenHouseDateWindow {
 
 export interface PropertySyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: PropertySyncSink<SinkError>;
+  readonly includeProperty?: (property: PropertyRecord) => boolean;
 }
 
 export interface MemberSyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: MemberSyncSink<SinkError>;
+  readonly includeMember?: (member: MemberRecord) => boolean;
 }
 
 export interface OfficeSyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: OfficeSyncSink<SinkError>;
+  readonly includeOffice?: (office: OfficeRecord) => boolean;
 }
 
 export interface OpenHouseSyncOptions<SinkError = never> {
@@ -729,10 +735,49 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           continue;
         }
 
-        const graph: PropertyGraph = yield* normalizePropertyGraph(
-          result.record as PropertyRecord,
-        );
+        const property = result.record as PropertyRecord;
         hydratedSuccessRecords += 1;
+        if (
+          options?.includeProperty !== undefined &&
+          !options.includeProperty(property)
+        ) {
+          const propertyKey =
+            stableReplicationKey(property.ListingKey) ??
+            stableReplicationKey(identifier.ListingKey) ??
+            "";
+          const propertyListingId = stableReplicationKey(property.ListingId);
+          const persistError = yield* runPersist(
+            "Property",
+            propertyKey,
+            Effect.gen(function* () {
+              if (propertyKey.length === 0) return;
+              if (
+                options?.sink?.markMissingPropertiesInactive !== undefined
+              ) {
+                yield* options.sink.markMissingPropertiesInactive([
+                  propertyKey,
+                ]);
+              }
+              if (
+                options?.sink?.deleteOpenHousesForListings !== undefined
+              ) {
+                yield* options.sink.deleteOpenHousesForListings([
+                  { listingKey: propertyKey, listingId: propertyListingId },
+                ]);
+              }
+            }),
+          );
+          if (persistError !== null) {
+            errors.push(persistError);
+            failedWatermarks.push(identifier.ModificationTimestamp);
+          } else {
+            successfulWatermarks.push(identifier.ModificationTimestamp);
+          }
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
+
+        const graph: PropertyGraph = yield* normalizePropertyGraph(property);
 
         const persist = Effect.gen(function* () {
           if (options?.sink?.upsertPropertyGraph !== undefined) {
@@ -902,6 +947,32 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         yield* logPersistProgress(processedRecords);
         continue;
       }
+      hydratedSuccessRecords += 1;
+      if (
+        options?.includeMember !== undefined &&
+        !options.includeMember(result.record)
+      ) {
+        const skippedMemberKey =
+          stableReplicationKey(result.record.MemberKey) ??
+          stableReplicationKey(identifier.MemberKey) ??
+          "";
+        const persistError = yield* runPersist(
+          "Member",
+          skippedMemberKey,
+          skippedMemberKey.length > 0 &&
+            options?.sink?.markMissingMembersInactive !== undefined
+            ? options.sink.markMissingMembersInactive([skippedMemberKey])
+            : Effect.void,
+        );
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          successfulWatermarks.push(identifier.ModificationTimestamp);
+        }
+        yield* logPersistProgress(processedRecords);
+        continue;
+      }
       const memberKey = String(result.record.MemberKey ?? "");
       const memberMedia = (
         Array.isArray((result.record as Record<string, unknown>).Media)
@@ -909,7 +980,6 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
           : []
       ).map((media) => normalizeMedia("Member", memberKey, media));
       const memberSocialMedia = result.record.MemberSocialMedia ?? [];
-      hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertMemberWithMedia !== undefined) {
           yield* options.sink.upsertMemberWithMedia(
@@ -1090,13 +1160,38 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         yield* logPersistProgress(processedRecords);
         continue;
       }
+      hydratedSuccessRecords += 1;
+      if (
+        options?.includeOffice !== undefined &&
+        !options.includeOffice(result.record)
+      ) {
+        const skippedOfficeKey =
+          stableReplicationKey(result.record.OfficeKey) ??
+          stableReplicationKey(identifier.OfficeKey) ??
+          "";
+        const persistError = yield* runPersist(
+          "Office",
+          skippedOfficeKey,
+          skippedOfficeKey.length > 0 &&
+            options?.sink?.markMissingOfficesInactive !== undefined
+            ? options.sink.markMissingOfficesInactive([skippedOfficeKey])
+            : Effect.void,
+        );
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          successfulWatermarks.push(identifier.ModificationTimestamp);
+        }
+        yield* logPersistProgress(processedRecords);
+        continue;
+      }
       const office = result.record as Record<string, unknown>;
       const officeKey = String(office.OfficeKey ?? "");
       const officeMedia = (
         Array.isArray(office.Media) ? (office.Media as MediaType) : []
       ).map((media) => normalizeMedia("Office", officeKey, media));
       const officeSocialMedia = result.record.OfficeSocialMedia ?? [];
-      hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertOfficeWithMedia !== undefined) {
           yield* options.sink.upsertOfficeWithMedia(

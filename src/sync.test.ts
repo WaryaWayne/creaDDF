@@ -23,6 +23,7 @@ import {
   syncOpenHouses,
   syncProperties,
 } from "./sync";
+import type { OpenHouseListingScope } from "./sync";
 import { OpenHouseSchema } from "./schema/openHouse";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -67,6 +68,11 @@ const propertyFor = (key: string) => ({
   Rooms: [{ RoomKey: `${key}-room`, ListingKey: null }],
   Media: [{ ...propertyMedia, MediaKey: `${key}-media` }],
 });
+
+const listingScopesLabel = (listings: ReadonlyArray<OpenHouseListingScope>) =>
+  listings
+    .map((listing) => `${listing.listingKey}:${listing.listingId ?? ""}`)
+    .join(",");
 
 describe("syncProperties", () => {
   it.effect(
@@ -215,6 +221,152 @@ describe("syncProperties", () => {
 
         assert.equal(result.nextWatermark, "2024-01-02T00:00:00.000Z");
         assert.deepEqual(calls, ["graph:listing-1:1:1"]);
+      }),
+  );
+
+  it.effect(
+    "marks out-of-scope hydrated property records inactive before advancing the watermark",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({
+                value: [
+                  {
+                    ListingKey: "listing-in",
+                    ModificationTimestamp: "2024-01-02T00:00:00.000Z",
+                  },
+                  {
+                    ListingKey: "listing-out",
+                    ModificationTimestamp: "2024-01-03T00:00:00.000Z",
+                  },
+                ],
+              });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) =>
+            response<T>({
+              ...propertyFor(String(key)),
+              ListingId: key === "listing-in" ? "X-IN" : "X-OUT",
+              ListAORKey: key === "listing-in" ? "76" : "999",
+            }),
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            includeProperty: (property) => property.ListAORKey === "76",
+            sink: {
+              upsertPropertyGraph: (graph) =>
+                Effect.sync(() =>
+                  calls.push(`graph:${graph.property.ListingKey}`),
+                ),
+              markMissingPropertiesInactive: (keys) =>
+                Effect.sync(() =>
+                  calls.push(`property-inactive:${keys.join(",")}`),
+                ),
+              deleteOpenHousesForListings: (listings) =>
+                Effect.sync(() =>
+                  calls.push(`openhouses-delete:${listingScopesLabel(listings)}`),
+                ),
+              saveWatermark: (_resource, watermark) =>
+                Effect.sync(() => calls.push(`watermark:${watermark}`)),
+            },
+          }),
+          http,
+        );
+
+        assert.deepEqual(result.counts, {
+          identifiers: 2,
+          hydrated: 2,
+          persisted: 1,
+          failed: 0,
+        });
+        assert.equal(result.nextWatermark, "2024-01-03T00:00:00.000Z");
+        assert.deepEqual(calls, [
+          "graph:listing-in",
+          "property-inactive:listing-out",
+          "openhouses-delete:listing-out:X-OUT",
+          "watermark:2024-01-03T00:00:00.000Z",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "does not advance the property watermark past a failed out-of-scope open house cleanup",
+    () =>
+      Effect.gen(function* () {
+        const calls: Array<string> = [];
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({
+                value: [
+                  {
+                    ListingKey: "listing-in",
+                    ModificationTimestamp: "2024-01-02T00:00:00.000Z",
+                  },
+                  {
+                    ListingKey: "listing-out",
+                    ModificationTimestamp: "2024-01-03T00:00:00.000Z",
+                  },
+                ],
+              });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) =>
+            response<T>({
+              ...propertyFor(String(key)),
+              ListingId: key === "listing-in" ? "X-IN" : "X-OUT",
+              ListAORKey: key === "listing-in" ? "76" : "999",
+            }),
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            includeProperty: (property) => property.ListAORKey === "76",
+            sink: {
+              upsertPropertyGraph: (graph) =>
+                Effect.sync(() =>
+                  calls.push(`graph:${graph.property.ListingKey}`),
+                ),
+              markMissingPropertiesInactive: (keys) =>
+                Effect.sync(() =>
+                  calls.push(`property-inactive:${keys.join(",")}`),
+                ),
+              deleteOpenHousesForListings: (listings) =>
+                Effect.gen(function* () {
+                  calls.push(
+                    `openhouses-delete:${listingScopesLabel(listings)}`,
+                  );
+                  return yield* new TestSinkError({
+                    reason: "open house cleanup failed",
+                  });
+                }),
+              saveWatermark: (_resource, watermark) =>
+                Effect.sync(() => calls.push(`watermark:${watermark}`)),
+            },
+          }),
+          http,
+        );
+
+        assert.equal(result.errors.length, 1);
+        assert.deepEqual(result.counts, {
+          identifiers: 2,
+          hydrated: 2,
+          persisted: 1,
+          failed: 1,
+        });
+        assert.equal(result.nextWatermark, "2024-01-02T00:00:00.000Z");
+        assert.deepEqual(calls, [
+          "graph:listing-in",
+          "property-inactive:listing-out",
+          "openhouses-delete:listing-out:X-OUT",
+          "watermark:2024-01-02T00:00:00.000Z",
+        ]);
       }),
   );
 
@@ -730,6 +882,121 @@ describe("syncMembers and syncOffices", () => {
           "office-watermark:2024-03-01T00:00:00.000Z",
         ]);
       }),
+  );
+
+  it.effect("skips out-of-scope hydrated member and office records", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const http = emptyHttp({
+        requestJson: <T = unknown>(path: string) => {
+          if (path.startsWith("/odata/v1/Member/MemberReplication")) {
+            return response<T>({
+              value: [
+                {
+                  MemberKey: "member-in",
+                  ModificationTimestamp: "2024-02-01T00:00:00.000Z",
+                },
+                {
+                  MemberKey: "member-out",
+                  ModificationTimestamp: "2024-02-02T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+          if (path.startsWith("/odata/v1/Office/OfficeReplication")) {
+            return response<T>({
+              value: [
+                {
+                  OfficeKey: "office-in",
+                  ModificationTimestamp: "2024-03-01T00:00:00.000Z",
+                },
+                {
+                  OfficeKey: "office-out",
+                  ModificationTimestamp: "2024-03-02T00:00:00.000Z",
+                },
+              ],
+            });
+          }
+          return response<T>({ value: [] });
+        },
+        getOData: <T = unknown>(path: string, key: string | number) => {
+          if (path === "/odata/v1/Member") {
+            return response<T>({
+              MemberKey: key,
+              MemberAORKey: key === "member-in" ? "76" : "999",
+              Media: [],
+              MemberSocialMedia: [],
+            });
+          }
+          return response<T>({
+            OfficeKey: key,
+            OfficeAORKey: key === "office-in" ? "93" : "999",
+            Media: [],
+            OfficeSocialMedia: [],
+          });
+        },
+      });
+
+      const members = yield* runWithHttp(
+        syncMembers({
+          includeMember: (member) => member.MemberAORKey === "76",
+          sink: {
+            upsertMemberWithMedia: (member) =>
+              Effect.sync(() => calls.push(`member:${member.MemberKey}`)),
+            markMissingMembersInactive: (keys) =>
+              Effect.sync(() =>
+                calls.push(`member-inactive:${keys.join(",")}`),
+              ),
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
+          },
+        }),
+        http,
+      );
+      const offices = yield* runWithHttp(
+        syncOffices({
+          includeOffice: (office) => office.OfficeAORKey === "93",
+          sink: {
+            upsertOfficeWithMedia: (office) =>
+              Effect.sync(() =>
+                calls.push(
+                  `office:${(office as { OfficeKey: string }).OfficeKey}`,
+                ),
+              ),
+            markMissingOfficesInactive: (keys) =>
+              Effect.sync(() =>
+                calls.push(`office-inactive:${keys.join(",")}`),
+              ),
+            saveWatermark: (_resource, watermark) =>
+              Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
+          },
+        }),
+        http,
+      );
+
+      assert.deepEqual(members.counts, {
+        identifiers: 2,
+        hydrated: 2,
+        persisted: 1,
+        failed: 0,
+      });
+      assert.deepEqual(offices.counts, {
+        identifiers: 2,
+        hydrated: 2,
+        persisted: 1,
+        failed: 0,
+      });
+      assert.equal(members.nextWatermark, "2024-02-02T00:00:00.000Z");
+      assert.equal(offices.nextWatermark, "2024-03-02T00:00:00.000Z");
+      assert.deepEqual(calls, [
+        "member:member-in",
+        "member-inactive:member-out",
+        "member-watermark:2024-02-02T00:00:00.000Z",
+        "office:office-in",
+        "office-inactive:office-out",
+        "office-watermark:2024-03-02T00:00:00.000Z",
+      ]);
+    }),
   );
 
   it.effect("reports missing member and office replication keys without hydrating empty keys", () =>
