@@ -1,5 +1,5 @@
 # Model Field Inventory
-Generated from the embedded OpenAPI model in https://ddfapi-docs.realtor.ca/ on 2026-05-04. Use this as a field checklist when finishing schemas and SDK response validators.
+Generated from the embedded OpenAPI model in https://ddfapi-docs.realtor.ca/ and re-checked against the live embedded OpenAPI on 2026-05-14. Use this as a field checklist when finishing schemas and SDK response validators.
 
 ## DDF.Core.Entities.Property
 | Field | Type | Nullable | Format | Description |
