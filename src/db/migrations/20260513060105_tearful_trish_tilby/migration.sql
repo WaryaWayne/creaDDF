@@ -1,2 +1,0 @@
-ALTER TABLE "ddf_destinations" ALTER COLUMN "destination_type" SET DATA TYPE integer USING "destination_type"::integer;--> statement-breakpoint
-ALTER TABLE "ddf_destinations" ALTER COLUMN "destination_status" SET DATA TYPE integer USING "destination_status"::integer;
