@@ -179,6 +179,7 @@ const includeOfficeForAorKeys = (chosenAorKeys: ChosenAorKeys) => {
 };
 
 export interface SyncDdfDatabaseOnceOptions {
+  readonly runId?: string;
   readonly runMigrations?: boolean;
   readonly destinationId?: number;
   readonly concurrency?: number;
@@ -278,6 +279,21 @@ const makeSyncRecordError = (
   stage,
   cause,
   message: causeMessage(cause),
+});
+
+const failedDestinationResult = (cause: unknown): SyncResult<Destination> => ({
+  resource: "Destination",
+  identifiers: [],
+  counts: {
+    identifiers: 0,
+    hydrated: 0,
+    persisted: 0,
+    failed: 1,
+  },
+  errors: [
+    makeSyncRecordError("Destination", "destination-sync", "hydrate", cause),
+  ],
+  nextWatermark: null,
 });
 
 const collectPagedDestinations = Effect.fn(
@@ -506,9 +522,16 @@ const defaultDependencies: SyncDdfDatabaseDependencies = {
 export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
   function* (options?: SyncDdfDatabaseOnceOptions) {
     const dependencies = { ...defaultDependencies, ...options?.dependencies };
-    const runId = `ddf-sync-${randomUUID()}`;
+    const runId = options?.runId ?? `ddf-sync-${randomUUID()}`;
     const shouldRunMigrations = options?.runMigrations ?? true;
     const chosenAorKeys = yield* loadChosenAorKeys(options);
+    yield* Effect.annotateCurrentSpan({
+      "ddf.run_id": runId,
+      "ddf.destination_id": options?.destinationId ?? null,
+      "ddf.sync.concurrency": options?.concurrency ?? null,
+      "ddf.sync.run_migrations": shouldRunMigrations,
+      "ddf.sync.chosen_aor_keys": chosenAorKeys.length,
+    });
 
     yield* Effect.logInfo("DDF database sync: starting", {
       runId,
@@ -522,7 +545,11 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       yield* Effect.logInfo("DDF database sync: running database migrations", {
         runId,
       });
-      yield* dependencies.runMigrations();
+      yield* dependencies.runMigrations().pipe(
+        Effect.withSpan("DdfDatabaseSync.runMigrations", {
+          attributes: { "ddf.run_id": runId },
+        }),
+      );
       yield* Effect.logInfo("DDF database sync: database migrations complete", {
         runId,
       });
@@ -540,16 +567,32 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     yield* Effect.logInfo("DDF database sync: preparing database sink", {
       runId,
     });
-    const sink = yield* dependencies.makeSink({ runId });
+    const sink = yield* dependencies.makeSink({ runId }).pipe(
+      Effect.withSpan("DdfDatabaseSync.makeSink", {
+        attributes: { "ddf.run_id": runId },
+      }),
+    );
     const watermarkScope = databaseWatermarkScope(options, chosenAorKeys);
 
     yield* Effect.logInfo("DDF database sync: syncing destinations", {
       runId,
     });
-    const destination = yield* dependencies.syncDestinations(
-      sink,
-      options?.destinationQuery,
+    const destinationExit = yield* Effect.exit(
+      dependencies.syncDestinations(sink, options?.destinationQuery).pipe(
+        Effect.withSpan("DdfDatabaseSync.syncDestinationsPhase", {
+          attributes: { "ddf.run_id": runId, "ddf.resource": "Destination" },
+        }),
+      ),
     );
+    const destination = Exit.isSuccess(destinationExit)
+      ? destinationExit.value
+      : failedDestinationResult(destinationExit.cause);
+    if (Exit.isFailure(destinationExit)) {
+      yield* Effect.logWarning("DDF database sync: destination sync failed; continuing replication", {
+        runId,
+        cause: causeMessage(destinationExit.cause),
+      });
+    }
     yield* Effect.logInfo(
       "DDF database sync: destinations complete",
       syncResultLogDetails(destination),
@@ -561,7 +604,11 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
         dependencies.loadWatermark("Property", watermarkScope),
         dependencies.loadWatermark("Member", watermarkScope),
         dependencies.loadWatermark("Office", watermarkScope),
-      ]);
+      ]).pipe(
+        Effect.withSpan("DdfDatabaseSync.loadWatermarks", {
+          attributes: { "ddf.run_id": runId },
+        }),
+      );
     yield* Effect.logInfo("DDF database sync: loaded watermarks", {
       runId,
       property: propertyWatermark,
@@ -590,7 +637,15 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     const property = yield* dependencies.syncProperties({
       ...syncOptions.property,
       sink,
-    });
+    }).pipe(
+      Effect.withSpan("DdfDatabaseSync.syncPropertiesPhase", {
+        attributes: {
+          "ddf.run_id": runId,
+          "ddf.resource": "Property",
+          "ddf.sync.mode": syncOptions.property.mode,
+        },
+      }),
+    );
     yield* Effect.logInfo(
       "DDF database sync: properties complete",
       syncResultLogDetails(property),
@@ -610,7 +665,15 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     const member = yield* dependencies.syncMembers({
       ...syncOptions.member,
       sink,
-    });
+    }).pipe(
+      Effect.withSpan("DdfDatabaseSync.syncMembersPhase", {
+        attributes: {
+          "ddf.run_id": runId,
+          "ddf.resource": "Member",
+          "ddf.sync.mode": syncOptions.member.mode,
+        },
+      }),
+    );
     yield* Effect.logInfo(
       "DDF database sync: members complete",
       syncResultLogDetails(member),
@@ -630,7 +693,15 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
     const office = yield* dependencies.syncOffices({
       ...syncOptions.office,
       sink,
-    });
+    }).pipe(
+      Effect.withSpan("DdfDatabaseSync.syncOfficesPhase", {
+        attributes: {
+          "ddf.run_id": runId,
+          "ddf.resource": "Office",
+          "ddf.sync.mode": syncOptions.office.mode,
+        },
+      }),
+    );
     yield* Effect.logInfo(
       "DDF database sync: offices complete",
       syncResultLogDetails(office),
@@ -655,7 +726,15 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       listingScopes: openHouseListingScopes,
       dateWindow: openHouseDateWindow,
       sink,
-    });
+    }).pipe(
+      Effect.withSpan("DdfDatabaseSync.syncOpenHousesPhase", {
+        attributes: {
+          "ddf.run_id": runId,
+          "ddf.resource": "OpenHouse",
+          "ddf.sync.listing_scopes": openHouseListingScopes.length,
+        },
+      }),
+    );
     yield* Effect.logInfo(
       "DDF database sync: open houses complete",
       syncResultLogDetails(openHouse),
@@ -675,6 +754,10 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       syncErrors,
       sink.recordSyncError,
       { discard: true },
+    ).pipe(
+      Effect.withSpan("DdfDatabaseSync.recordSyncErrors", {
+        attributes: { "ddf.run_id": runId, "ddf.sync.errors": syncErrors.length },
+      }),
     );
 
     const completedAt = yield* DateTime.nowAsDate;
@@ -707,7 +790,11 @@ export const syncDdfDatabaseOnce = Effect.fn("DdfDatabaseSync.syncOnce")(
       runId,
       status: summary.status,
     });
-    yield* dependencies.recordRun(summary, options?.destinationId);
+    yield* dependencies.recordRun(summary, options?.destinationId).pipe(
+      Effect.withSpan("DdfDatabaseSync.recordRun", {
+        attributes: { "ddf.run_id": runId, "ddf.sync.status": summary.status },
+      }),
+    );
     yield* Effect.logInfo("DDF database sync: finished", {
       runId,
       status: summary.status,

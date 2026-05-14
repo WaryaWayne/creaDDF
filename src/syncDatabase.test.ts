@@ -4,7 +4,7 @@ import { DdfHttp } from "./client";
 import type { DdfHttpApi } from "./client";
 import type { DdfWatermarkScope } from "./db/schema";
 import type { Destination } from "./schema/destinationSchema";
-import type { SyncResource, SyncResult } from "./sync";
+import type { SyncRecordError, SyncResource, SyncResult } from "./sync";
 import {
   chosenAorKeysFromEnv,
   databaseSyncOptionsFromWatermarks,
@@ -237,6 +237,65 @@ describe("syncDdfDatabaseOnce planning", () => {
         persisted: 2,
         failed: 0,
       });
+    }),
+  );
+
+  it.effect("continues replication and records a partial failure when destination sync fails", () =>
+    Effect.gen(function* () {
+      const calls: Array<string> = [];
+      const recordedErrors: Array<string> = [];
+      let recorded: SyncDdfDatabaseOnceSummary | undefined;
+      const destinationFailure = new Error("destination unavailable");
+      const dependencies = {
+        syncDestinations: () =>
+          Effect.fail(destinationFailure),
+        syncProperties: () =>
+          Effect.sync(() => {
+            calls.push("properties");
+            return syncResult("Property", "2024-01-01T00:00:00.000Z");
+          }),
+        syncMembers: () =>
+          Effect.sync(() => {
+            calls.push("members");
+            return syncResult("Member", null);
+          }),
+        syncOffices: () =>
+          Effect.sync(() => {
+            calls.push("offices");
+            return syncResult("Office", null);
+          }),
+        syncOpenHouses: () =>
+          Effect.sync(() => {
+            calls.push("openHouses");
+            return syncResult("OpenHouse", null);
+          }),
+        loadWatermark: () => Effect.succeed(null),
+        saveWatermark: () => Effect.void,
+        runMigrations: () => Effect.void,
+        makeSink: () =>
+          Effect.succeed({
+            upsertDestination: () => Effect.void,
+            recordSyncError: (error: SyncRecordError) =>
+              Effect.sync(() => recordedErrors.push(`${error.resource}:${error.key}`)),
+          }),
+        loadOpenHouseListingScopes: () => Effect.succeed([]),
+        recordRun: (summary: SyncDdfDatabaseOnceSummary) =>
+          Effect.sync(() => {
+            recorded = summary;
+          }),
+      } as unknown as Partial<SyncDdfDatabaseDependencies>;
+
+      const summary = yield* syncDdfDatabaseOnce({
+        runMigrations: false,
+        dependencies,
+      }) as Effect.Effect<SyncDdfDatabaseOnceSummary>;
+
+      assert.deepEqual(calls, ["properties", "members", "offices", "openHouses"]);
+      assert.deepEqual(recordedErrors, ["Destination:destination-sync"]);
+      assert.equal(summary.status, "partial_failure");
+      assert.equal(summary.destination.counts.failed, 1);
+      assert.equal(summary.destination.errors[0]?.message.includes("destination unavailable"), true);
+      assert.equal(recorded?.status, "partial_failure");
     }),
   );
 
