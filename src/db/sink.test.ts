@@ -43,6 +43,11 @@ describe("database sync sink row mapping", () => {
       CoListOfficeNationalAssociationId: "CLONA-1",
       CoListOfficeNationalAssociationId2: "CLONA-2",
       CoListOfficeNationalAssociationId3: "CLONA-3",
+      Rooms: [{ RoomKey: "room-1", RoomType: "Kitchen" }],
+      Media: [
+        { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2, PreferredPhotoYN: false },
+        { MediaKey: "media-1", MediaURL: "https://example.test/primary.jpg", Order: 1, PreferredPhotoYN: true },
+      ],
     });
 
     const row = propertyRowFromRecord(property);
@@ -58,7 +63,46 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.coListAgentNationalAssociationId3, "CLANA-3");
     assert.equal(row.listOfficeNationalAssociationId, "LONA-1");
     assert.equal(row.coListOfficeNationalAssociationId3, "CLONA-3");
+    assert.deepEqual(row.rooms as unknown, [{ RoomKey: "room-1", RoomType: "Kitchen" }]);
+    assert.deepEqual(row.media as unknown, [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2, PreferredPhotoYN: false },
+      { MediaKey: "media-1", MediaURL: "https://example.test/primary.jpg", Order: 1, PreferredPhotoYN: true },
+    ]);
+    assert.equal(row.primaryMediaUrl, "https://example.test/primary.jpg");
     assert.equal(row.raw, property);
+  });
+
+  it("falls back to order one as the listing-card helper when no preferred photo is present", () => {
+    const row = propertyRowFromRecord(asPropertyRecord({
+      ListingKey: "listing-1",
+      Media: [
+        { MediaKey: "media-1", MediaURL: "https://example.test/first.jpg", Order: 1 },
+        { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      ],
+    }));
+
+    assert.equal(row.primaryMediaUrl, "https://example.test/first.jpg");
+  });
+
+  it("uses preferred photo as primary and falls back only to order one", () => {
+    const row = propertyRowFromRecord(asPropertyRecord({
+      ListingKey: "listing-1",
+      Media: [
+        { MediaKey: "media-1", MediaURL: "https://example.test/order-one.jpg", Order: 1, PreferredPhotoYN: false },
+        { MediaKey: "media-2", MediaURL: "https://example.test/preferred.jpg", Order: 2, PreferredPhotoYN: true },
+      ],
+    }));
+
+    assert.equal(row.primaryMediaUrl, "https://example.test/preferred.jpg");
+    assert.equal(
+      propertyRowFromRecord(asPropertyRecord({
+        ListingKey: "listing-2",
+        Media: [
+          { MediaKey: "media-3", MediaURL: "https://example.test/not-a-primary.jpg", Order: 2 },
+        ],
+      })).primaryMediaUrl,
+      null,
+    );
   });
 
   it("derives stable room and media ownership keys", () => {
@@ -191,6 +235,16 @@ describe("database sync sink row mapping", () => {
       MemberType: "Salesperson",
       MemberEmail: "agent@example.test",
       MemberEmailYN: true,
+      MemberLanguages: ["English", "French"],
+      MemberDesignation: ["Certified Residential Specialist®"],
+      MemberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     });
     const openHouse = asOpenHouseRecord({
       OpenHouseKey: "open-house-1",
@@ -211,11 +265,61 @@ describe("database sync sink row mapping", () => {
     const memberRow = memberRowFromRecord(member);
     assert.equal(memberRow.emailYn, true);
     assert.equal("email" in memberRow, false);
+    assert.deepEqual(memberRow.memberLanguages, ["English", "French"]);
+    assert.deepEqual(memberRow.memberDesignation, ["Certified Residential Specialist®"]);
+    assert.deepEqual(memberRow.memberSocialMedia as unknown, [
+      {
+        SocialMediaKey: "member-social-1",
+        SocialMediaType: "Website",
+        SocialMediaUrlOrId: "https://member.example.test",
+        ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+      },
+    ]);
     assert.equal(openHouseRowFromRecord(openHouse).listingId, "X123");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseDate, "2027-06-07");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseStartTime, "12:00:00");
     assert.equal(openHouseRowFromRecord(openHouse).openHouseEndTime, "15:30:00");
     assert.equal(openHouseRowFromRecord(openHouse).livestreamOpenHouseUrl, "https://example.test/live");
+  });
+
+
+  it("maps member and office media into parent JSONB columns", () => {
+    const memberMedia = [
+      asMediaRecord({ MediaKey: "member-media-1", MediaURL: "https://example.test/member.jpg", Order: 1 }),
+    ];
+    const officeMedia = [
+      asMediaRecord({ MediaKey: "office-media-1", MediaURL: "https://example.test/office.jpg", Order: 1 }),
+    ];
+
+    assert.deepEqual(
+      memberRowFromRecord(asMemberRecord({ MemberKey: "member-1" }), memberMedia).media as unknown,
+      memberMedia,
+    );
+    assert.deepEqual(
+      officeRowFromRecord(asOfficeRecord({ OfficeKey: "office-1" }), officeMedia).media as unknown,
+      officeMedia,
+    );
+    assert.deepEqual(
+      officeRowFromRecord(asOfficeRecord({
+        OfficeKey: "office-1",
+        OfficeSocialMedia: [
+          {
+            SocialMediaKey: "office-social-1",
+            SocialMediaType: "Website",
+            SocialMediaUrlOrId: "https://office.example.test",
+            ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+          },
+        ],
+      })).officeSocialMedia as unknown,
+      [
+        {
+          SocialMediaKey: "office-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://office.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
+    );
   });
 
   it("maps destination rows for the DB query surface", () => {

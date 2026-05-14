@@ -4,39 +4,13 @@ CREATE TABLE "ddf_destinations" (
 	"destination_url" text,
 	"destination_type" text,
 	"destination_status" text,
-	"raw" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "ddf_media" (
-	"media_key" text PRIMARY KEY,
-	"resource" text NOT NULL,
-	"resource_key" text NOT NULL,
-	"resource_record_id" text,
-	"resource_record_key" text,
-	"resource_name" text,
+	"member_first_name" text,
+	"member_last_name" text,
+	"member_key" text,
+	"original_entry_timestamp" timestamp with time zone,
 	"modification_timestamp" timestamp with time zone,
-	"media_url" text,
-	"media_category" text,
-	"long_description" text,
-	"preferred_photo" boolean,
-	"sort_order" integer,
+	"full_nsp" boolean,
 	"raw" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "ddf_member_designations" (
-	"member_key" text NOT NULL,
-	"designation" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "ddf_member_languages" (
-	"member_key" text NOT NULL,
-	"language" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -72,6 +46,10 @@ CREATE TABLE "ddf_members" (
 	"status" text,
 	"type" text,
 	"email_yn" boolean,
+	"media" jsonb,
+	"member_languages" jsonb DEFAULT '[]' NOT NULL,
+	"member_designation" jsonb DEFAULT '[]' NOT NULL,
+	"member_social_media" jsonb DEFAULT '[]' NOT NULL,
 	"active" boolean DEFAULT true NOT NULL,
 	"raw" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -100,6 +78,8 @@ CREATE TABLE "ddf_offices" (
 	"postal_code" text,
 	"office_type" text,
 	"office_status" text,
+	"media" jsonb,
+	"office_social_media" jsonb DEFAULT '[]' NOT NULL,
 	"active" boolean DEFAULT true NOT NULL,
 	"raw" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -133,7 +113,6 @@ CREATE TABLE "ddf_properties" (
 	"standard_status" text,
 	"property_sub_type" text,
 	"business_type" jsonb,
-	"property_type" text,
 	"public_remarks" text,
 	"list_price" double precision,
 	"lease_amount" double precision,
@@ -225,7 +204,7 @@ CREATE TABLE "ddf_properties" (
 	"property_condition" jsonb,
 	"roof" jsonb,
 	"construction_materials" jsonb,
-	"stories" integer,
+	"stories" double precision,
 	"property_attached" boolean,
 	"accessibility_features" jsonb,
 	"zoning" text,
@@ -266,38 +245,10 @@ CREATE TABLE "ddf_properties" (
 	"inclusions" text,
 	"internet_entire_listing_display" boolean,
 	"internet_address_display" boolean,
+	"rooms" jsonb,
+	"media" jsonb,
+	"primary_media_url" text,
 	"active" boolean DEFAULT true NOT NULL,
-	"raw" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "ddf_property_rooms" (
-	"room_key" text PRIMARY KEY,
-	"listing_key" text NOT NULL,
-	"listing_id" text,
-	"modification_timestamp" timestamp with time zone,
-	"room_description" text,
-	"room_dimensions" text,
-	"room_length" double precision,
-	"room_level" text,
-	"room_width" double precision,
-	"room_length_width_units" text,
-	"room_type" text,
-	"raw" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
-);
---> statement-breakpoint
-CREATE TABLE "ddf_social_media" (
-	"social_media_key" text PRIMARY KEY,
-	"resource" text NOT NULL,
-	"resource_key" text NOT NULL,
-	"resource_record_key" text,
-	"social_media_type" text,
-	"modification_timestamp" timestamp with time zone,
-	"resource_name" text,
-	"social_media_url_or_id" text,
 	"raw" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -324,16 +275,17 @@ CREATE TABLE "ddf_sync_runs" (
 );
 --> statement-breakpoint
 CREATE TABLE "ddf_watermarks" (
-	"resource" text PRIMARY KEY,
+	"resource" text,
 	"watermark" text NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"cursor_kind" text DEFAULT 'processed_replication_stream',
+	"scope_hash" text DEFAULT 'global',
+	"scope" jsonb DEFAULT '{"destinationId":null,"chosenAorKeys":[]}' NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ddf_watermarks_pkey" PRIMARY KEY("resource","cursor_kind","scope_hash")
 );
 --> statement-breakpoint
 CREATE INDEX "ddf_destinations_status_idx" ON "ddf_destinations" ("destination_status");--> statement-breakpoint
-CREATE INDEX "ddf_media_owner_idx" ON "ddf_media" ("resource","resource_key");--> statement-breakpoint
-CREATE INDEX "ddf_media_modified_idx" ON "ddf_media" ("modification_timestamp");--> statement-breakpoint
-CREATE INDEX "ddf_member_designations_member_idx" ON "ddf_member_designations" ("member_key");--> statement-breakpoint
-CREATE INDEX "ddf_member_languages_member_idx" ON "ddf_member_languages" ("member_key");--> statement-breakpoint
+CREATE INDEX "ddf_destinations_member_idx" ON "ddf_destinations" ("member_key");--> statement-breakpoint
 CREATE INDEX "ddf_members_modified_idx" ON "ddf_members" ("modification_timestamp");--> statement-breakpoint
 CREATE INDEX "ddf_members_office_idx" ON "ddf_members" ("office_key");--> statement-breakpoint
 CREATE INDEX "ddf_members_mls_id_idx" ON "ddf_members" ("member_mls_id");--> statement-breakpoint
@@ -349,9 +301,7 @@ CREATE INDEX "ddf_properties_list_agent_idx" ON "ddf_properties" ("list_agent_ke
 CREATE INDEX "ddf_properties_status_idx" ON "ddf_properties" ("standard_status");--> statement-breakpoint
 CREATE INDEX "ddf_properties_location_idx" ON "ddf_properties" ("province","city");--> statement-breakpoint
 CREATE INDEX "ddf_properties_listing_id_idx" ON "ddf_properties" ("listing_id");--> statement-breakpoint
-CREATE INDEX "ddf_property_rooms_listing_idx" ON "ddf_property_rooms" ("listing_key");--> statement-breakpoint
-CREATE INDEX "ddf_social_media_owner_idx" ON "ddf_social_media" ("resource","resource_key");--> statement-breakpoint
-CREATE INDEX "ddf_social_media_modified_idx" ON "ddf_social_media" ("modification_timestamp");--> statement-breakpoint
+CREATE INDEX "ddf_properties_list_aor_key_idx" ON "ddf_properties" ("list_aor_key");--> statement-breakpoint
 CREATE INDEX "ddf_sync_errors_run_idx" ON "ddf_sync_errors" ("run_id");--> statement-breakpoint
 CREATE INDEX "ddf_sync_errors_resource_idx" ON "ddf_sync_errors" ("resource","record_key");--> statement-breakpoint
 CREATE INDEX "ddf_sync_runs_started_idx" ON "ddf_sync_runs" ("started_at");

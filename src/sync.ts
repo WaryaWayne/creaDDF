@@ -50,11 +50,13 @@ import {
   ddfSyncFailedCount,
   ddfSyncHydratedCount,
   ddfSyncPersistedCount,
+  ddfSyncSkippedCount,
 } from "./metrics";
 import { DdfWatermarkStore } from "./watermark";
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([
+  "Destination",
   "Property",
   "Member",
   "Office",
@@ -202,17 +204,6 @@ export interface PropertySyncSink<SinkError = never> {
   readonly upsertPropertyGraph?: (
     graph: PropertyGraph,
   ) => Effect.Effect<void, SinkError>;
-  readonly upsertProperty?: (
-    property: PropertyRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertRoom?: (
-    room: RoomRecord,
-    property: PropertyRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
-  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Property",
     watermark: string,
@@ -220,19 +211,15 @@ export interface PropertySyncSink<SinkError = never> {
   readonly markMissingPropertiesInactive?: (
     keys: ReadonlyArray<string>,
   ) => Effect.Effect<void, SinkError>;
+  readonly deleteOpenHousesForListings?: (
+    listings: ReadonlyArray<OpenHouseListingScope>,
+  ) => Effect.Effect<void, SinkError>;
 }
 
 export interface MemberSyncSink<SinkError = never> {
   readonly upsertMemberWithMedia?: (
     member: MemberRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMember?: (
-    member: MemberRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly upsertSocialMedia?: (
     socialMedia: SocialMedia,
@@ -251,13 +238,6 @@ export interface OfficeSyncSink<SinkError = never> {
   readonly upsertOfficeWithMedia?: (
     office: OfficeRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertOffice?: (
-    office: OfficeRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly upsertSocialMedia?: (
     socialMedia: SocialMedia,
@@ -294,14 +274,21 @@ export interface OpenHouseDateWindow {
 
 export interface PropertySyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: PropertySyncSink<SinkError>;
+  /**
+   * Applied after property hydration because replication identifiers do not expose ListAORKey.
+   * Skipped hydrated properties are logged and counted in `crea_ddf_sync_skipped_total`.
+   */
+  readonly includeProperty?: (property: PropertyRecord) => boolean;
 }
 
 export interface MemberSyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: MemberSyncSink<SinkError>;
+  readonly includeMember?: (member: MemberRecord) => boolean;
 }
 
 export interface OfficeSyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: OfficeSyncSink<SinkError>;
+  readonly includeOffice?: (office: OfficeRecord) => boolean;
 }
 
 export interface OpenHouseSyncOptions<SinkError = never> {
@@ -683,11 +670,9 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const failedWatermarks: Array<unknown> =
       collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
-    const hasRecordSink =
-      options?.sink?.upsertPropertyGraph !== undefined ||
-      options?.sink?.upsertProperty !== undefined ||
-      options?.sink?.upsertRoom !== undefined ||
-      options?.sink?.upsertMedia !== undefined;
+    let skippedRecords = 0;
+    const hasParentRecordSink =
+      options?.sink?.upsertPropertyGraph !== undefined;
 
     yield* Effect.logInfo("Property sync: normalizing and persisting records", {
       identifiers: identifiers.length,
@@ -757,46 +742,63 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           continue;
         }
 
-        const graph: PropertyGraph = yield* normalizePropertyGraph(
-          result.record as PropertyRecord,
-        );
+        const property = result.record as PropertyRecord;
         hydratedSuccessRecords += 1;
+        if (
+          options?.includeProperty !== undefined &&
+          !options.includeProperty(property)
+        ) {
+          skippedRecords += 1;
+          const propertyKey =
+            stableReplicationKey(property.ListingKey) ??
+            stableReplicationKey(identifier.ListingKey) ??
+            "";
+          const propertyListingId = stableReplicationKey(property.ListingId);
+          const persistError = yield* runPersist(
+            "Property",
+            propertyKey,
+            Effect.gen(function* () {
+              if (propertyKey.length === 0) return;
+              if (
+                options?.sink?.markMissingPropertiesInactive !== undefined
+              ) {
+                yield* options.sink.markMissingPropertiesInactive([
+                  propertyKey,
+                ]);
+              }
+              if (
+                options?.sink?.deleteOpenHousesForListings !== undefined
+              ) {
+                yield* options.sink.deleteOpenHousesForListings([
+                  { listingKey: propertyKey, listingId: propertyListingId },
+                ]);
+              }
+            }),
+          );
+          if (persistError !== null) {
+            errors.push(persistError);
+            failedWatermarks.push(identifier.ModificationTimestamp);
+          } else {
+            successfulWatermarks.push(identifier.ModificationTimestamp);
+          }
+          yield* logPersistProgress(processedRecords);
+          continue;
+        }
 
-        const propertyKey = String(graph.property.ListingKey ?? "");
+        const graph: PropertyGraph = yield* normalizePropertyGraph(property);
+
         const persist = Effect.gen(function* () {
           if (options?.sink?.upsertPropertyGraph !== undefined) {
             yield* options.sink.upsertPropertyGraph(graph);
-            return;
-          }
-          if (options?.sink?.upsertProperty !== undefined) {
-            yield* options.sink.upsertProperty(graph.property);
-          }
-          if (options?.sink?.upsertRoom !== undefined) {
-            yield* Effect.forEach(
-              graph.rooms,
-              (room) =>
-                options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
-              { discard: true },
-            );
-          }
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              graph.media,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Property",
-                  key: propertyKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
           }
         });
+        const propertyKey = String(graph.property.ListingKey ?? "");
         const persistError = yield* runPersist("Property", propertyKey, persist);
         if (persistError !== null) {
           errors.push(persistError);
           failedWatermarks.push(identifier.ModificationTimestamp);
         } else {
-          if (hasRecordSink) persistedRecords += 1;
+          if (hasParentRecordSink) persistedRecords += 1;
           successfulWatermarks.push(identifier.ModificationTimestamp);
         }
         yield* logPersistProgress(processedRecords);
@@ -826,9 +828,13 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       errors,
     );
     yield* trackSyncMetrics(counts);
+    yield* Metric.update(ddfSyncSkippedCount, skippedRecords);
     yield* Effect.logInfo(
       "Property sync: complete",
-      countsLogDetails(counts, nextWatermark),
+      {
+        ...countsLogDetails(counts, nextWatermark),
+        skippedOutOfScope: skippedRecords,
+      },
     );
 
     return {
@@ -883,11 +889,8 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
   const failedWatermarks: Array<unknown> =
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink =
-    options?.sink?.upsertMemberWithMedia !== undefined ||
-    options?.sink?.upsertMember !== undefined ||
-    options?.sink?.upsertMedia !== undefined ||
-    options?.sink?.upsertSocialMedia !== undefined;
+  const hasParentRecordSink =
+    options?.sink?.upsertMemberWithMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -956,6 +959,32 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         yield* logPersistProgress(processedRecords);
         continue;
       }
+      hydratedSuccessRecords += 1;
+      if (
+        options?.includeMember !== undefined &&
+        !options.includeMember(result.record)
+      ) {
+        const skippedMemberKey =
+          stableReplicationKey(result.record.MemberKey) ??
+          stableReplicationKey(identifier.MemberKey) ??
+          "";
+        const persistError = yield* runPersist(
+          "Member",
+          skippedMemberKey,
+          skippedMemberKey.length > 0 &&
+            options?.sink?.markMissingMembersInactive !== undefined
+            ? options.sink.markMissingMembersInactive([skippedMemberKey])
+            : Effect.void,
+        );
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          successfulWatermarks.push(identifier.ModificationTimestamp);
+        }
+        yield* logPersistProgress(processedRecords);
+        continue;
+      }
       const memberKey = String(result.record.MemberKey ?? "");
       const memberMedia = (
         Array.isArray((result.record as Record<string, unknown>).Media)
@@ -963,27 +992,12 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
           : []
       ).map((media) => normalizeMedia("Member", memberKey, media));
       const memberSocialMedia = result.record.MemberSocialMedia ?? [];
-      hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertMemberWithMedia !== undefined) {
           yield* options.sink.upsertMemberWithMedia(
             result.record,
             memberMedia,
           );
-        } else {
-          if (options?.sink?.upsertMember !== undefined)
-            yield* options.sink.upsertMember(result.record);
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              memberMedia,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Member",
-                  key: memberKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
-          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
@@ -1002,7 +1016,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
-        if (hasRecordSink) persistedRecords += 1;
+        if (hasParentRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
       yield* logPersistProgress(processedRecords);
@@ -1088,11 +1102,8 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
   const failedWatermarks: Array<unknown> =
     collected.errors.length > 0 ? [null] : [];
   let persistedRecords = 0;
-  const hasRecordSink =
-    options?.sink?.upsertOfficeWithMedia !== undefined ||
-    options?.sink?.upsertOffice !== undefined ||
-    options?.sink?.upsertMedia !== undefined ||
-    options?.sink?.upsertSocialMedia !== undefined;
+  const hasParentRecordSink =
+    options?.sink?.upsertOfficeWithMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
     identifiers: identifiers.length,
@@ -1161,33 +1172,44 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         yield* logPersistProgress(processedRecords);
         continue;
       }
+      hydratedSuccessRecords += 1;
+      if (
+        options?.includeOffice !== undefined &&
+        !options.includeOffice(result.record)
+      ) {
+        const skippedOfficeKey =
+          stableReplicationKey(result.record.OfficeKey) ??
+          stableReplicationKey(identifier.OfficeKey) ??
+          "";
+        const persistError = yield* runPersist(
+          "Office",
+          skippedOfficeKey,
+          skippedOfficeKey.length > 0 &&
+            options?.sink?.markMissingOfficesInactive !== undefined
+            ? options.sink.markMissingOfficesInactive([skippedOfficeKey])
+            : Effect.void,
+        );
+        if (persistError !== null) {
+          errors.push(persistError);
+          failedWatermarks.push(identifier.ModificationTimestamp);
+        } else {
+          successfulWatermarks.push(identifier.ModificationTimestamp);
+        }
+        yield* logPersistProgress(processedRecords);
+        continue;
+      }
       const office = result.record as Record<string, unknown>;
       const officeKey = String(office.OfficeKey ?? "");
       const officeMedia = (
         Array.isArray(office.Media) ? (office.Media as MediaType) : []
       ).map((media) => normalizeMedia("Office", officeKey, media));
       const officeSocialMedia = result.record.OfficeSocialMedia ?? [];
-      hydratedSuccessRecords += 1;
       const persist = Effect.gen(function* () {
         if (options?.sink?.upsertOfficeWithMedia !== undefined) {
           yield* options.sink.upsertOfficeWithMedia(
             result.record,
             officeMedia,
           );
-        } else {
-          if (options?.sink?.upsertOffice !== undefined)
-            yield* options.sink.upsertOffice(result.record);
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              officeMedia,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Office",
-                  key: officeKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
-          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
@@ -1206,7 +1228,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         errors.push(persistError);
         failedWatermarks.push(identifier.ModificationTimestamp);
       } else {
-        if (hasRecordSink) persistedRecords += 1;
+        if (hasParentRecordSink) persistedRecords += 1;
         successfulWatermarks.push(identifier.ModificationTimestamp);
       }
       yield* logPersistProgress(processedRecords);

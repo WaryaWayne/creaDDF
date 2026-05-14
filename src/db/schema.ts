@@ -7,20 +7,20 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   time,
   timestamp,
 } from "drizzle-orm/pg-core";
 import type { Destination } from "../schema/destinationSchema";
-import type { SocialMedia } from "../schema/officeSchema";
+import type { MediaType } from "../schema/mediaSchema";
+import type { RoomsType } from "../schema/roomsSchema";
 import type { SyncDdfDatabaseOnceSummary } from "../syncDatabase";
 import type {
-  MediaRecord,
   MemberRecord,
   OfficeRecord,
   OpenHouseRecord,
   PropertyRecord,
-  RoomRecord,
   SyncResource,
   SyncStage,
 } from "../sync";
@@ -33,6 +33,13 @@ export interface DdfSerializedCause {
   readonly stack?: string;
   readonly pretty?: string;
 }
+
+export interface DdfWatermarkScope {
+  readonly destinationId: number | null;
+  readonly chosenAorKeys: ReadonlyArray<string>;
+}
+
+export type DdfWatermarkCursorKind = "processed_replication_stream";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -184,6 +191,9 @@ export const ddfProperties = pgTable(
     inclusions: text("inclusions"),
     internetEntireListingDisplay: boolean("internet_entire_listing_display"),
     internetAddressDisplay: boolean("internet_address_display"),
+    rooms: jsonb("rooms").$type<RoomsType>(),
+    media: jsonb("media").$type<MediaType>(),
+    primaryMediaUrl: text("primary_media_url"),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<PropertyRecord>().notNull(),
     ...timestamps,
@@ -195,50 +205,7 @@ export const ddfProperties = pgTable(
     index("ddf_properties_status_idx").on(table.standardStatus),
     index("ddf_properties_location_idx").on(table.province, table.city),
     index("ddf_properties_listing_id_idx").on(table.listingId),
-  ],
-);
-
-export const ddfPropertyRooms = pgTable(
-  "ddf_property_rooms",
-  {
-    roomKey: text("room_key").primaryKey(),
-    listingKey: text("listing_key").notNull(),
-    listingId: text("listing_id"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    roomDescription: text("room_description"),
-    roomDimensions: text("room_dimensions"),
-    roomLength: doublePrecision("room_length"),
-    roomLevel: text("room_level"),
-    roomWidth: doublePrecision("room_width"),
-    roomLengthWidthUnits: text("room_length_width_units"),
-    roomType: text("room_type"),
-    raw: jsonb("raw").$type<RoomRecord>().notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_property_rooms_listing_idx").on(table.listingKey)],
-);
-
-export const ddfMedia = pgTable(
-  "ddf_media",
-  {
-    mediaKey: text("media_key").primaryKey(),
-    resource: text("resource").$type<SyncResource>().notNull(),
-    resourceKey: text("resource_key").notNull(),
-    resourceRecordId: text("resource_record_id"),
-    resourceRecordKey: text("resource_record_key"),
-    resourceName: text("resource_name"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    mediaUrl: text("media_url"),
-    mediaCategory: text("media_category"),
-    longDescription: text("long_description"),
-    preferredPhoto: boolean("preferred_photo"),
-    sortOrder: integer("sort_order"),
-    raw: jsonb("raw").$type<MediaRecord>().notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    index("ddf_media_owner_idx").on(table.resource, table.resourceKey),
-    index("ddf_media_modified_idx").on(table.modificationTimestamp),
+    index("ddf_properties_list_aor_key_idx").on(table.listAorKey),
   ],
 );
 
@@ -275,6 +242,19 @@ export const ddfMembers = pgTable(
     status: text("status"),
     type: text("type"),
     emailYn: boolean("email_yn"),
+    media: jsonb("media").$type<MediaType>(),
+    memberLanguages: jsonb("member_languages")
+      .$type<NonNullable<MemberRecord["MemberLanguages"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    memberDesignation: jsonb("member_designation")
+      .$type<NonNullable<MemberRecord["MemberDesignation"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    memberSocialMedia: jsonb("member_social_media")
+      .$type<NonNullable<MemberRecord["MemberSocialMedia"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<MemberRecord>().notNull(),
     ...timestamps,
@@ -283,46 +263,6 @@ export const ddfMembers = pgTable(
     index("ddf_members_modified_idx").on(table.modificationTimestamp),
     index("ddf_members_office_idx").on(table.officeKey),
     index("ddf_members_mls_id_idx").on(table.memberMlsId),
-  ],
-);
-
-export const ddfMemberLanguages = pgTable(
-  "ddf_member_languages",
-  {
-    memberKey: text("member_key").notNull(),
-    language: text("language").notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_member_languages_member_idx").on(table.memberKey)],
-);
-
-export const ddfMemberDesignations = pgTable(
-  "ddf_member_designations",
-  {
-    memberKey: text("member_key").notNull(),
-    designation: text("designation").notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_member_designations_member_idx").on(table.memberKey)],
-);
-
-export const ddfSocialMedia = pgTable(
-  "ddf_social_media",
-  {
-    socialMediaKey: text("social_media_key").primaryKey(),
-    resource: text("resource").$type<SyncResource>().notNull(),
-    resourceKey: text("resource_key").notNull(),
-    resourceRecordKey: text("resource_record_key"),
-    socialMediaType: text("social_media_type"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    resourceName: text("resource_name"),
-    socialMediaUrlOrId: text("social_media_url_or_id"),
-    raw: jsonb("raw").$type<SocialMedia>().notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    index("ddf_social_media_owner_idx").on(table.resource, table.resourceKey),
-    index("ddf_social_media_modified_idx").on(table.modificationTimestamp),
   ],
 );
 
@@ -350,6 +290,11 @@ export const ddfOffices = pgTable(
     postalCode: text("postal_code"),
     officeType: text("office_type"),
     officeStatus: text("office_status"),
+    media: jsonb("media").$type<MediaType>(),
+    officeSocialMedia: jsonb("office_social_media")
+      .$type<NonNullable<OfficeRecord["OfficeSocialMedia"]>>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     active: boolean("active").default(true).notNull(),
     raw: jsonb("raw").$type<OfficeRecord>().notNull(),
     ...timestamps,
@@ -407,11 +352,28 @@ export const ddfDestinations = pgTable(
   ],
 );
 
-export const ddfWatermarks = pgTable("ddf_watermarks", {
-  resource: text("resource").$type<SyncResource>().primaryKey(),
-  watermark: text("watermark").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const ddfWatermarks = pgTable(
+  "ddf_watermarks",
+  {
+    resource: text("resource").$type<SyncResource>().notNull(),
+    watermark: text("watermark").notNull(),
+    cursorKind: text("cursor_kind")
+      .$type<DdfWatermarkCursorKind>()
+      .default("processed_replication_stream")
+      .notNull(),
+    scopeHash: text("scope_hash").default("global").notNull(),
+    scope: jsonb("scope")
+      .$type<DdfWatermarkScope>()
+      .default(sql`'{"destinationId":null,"chosenAorKeys":[]}'::jsonb`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.resource, table.cursorKind, table.scopeHash],
+    }),
+  ],
+);
 
 export const ddfSyncRuns = pgTable(
   "ddf_sync_runs",

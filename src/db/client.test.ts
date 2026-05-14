@@ -1,9 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { DateTime, Effect, Exit } from "effect";
 import {
   DdfDbClientValidationError,
   coListAgentKeysFromRow,
   coListOfficeKeysFromRow,
+  embeddedMediaRowsFromColumn,
+  embeddedRoomRowsFromColumn,
+  embeddedSocialMediaRowsFromColumn,
   groupRowsBy,
   projectionPlan,
   propertyFieldPresets,
@@ -20,9 +23,61 @@ describe("database read client helpers", () => {
       "propertySubType",
       "bedroomsTotal",
       "bathroomsTotalInteger",
+      "primaryMediaUrl",
       "modificationTimestamp",
     ]);
     assert.equal(propertyFieldPresets.card.join(",").includes("raw"), false);
+  });
+
+  it("projects embedded JSONB property/member/office media and property rooms for includes", () => {
+    const timestamp = DateTime.makeUnsafe("2024-01-02T03:04:05.000Z");
+    const media = [
+      { MediaKey: "media-2", MediaURL: "https://example.test/second.jpg", Order: 2 },
+      {
+        MediaKey: "media-1",
+        MediaURL: "https://example.test/first.jpg",
+        ModificationTimestamp: timestamp,
+        Order: 1,
+      },
+    ];
+
+    const mediaRows = embeddedMediaRowsFromColumn(media, "Property", "listing-1");
+
+    assert.equal(mediaRows[0]?.mediaKey, "media-1");
+    assert.equal(mediaRows[0]?.resource, "Property");
+    assert.equal(mediaRows[0]?.resourceKey, "listing-1");
+    assert.equal((mediaRows[0]?.modificationTimestamp as Date | null)?.toISOString(), "2024-01-02T03:04:05.000Z");
+    assert.equal(mediaRows[1]?.mediaKey, "media-2");
+    assert.equal(embeddedMediaRowsFromColumn(media, "Member", "member-1")[0]?.resourceKey, "member-1");
+    assert.equal(embeddedMediaRowsFromColumn(media, "Office", "office-1")[0]?.resourceKey, "office-1");
+    const socialRows = embeddedSocialMediaRowsFromColumn([
+      {
+        SocialMediaKey: "social-1",
+        SocialMediaType: "Website",
+        SocialMediaUrlOrId: "https://example.test/profile",
+        ModificationTimestamp: timestamp,
+      },
+    ], "Member", "member-1");
+    assert.equal(socialRows[0]?.socialMediaKey, "social-1");
+    assert.equal(socialRows[0]?.resource, "Member");
+    assert.equal(socialRows[0]?.resourceKey, "member-1");
+    assert.equal((socialRows[0]?.modificationTimestamp as Date | null)?.toISOString(), "2024-01-02T03:04:05.000Z");
+    const roomRows = embeddedRoomRowsFromColumn([{
+      RoomKey: "room-1",
+      RoomType: "Kitchen",
+      RoomLevel: "Main level",
+      ModificationTimestamp: timestamp,
+    }], {
+      listingKey: "listing-1",
+      listingId: "L123",
+    });
+
+    assert.equal(roomRows[0]?.roomKey, "room-1");
+    assert.equal(roomRows[0]?.listingKey, "listing-1");
+    assert.equal(roomRows[0]?.listingId, "L123");
+    assert.equal((roomRows[0]?.modificationTimestamp as Date | null)?.toISOString(), "2024-01-02T03:04:05.000Z");
+    assert.equal(roomRows[0]?.roomLevel, "Main level");
+    assert.equal(roomRows[0]?.roomType, "Kitchen");
   });
 
   it("only includes raw when explicitly requested", () => {

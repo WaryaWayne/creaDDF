@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { inArray, or } from "drizzle-orm";
 import { Cause, Data, DateTime, Effect } from "effect";
 import type {
   MediaRecord,
@@ -21,15 +21,10 @@ import { DdfDatabase } from "./layer";
 import type { DdfSerializedCause } from "./schema";
 import {
   ddfDestinations,
-  ddfMedia,
-  ddfMemberDesignations,
-  ddfMemberLanguages,
   ddfMembers,
   ddfOffices,
   ddfOpenHouses,
   ddfProperties,
-  ddfPropertyRooms,
-  ddfSocialMedia,
   ddfSyncErrors,
   touchUpdatedAt,
 } from "./schema";
@@ -136,6 +131,15 @@ const requireNumberKey = (operation: string, key: number | null) =>
         }),
       )
     : Effect.succeed(key);
+
+const primaryMediaUrlFromMedia = (media: ReadonlyArray<MediaRecord> | null | undefined): string | null => {
+  const records = media ?? [];
+  const preferred = records.find((record) => record.PreferredPhotoYN === true && stableKey(record.MediaURL) !== null);
+  if (preferred !== undefined) return preferred.MediaURL ?? null;
+
+  const orderedPrimary = records.find((record) => record.Order === 1 && stableKey(record.MediaURL) !== null);
+  return orderedPrimary?.MediaURL ?? null;
+};
 
 export const propertyRowFromRecord = (property: PropertyRecord) => ({
   listingKey: stableKey(property.ListingKey),
@@ -280,6 +284,9 @@ export const propertyRowFromRecord = (property: PropertyRecord) => ({
   inclusions: nullable(property.Inclusions),
   internetEntireListingDisplay: nullable(property.InternetEntireListingDisplayYN),
   internetAddressDisplay: nullable(property.InternetAddressDisplayYN),
+  rooms: nullable(property.Rooms),
+  media: nullable(property.Media),
+  primaryMediaUrl: primaryMediaUrlFromMedia(property.Media),
   active: true,
   raw: property,
 });
@@ -335,7 +342,10 @@ export const mediaRowFromRecord = (media: MediaRecord, owner: SyncOwner) => ({
   raw: media,
 });
 
-export const memberRowFromRecord = (member: MemberRecord) => ({
+export const memberRowFromRecord = (
+  member: MemberRecord,
+  media: ReadonlyArray<MediaRecord> | null | undefined = member.Media,
+) => ({
   memberKey: stableKey(member.MemberKey),
   memberMlsId: nullable(member.MemberMlsId),
   modificationTimestamp: timestampValue(member.ModificationTimestamp),
@@ -366,21 +376,13 @@ export const memberRowFromRecord = (member: MemberRecord) => ({
   status: nullable(member.MemberStatus),
   type: nullable(member.MemberType),
   emailYn: nullable(member.MemberEmailYN),
+  media: nullable(media),
+  memberLanguages: member.MemberLanguages ?? [],
+  memberDesignation: member.MemberDesignation ?? [],
+  memberSocialMedia: member.MemberSocialMedia ?? [],
   active: true,
   raw: member,
 });
-
-export const memberLanguageRowsFromRecord = (member: MemberRecord, memberKey: string) =>
-  (member.MemberLanguages ?? []).map((language) => ({
-    memberKey,
-    language,
-  }));
-
-export const memberDesignationRowsFromRecord = (member: MemberRecord, memberKey: string) =>
-  (member.MemberDesignation ?? []).map((designation) => ({
-    memberKey,
-    designation,
-  }));
 
 export const socialMediaRowFromRecord = (socialMedia: SocialMedia, owner: SyncOwner) => ({
   socialMediaKey:
@@ -405,12 +407,10 @@ export const socialMediaRowFromRecord = (socialMedia: SocialMedia, owner: SyncOw
   raw: socialMedia,
 });
 
-export const socialMediaRowsFromRecord = (
-  socialMedia: ReadonlyArray<SocialMedia> | null,
-  owner: SyncOwner,
-) => (socialMedia ?? []).map((record) => socialMediaRowFromRecord(record, owner));
-
-export const officeRowFromRecord = (office: OfficeRecord) => ({
+export const officeRowFromRecord = (
+  office: OfficeRecord,
+  media: ReadonlyArray<MediaRecord> | null | undefined = office.Media,
+) => ({
   officeKey: stableKey(office.OfficeKey),
   officeMlsId: nullable(office.OfficeMlsId),
   modificationTimestamp: timestampValue(office.ModificationTimestamp),
@@ -432,6 +432,8 @@ export const officeRowFromRecord = (office: OfficeRecord) => ({
   postalCode: nullable(office.OfficePostalCode),
   officeType: nullable(office.OfficeType),
   officeStatus: nullable(office.OfficeStatus),
+  media: nullable(media),
+  officeSocialMedia: office.OfficeSocialMedia ?? [],
   active: true,
   raw: office,
 });
@@ -521,9 +523,18 @@ export const serializeSyncRecordError = (
 const mapSinkError = (operation: string) => (cause: unknown) =>
   new DdfDatabaseSinkError({ operation, cause });
 
+type DdfDatabaseMemberSyncSink = Omit<
+  MemberSyncSink<DdfDatabaseSinkError>,
+  "upsertSocialMedia"
+>;
+type DdfDatabaseOfficeSyncSink = Omit<
+  OfficeSyncSink<DdfDatabaseSinkError>,
+  "upsertSocialMedia"
+>;
+
 export type DdfDatabaseSyncSink = PropertySyncSink<DdfDatabaseSinkError> &
-  MemberSyncSink<DdfDatabaseSinkError> &
-  OfficeSyncSink<DdfDatabaseSinkError> &
+  DdfDatabaseMemberSyncSink &
+  DdfDatabaseOfficeSyncSink &
   OpenHouseSyncSink<DdfDatabaseSinkError> & {
     readonly upsertDestination: (
       destination: Destination,
@@ -553,329 +564,54 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
       ),
       upsertPropertyGraph: Effect.fn("DdfDatabaseSyncSink.upsertPropertyGraph")(
         function* (graph: PropertyGraph) {
-          const propertyRow = propertyRowFromRecord(graph.property);
+          const propertyRow = {
+            ...propertyRowFromRecord(graph.property),
+            rooms: graph.rooms,
+            media: graph.media,
+            primaryMediaUrl: primaryMediaUrlFromMedia(graph.media),
+          };
           const listingKey = yield* requireKey(
             "upsertPropertyGraph.property",
             propertyRow.listingKey,
           );
-          yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx
-                .insert(ddfProperties)
-                .values({ ...propertyRow, listingKey })
-                .onConflictDoUpdate({
-                  target: ddfProperties.listingKey,
-                  set: { ...propertyRow, listingKey, ...touchUpdatedAt },
-                });
-              yield* tx
-                .delete(ddfPropertyRooms)
-                .where(eq(ddfPropertyRooms.listingKey, listingKey));
-              yield* tx
-                .delete(ddfMedia)
-                .where(
-                  and(
-                    eq(ddfMedia.resource, "Property"),
-                    eq(ddfMedia.resourceKey, listingKey),
-                  ),
-                );
-              yield* Effect.forEach(
-                graph.rooms,
-                (room) =>
-                  Effect.gen(function* () {
-                    const row = roomRowFromRecord(room, graph.property);
-                    const roomListingKey = yield* requireKey(
-                      "upsertPropertyGraph.roomListingKey",
-                      row.listingKey,
-                    );
-                    const roomKey = yield* requireKey(
-                      "upsertPropertyGraph.roomKey",
-                      row.roomKey.length > 0 ? row.roomKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfPropertyRooms)
-                      .values({ ...row, listingKey: roomListingKey, roomKey })
-                      .onConflictDoUpdate({
-                        target: ddfPropertyRooms.roomKey,
-                        set: { ...row, listingKey: roomListingKey, roomKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                graph.media,
-                (media) =>
-                  Effect.gen(function* () {
-                    const row = mediaRowFromRecord(media, {
-                      resource: "Property",
-                      key: listingKey,
-                    });
-                    const mediaKey = yield* requireKey(
-                      "upsertPropertyGraph.mediaKey",
-                      row.mediaKey.length > 0 ? row.mediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfMedia)
-                      .values({ ...row, mediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfMedia.mediaKey,
-                        set: { ...row, mediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-            }),
-          ).pipe(Effect.mapError(mapSinkError("upsertPropertyGraph")));
+          yield* db
+            .insert(ddfProperties)
+            .values({ ...propertyRow, listingKey })
+            .onConflictDoUpdate({
+              target: ddfProperties.listingKey,
+              set: { ...propertyRow, listingKey, ...touchUpdatedAt },
+            })
+            .pipe(Effect.mapError(mapSinkError("upsertPropertyGraph")));
         },
       ),
       upsertMemberWithMedia: Effect.fn("DdfDatabaseSyncSink.upsertMemberWithMedia")(
         function* (member, media) {
-          const row = memberRowFromRecord(member);
+          const row = memberRowFromRecord(member, media);
           const memberKey = yield* requireKey("upsertMemberWithMedia", row.memberKey);
-          yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx
-                .insert(ddfMembers)
-                .values({ ...row, memberKey })
-                .onConflictDoUpdate({
-                  target: ddfMembers.memberKey,
-                  set: { ...row, memberKey, ...touchUpdatedAt },
-                });
-              yield* tx
-                .delete(ddfMedia)
-                .where(
-                  and(eq(ddfMedia.resource, "Member"), eq(ddfMedia.resourceKey, memberKey)),
-                );
-              yield* tx
-                .delete(ddfSocialMedia)
-                .where(
-                  and(eq(ddfSocialMedia.resource, "Member"), eq(ddfSocialMedia.resourceKey, memberKey)),
-                );
-              yield* tx
-                .delete(ddfMemberLanguages)
-                .where(eq(ddfMemberLanguages.memberKey, memberKey));
-              yield* tx
-                .delete(ddfMemberDesignations)
-                .where(eq(ddfMemberDesignations.memberKey, memberKey));
-              yield* Effect.forEach(
-                memberLanguageRowsFromRecord(member, memberKey),
-                (languageRow) => tx.insert(ddfMemberLanguages).values(languageRow),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                memberDesignationRowsFromRecord(member, memberKey),
-                (designationRow) => tx.insert(ddfMemberDesignations).values(designationRow),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                socialMediaRowsFromRecord(member.MemberSocialMedia ?? null, { resource: "Member", key: memberKey }),
-                (socialMediaRow) =>
-                  Effect.gen(function* () {
-                    const socialMediaKey = yield* requireKey(
-                      "upsertMemberWithMedia.socialMediaKey",
-                      socialMediaRow.socialMediaKey.length > 0 ? socialMediaRow.socialMediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfSocialMedia)
-                      .values({ ...socialMediaRow, socialMediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfSocialMedia.socialMediaKey,
-                        set: { ...socialMediaRow, socialMediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                media,
-                (mediaRecord) =>
-                  Effect.gen(function* () {
-                    const mediaRow = mediaRowFromRecord(mediaRecord, {
-                      resource: "Member",
-                      key: memberKey,
-                    });
-                    const mediaKey = yield* requireKey(
-                      "upsertMemberWithMedia.mediaKey",
-                      mediaRow.mediaKey.length > 0 ? mediaRow.mediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfMedia)
-                      .values({ ...mediaRow, mediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfMedia.mediaKey,
-                        set: { ...mediaRow, mediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-            }),
-          ).pipe(Effect.mapError(mapSinkError("upsertMemberWithMedia")));
+          yield* db
+            .insert(ddfMembers)
+            .values({ ...row, memberKey })
+            .onConflictDoUpdate({
+              target: ddfMembers.memberKey,
+              set: { ...row, memberKey, ...touchUpdatedAt },
+            })
+            .pipe(Effect.mapError(mapSinkError("upsertMemberWithMedia")));
         },
       ),
       upsertOfficeWithMedia: Effect.fn("DdfDatabaseSyncSink.upsertOfficeWithMedia")(
         function* (office, media) {
-          const row = officeRowFromRecord(office);
+          const row = officeRowFromRecord(office, media);
           const officeKey = yield* requireKey("upsertOfficeWithMedia", row.officeKey);
-          yield* db.transaction((tx) =>
-            Effect.gen(function* () {
-              yield* tx
-                .insert(ddfOffices)
-                .values({ ...row, officeKey })
-                .onConflictDoUpdate({
-                  target: ddfOffices.officeKey,
-                  set: { ...row, officeKey, ...touchUpdatedAt },
-                });
-              yield* tx
-                .delete(ddfMedia)
-                .where(
-                  and(eq(ddfMedia.resource, "Office"), eq(ddfMedia.resourceKey, officeKey)),
-                );
-              yield* tx
-                .delete(ddfSocialMedia)
-                .where(
-                  and(eq(ddfSocialMedia.resource, "Office"), eq(ddfSocialMedia.resourceKey, officeKey)),
-                );
-              yield* Effect.forEach(
-                socialMediaRowsFromRecord(office.OfficeSocialMedia ?? null, { resource: "Office", key: officeKey }),
-                (socialMediaRow) =>
-                  Effect.gen(function* () {
-                    const socialMediaKey = yield* requireKey(
-                      "upsertOfficeWithMedia.socialMediaKey",
-                      socialMediaRow.socialMediaKey.length > 0 ? socialMediaRow.socialMediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfSocialMedia)
-                      .values({ ...socialMediaRow, socialMediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfSocialMedia.socialMediaKey,
-                        set: { ...socialMediaRow, socialMediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-              yield* Effect.forEach(
-                media,
-                (mediaRecord) =>
-                  Effect.gen(function* () {
-                    const mediaRow = mediaRowFromRecord(mediaRecord, {
-                      resource: "Office",
-                      key: officeKey,
-                    });
-                    const mediaKey = yield* requireKey(
-                      "upsertOfficeWithMedia.mediaKey",
-                      mediaRow.mediaKey.length > 0 ? mediaRow.mediaKey : null,
-                    );
-                    yield* tx
-                      .insert(ddfMedia)
-                      .values({ ...mediaRow, mediaKey })
-                      .onConflictDoUpdate({
-                        target: ddfMedia.mediaKey,
-                        set: { ...mediaRow, mediaKey, ...touchUpdatedAt },
-                      });
-                  }),
-                { discard: true },
-              );
-            }),
-          ).pipe(Effect.mapError(mapSinkError("upsertOfficeWithMedia")));
-        },
-      ),
-      upsertProperty: Effect.fn("DdfDatabaseSyncSink.upsertProperty")(
-        function* (property) {
-          const row = propertyRowFromRecord(property);
-          const listingKey = yield* requireKey("upsertProperty", row.listingKey);
           yield* db
-            .insert(ddfProperties)
-            .values({ ...row, listingKey })
+            .insert(ddfOffices)
+            .values({ ...row, officeKey })
             .onConflictDoUpdate({
-              target: ddfProperties.listingKey,
-              set: { ...row, listingKey, ...touchUpdatedAt },
+              target: ddfOffices.officeKey,
+              set: { ...row, officeKey, ...touchUpdatedAt },
             })
-            .pipe(Effect.mapError(mapSinkError("upsertProperty")));
+            .pipe(Effect.mapError(mapSinkError("upsertOfficeWithMedia")));
         },
       ),
-      upsertRoom: Effect.fn("DdfDatabaseSyncSink.upsertRoom")(function* (
-        room,
-        property,
-      ) {
-        const row = roomRowFromRecord(room, property);
-        const listingKey = yield* requireKey(
-          "upsertRoom.listingKey",
-          row.listingKey,
-        );
-        const roomKey = yield* requireKey(
-          "upsertRoom.roomKey",
-          row.roomKey.length > 0 ? row.roomKey : null,
-        );
-        yield* db
-          .insert(ddfPropertyRooms)
-          .values({ ...row, listingKey, roomKey })
-          .onConflictDoUpdate({
-            target: ddfPropertyRooms.roomKey,
-            set: { ...row, listingKey, roomKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertRoom")));
-      }),
-      upsertMedia: Effect.fn("DdfDatabaseSyncSink.upsertMedia")(function* (
-        media,
-        owner,
-      ) {
-        const row = mediaRowFromRecord(media, owner);
-        const mediaKey = yield* requireKey(
-          "upsertMedia",
-          row.mediaKey.length > 0 ? row.mediaKey : null,
-        );
-        yield* db
-          .insert(ddfMedia)
-          .values({ ...row, mediaKey })
-          .onConflictDoUpdate({
-            target: ddfMedia.mediaKey,
-            set: { ...row, mediaKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertMedia")));
-      }),
-      upsertSocialMedia: Effect.fn("DdfDatabaseSyncSink.upsertSocialMedia")(
-        function* (socialMedia, owner) {
-          const row = socialMediaRowFromRecord(socialMedia, owner);
-          const socialMediaKey = yield* requireKey(
-            "upsertSocialMedia",
-            row.socialMediaKey.length > 0 ? row.socialMediaKey : null,
-          );
-          yield* db
-            .insert(ddfSocialMedia)
-            .values({ ...row, socialMediaKey })
-            .onConflictDoUpdate({
-              target: ddfSocialMedia.socialMediaKey,
-              set: { ...row, socialMediaKey, ...touchUpdatedAt },
-            })
-            .pipe(Effect.mapError(mapSinkError("upsertSocialMedia")));
-        },
-      ),
-      upsertMember: Effect.fn("DdfDatabaseSyncSink.upsertMember")(function* (
-        member,
-      ) {
-        const row = memberRowFromRecord(member);
-        const memberKey = yield* requireKey("upsertMember", row.memberKey);
-        yield* db
-          .insert(ddfMembers)
-          .values({ ...row, memberKey })
-          .onConflictDoUpdate({
-            target: ddfMembers.memberKey,
-            set: { ...row, memberKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertMember")));
-      }),
-      upsertOffice: Effect.fn("DdfDatabaseSyncSink.upsertOffice")(function* (
-        office,
-      ) {
-        const row = officeRowFromRecord(office);
-        const officeKey = yield* requireKey("upsertOffice", row.officeKey);
-        yield* db
-          .insert(ddfOffices)
-          .values({ ...row, officeKey })
-          .onConflictDoUpdate({
-            target: ddfOffices.officeKey,
-            set: { ...row, officeKey, ...touchUpdatedAt },
-          })
-          .pipe(Effect.mapError(mapSinkError("upsertOffice")));
-      }),
       upsertOpenHouse: Effect.fn("DdfDatabaseSyncSink.upsertOpenHouse")(
         function* (openHouse) {
           const row = openHouseRowFromRecord(openHouse);
@@ -902,6 +638,33 @@ export const makeDdfDatabaseSyncSink = Effect.fn("DdfDatabaseSyncSink.make")(
           .set({ active: false, ...touchUpdatedAt })
           .where(inArray(ddfProperties.listingKey, keys))
           .pipe(Effect.mapError(mapSinkError("markMissingPropertiesInactive")));
+      }),
+      deleteOpenHousesForListings: Effect.fn(
+        "DdfDatabaseSyncSink.deleteOpenHousesForListings",
+      )(function* (listings) {
+        const listingKeys = [
+          ...new Set(listings.map((listing) => listing.listingKey)),
+        ];
+        const listingIds = [
+          ...new Set(
+            listings.flatMap((listing) =>
+              listing.listingId === null ? [] : [listing.listingId],
+            ),
+          ),
+        ];
+        const filter = or(
+          listingKeys.length > 0
+            ? inArray(ddfOpenHouses.listingKey, listingKeys)
+            : undefined,
+          listingIds.length > 0
+            ? inArray(ddfOpenHouses.listingId, listingIds)
+            : undefined,
+        );
+        if (filter === undefined) return;
+        yield* db
+          .delete(ddfOpenHouses)
+          .where(filter)
+          .pipe(Effect.mapError(mapSinkError("deleteOpenHousesForListings")));
       }),
       markMissingMembersInactive: Effect.fn(
         "DdfDatabaseSyncSink.markMissingMembersInactive",
