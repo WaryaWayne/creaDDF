@@ -17,12 +17,10 @@ import type { SocialMedia } from "../schema/officeSchema";
 import type { RoomsType } from "../schema/roomsSchema";
 import type { SyncDdfDatabaseOnceSummary } from "../syncDatabase";
 import type {
-  MediaRecord,
   MemberRecord,
   OfficeRecord,
   OpenHouseRecord,
   PropertyRecord,
-  RoomRecord,
   SyncResource,
   SyncStage,
 } from "../sync";
@@ -201,50 +199,6 @@ export const ddfProperties = pgTable(
     index("ddf_properties_location_idx").on(table.province, table.city),
     index("ddf_properties_listing_id_idx").on(table.listingId),
     index("ddf_properties_list_aor_key_idx").on(table.listAorKey),
-  ],
-);
-
-export const ddfPropertyRooms = pgTable(
-  "ddf_property_rooms",
-  {
-    roomKey: text("room_key").primaryKey(),
-    listingKey: text("listing_key").notNull(),
-    listingId: text("listing_id"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    roomDescription: text("room_description"),
-    roomDimensions: text("room_dimensions"),
-    roomLength: doublePrecision("room_length"),
-    roomLevel: text("room_level"),
-    roomWidth: doublePrecision("room_width"),
-    roomLengthWidthUnits: text("room_length_width_units"),
-    roomType: text("room_type"),
-    raw: jsonb("raw").$type<RoomRecord>().notNull(),
-    ...timestamps,
-  },
-  (table) => [index("ddf_property_rooms_listing_idx").on(table.listingKey)],
-);
-
-export const ddfMedia = pgTable(
-  "ddf_media",
-  {
-    mediaKey: text("media_key").primaryKey(),
-    resource: text("resource").$type<SyncResource>().notNull(),
-    resourceKey: text("resource_key").notNull(),
-    resourceRecordId: text("resource_record_id"),
-    resourceRecordKey: text("resource_record_key"),
-    resourceName: text("resource_name"),
-    modificationTimestamp: timestamp("modification_timestamp", { withTimezone: true }),
-    mediaUrl: text("media_url"),
-    mediaCategory: text("media_category"),
-    longDescription: text("long_description"),
-    preferredPhoto: boolean("preferred_photo"),
-    sortOrder: integer("sort_order"),
-    raw: jsonb("raw").$type<MediaRecord>().notNull(),
-    ...timestamps,
-  },
-  (table) => [
-    index("ddf_media_owner_idx").on(table.resource, table.resourceKey),
-    index("ddf_media_modified_idx").on(table.modificationTimestamp),
   ],
 );
 
