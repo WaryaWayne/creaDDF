@@ -6,6 +6,7 @@ import {
   type DbRow,
   coListAgentKeysFromRow,
   coListOfficeKeysFromRow,
+  embeddedSocialMediaRowsFromColumn,
   groupRowsBy,
   projectionPlan,
   embeddedMediaRowsFromColumn,
@@ -14,14 +15,13 @@ import {
   validateListOptions,
 } from "./client";
 import { DdfDatabase, type DdfDrizzleDatabase } from "./layer";
-import { ddfMembers, ddfOffices, ddfOpenHouses, ddfProperties, ddfSocialMedia } from "./schema";
+import { ddfMembers, ddfOffices, ddfOpenHouses, ddfProperties } from "./schema";
 
 type FakeRows = {
   readonly properties?: ReadonlyArray<Record<string, unknown>>;
   readonly members?: ReadonlyArray<Record<string, unknown>>;
   readonly offices?: ReadonlyArray<Record<string, unknown>>;
   readonly openHouses?: ReadonlyArray<Record<string, unknown>>;
-  readonly socialMedia?: ReadonlyArray<Record<string, unknown>>;
 };
 
 type FakeQuery = {
@@ -40,7 +40,6 @@ const tableRows = (rows: FakeRows, table: unknown): ReadonlyArray<Record<string,
   if (table === ddfMembers) return rows.members ?? [];
   if (table === ddfOffices) return rows.offices ?? [];
   if (table === ddfOpenHouses) return rows.openHouses ?? [];
-  if (table === ddfSocialMedia) return rows.socialMedia ?? [];
   return [];
 };
 
@@ -110,7 +109,6 @@ const registerColumnFields = (table: object) => {
   ddfMembers,
   ddfOffices,
   ddfOpenHouses,
-  ddfSocialMedia,
 ].forEach(registerColumnFields);
 
 const snakeToCamel = (value: string) =>
@@ -324,6 +322,14 @@ const dbRows: FakeRows = {
       memberKey: "member-1",
       firstName: "Ada",
       officeKey: "office-1",
+      memberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       media: [
         {
           MediaKey: "member-media-1",
@@ -337,6 +343,14 @@ const dbRows: FakeRows = {
     {
       officeKey: "office-1",
       officeName: "Example Realty",
+      officeSocialMedia: [
+        {
+          SocialMediaKey: "office-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://office.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
       media: [
         {
           MediaKey: "office-media-1",
@@ -372,26 +386,65 @@ const queryRows: FakeRows = {
       memberKey: "member-1",
       firstName: "Ada",
       officeKey: "office-1",
+      memberLanguages: ["English"],
+      memberDesignation: ["Certified Residential Specialist®"],
+      memberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member-one.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     },
     {
       memberKey: "member-2",
       firstName: "Grace",
       officeKey: "office-2",
+      memberLanguages: ["French"],
+      memberDesignation: ["Accredited Buyer Representative"],
+      memberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-2",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member-two.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     },
     {
       memberKey: "member-3",
       firstName: "Barbara",
       officeKey: "office-2",
+      memberLanguages: ["Somali"],
+      memberDesignation: ["Real Estate Sector Governance Designation"],
+      memberSocialMedia: [
+        {
+          SocialMediaKey: "member-social-3",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://member-three.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     },
   ],
   offices: [
     {
       officeKey: "office-1",
       officeName: "North Realty",
+      officeSocialMedia: [
+        {
+          SocialMediaKey: "office-social-1",
+          SocialMediaType: "Website",
+          SocialMediaUrlOrId: "https://office-one.example.test",
+          ModificationTimestamp: "2024-01-01T00:00:00.000Z",
+        },
+      ],
     },
     {
       officeKey: "office-2",
       officeName: "South Realty",
+      officeSocialMedia: [],
     },
   ],
   openHouses: [
@@ -402,28 +455,6 @@ const queryRows: FakeRows = {
     {
       openHouseKey: "open-house-2",
       listingKey: "listing-2",
-    },
-  ],
-  socialMedia: [
-    {
-      socialMediaKey: "member-social-1",
-      resource: "Member",
-      resourceKey: "member-1",
-    },
-    {
-      socialMediaKey: "member-social-2",
-      resource: "Member",
-      resourceKey: "member-2",
-    },
-    {
-      socialMediaKey: "member-social-3",
-      resource: "Member",
-      resourceKey: "member-3",
-    },
-    {
-      socialMediaKey: "office-social-with-member-key",
-      resource: "Office",
-      resourceKey: "member-3",
     },
   ],
 };
@@ -466,6 +497,18 @@ describe("database read client helpers", () => {
     assert.equal(mediaRows[1]?.mediaKey, "media-2");
     assert.equal(embeddedMediaRowsFromColumn(media, "Member", "member-1")[0]?.resourceKey, "member-1");
     assert.equal(embeddedMediaRowsFromColumn(media, "Office", "office-1")[0]?.resourceKey, "office-1");
+    const socialRows = embeddedSocialMediaRowsFromColumn([
+      {
+        SocialMediaKey: "social-1",
+        SocialMediaType: "Website",
+        SocialMediaUrlOrId: "https://example.test/profile",
+        ModificationTimestamp: timestamp,
+      },
+    ], "Member", "member-1");
+    assert.equal(socialRows[0]?.socialMediaKey, "social-1");
+    assert.equal(socialRows[0]?.resource, "Member");
+    assert.equal(socialRows[0]?.resourceKey, "member-1");
+    assert.equal((socialRows[0]?.modificationTimestamp as Date | null)?.toISOString(), "2024-01-02T03:04:05.000Z");
     const roomRows = embeddedRoomRowsFromColumn([{
       RoomKey: "room-1",
       RoomType: "Kitchen",
@@ -517,6 +560,8 @@ describe("database read client helpers", () => {
             include: {
               office: { select: ["officeName"] },
               socialMedia: { select: ["socialMediaKey"] },
+              languages: { select: ["language"] },
+              designations: { select: ["designation"] },
             },
           });
 
@@ -526,12 +571,16 @@ describe("database read client helpers", () => {
               firstName: "Barbara",
               office: { officeName: "South Realty" },
               socialMedia: [{ socialMediaKey: "member-social-3" }],
+              languages: [{ language: "Somali" }],
+              designations: [{ designation: "Real Estate Sector Governance Designation" }],
             },
             {
               memberKey: "member-2",
               firstName: "Grace",
               office: { officeName: "South Realty" },
               socialMedia: [{ socialMediaKey: "member-social-2" }],
+              languages: [{ language: "French" }],
+              designations: [{ designation: "Accredited Buyer Representative" }],
             },
           ]);
         }),
@@ -561,25 +610,33 @@ describe("database read client helpers", () => {
       }),
     );
 
-    it.effect("projects member and office include media from parent JSONB", () =>
+    it.effect("projects member and office include collections from parent JSONB", () =>
       Effect.gen(function* () {
         const client = yield* DdfDbClient;
         const member = yield* client.members.get("member-1", {
           select: ["firstName"],
-          include: { media: { select: ["mediaUrl"] } },
+          include: {
+            media: { select: ["mediaUrl"] },
+            socialMedia: { select: ["socialMediaUrlOrId"] },
+          },
         });
         const office = yield* client.offices.get("office-1", {
           select: ["officeName"],
-          include: { media: { select: ["mediaUrl"] } },
+          include: {
+            media: { select: ["mediaUrl"] },
+            socialMedia: { select: ["socialMediaUrlOrId"] },
+          },
         });
 
         assert.deepEqual(member, {
           firstName: "Ada",
           media: [{ mediaUrl: "https://example.test/member.jpg" }],
+          socialMedia: [{ socialMediaUrlOrId: "https://member.example.test" }],
         });
         assert.deepEqual(office, {
           officeName: "Example Realty",
           media: [{ mediaUrl: "https://example.test/office.jpg" }],
+          socialMedia: [{ socialMediaUrlOrId: "https://office.example.test" }],
         });
       }),
     );
@@ -589,6 +646,9 @@ describe("database read client helpers", () => {
         const client = yield* DdfDbClient;
         assert.equal("media" in client, false);
         assert.equal("propertyRooms" in client, false);
+        assert.equal("socialMedia" in client, false);
+        assert.equal("memberLanguages" in client, false);
+        assert.equal("memberDesignations" in client, false);
       }),
     );
   });

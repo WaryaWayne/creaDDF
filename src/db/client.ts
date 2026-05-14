@@ -9,19 +9,17 @@ import {
 } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { MediaRecord, PropertyRecord, RoomRecord } from "../sync";
+import type { SocialMedia } from "../schema/officeSchema";
 import type { PgColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core";
 import { Context, Data, Effect, Layer } from "effect";
 import { DdfDatabase } from "./layer";
-import { mediaRowFromRecord, roomRowFromRecord } from "./sink";
+import { mediaRowFromRecord, roomRowFromRecord, socialMediaRowFromRecord } from "./sink";
 import {
   ddfDestinations,
-  ddfMemberDesignations,
-  ddfMemberLanguages,
   ddfMembers,
   ddfOffices,
   ddfOpenHouses,
   ddfProperties,
-  ddfSocialMedia,
 } from "./schema";
 
 type DbValue = string | number | boolean | Date | unknown | null;
@@ -130,20 +128,10 @@ const roomColumns = {
 } as const;
 export type PropertyRoomField = keyof typeof roomColumns;
 
-const socialMediaColumns = {
-  ...getColumns(ddfSocialMedia),
-} satisfies FieldMap<string>;
-export type SocialMediaField = keyof typeof socialMediaColumns;
-
-const memberLanguageColumns = {
-  ...getColumns(ddfMemberLanguages),
-} satisfies FieldMap<string>;
-export type MemberLanguageField = keyof typeof memberLanguageColumns;
-
-const memberDesignationColumns = {
-  ...getColumns(ddfMemberDesignations),
-} satisfies FieldMap<string>;
-export type MemberDesignationField = keyof typeof memberDesignationColumns;
+type SocialMediaRow = ReturnType<typeof socialMediaRowFromRecord>;
+export type SocialMediaField = keyof SocialMediaRow;
+export type MemberLanguageField = "memberKey" | "language";
+export type MemberDesignationField = "memberKey" | "designation";
 
 const destinationColumns = {
   ...getColumns(ddfDestinations),
@@ -522,6 +510,33 @@ export const embeddedMediaRowsFromColumn = (
           ? right.sortOrder
           : Number.MAX_SAFE_INTEGER),
     );
+
+export const embeddedSocialMediaRowsFromColumn = (
+  socialMedia: unknown,
+  resource: "Member" | "Office",
+  resourceKey: string,
+) =>
+  (Array.isArray(socialMedia) ? (socialMedia as ReadonlyArray<SocialMedia>) : [])
+    .map((record) => socialMediaRowFromRecord(record, { resource, key: resourceKey }))
+    .sort((left, right) => left.socialMediaKey.localeCompare(right.socialMediaKey));
+
+const embeddedMemberLanguageRowsFromColumn = (
+  languages: unknown,
+  memberKey: string,
+) =>
+  (Array.isArray(languages) ? (languages as ReadonlyArray<string>) : []).map((language) => ({
+    memberKey,
+    language,
+  }));
+
+const embeddedMemberDesignationRowsFromColumn = (
+  designations: unknown,
+  memberKey: string,
+) =>
+  (Array.isArray(designations) ? (designations as ReadonlyArray<string>) : []).map((designation) => ({
+    memberKey,
+    designation,
+  }));
 
 const propertyRecordFromRow = (row: DbRow): PropertyRecord =>
   ({
@@ -939,7 +954,6 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
           ),
         );
       }
-      const memberKeys = stringValues(rows, "memberKey");
       if (include.media !== undefined) {
         result = result.map((row) => ({
           ...row,
@@ -989,88 +1003,54 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
               : null,
         }));
       }
-      if (include.socialMedia !== undefined && memberKeys.length > 0) {
-        const socialRows = yield* db
-          .select(
-            selectionFor(
-              socialMediaColumns,
-              ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
-              include.socialMedia,
-              ["resourceKey"],
-            ),
-          )
-          .from(ddfSocialMedia)
-          .where(
-            and(
-              eq(ddfSocialMedia.resource, "Member"),
-              inArray(ddfSocialMedia.resourceKey, memberKeys),
-            ),
-          )
-          .pipe(Effect.mapError(mapClientError("members.socialMedia")));
-        result = appendGroup(
-          result,
-          "socialMedia",
-          groupProjectedRowsBy(
-            socialRows,
-            "resourceKey",
-            ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
-            include.socialMedia,
-            ["resourceKey"],
-          ),
-          "memberKey",
-        );
+      if (include.socialMedia !== undefined) {
+        result = result.map((row) => ({
+          ...row,
+          socialMedia:
+            typeof row.memberKey === "string"
+              ? projectRows(
+                  embeddedSocialMediaRowsFromColumn(
+                    row.memberSocialMedia,
+                    "Member",
+                    row.memberKey,
+                  ),
+                  ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
+                  include.socialMedia,
+                )
+              : [],
+        }));
       }
-      if (include.languages !== undefined && memberKeys.length > 0) {
-        const languageRows = yield* db
-          .select(
-            selectionFor(
-              memberLanguageColumns,
-              ["memberKey", "language"],
-              include.languages,
-              ["memberKey"],
-            ),
-          )
-          .from(ddfMemberLanguages)
-          .where(inArray(ddfMemberLanguages.memberKey, memberKeys))
-          .pipe(Effect.mapError(mapClientError("members.languages")));
-        result = appendGroup(
-          result,
-          "languages",
-          groupProjectedRowsBy(
-            languageRows,
-            "memberKey",
-            ["memberKey", "language"],
-            include.languages,
-            ["memberKey"],
-          ),
-          "memberKey",
-        );
+      if (include.languages !== undefined) {
+        result = result.map((row) => ({
+          ...row,
+          languages:
+            typeof row.memberKey === "string"
+              ? projectRows(
+                  embeddedMemberLanguageRowsFromColumn(
+                    row.memberLanguages,
+                    row.memberKey,
+                  ),
+                  ["memberKey", "language"],
+                  include.languages,
+                )
+              : [],
+        }));
       }
-      if (include.designations !== undefined && memberKeys.length > 0) {
-        const designationRows = yield* db
-          .select(
-            selectionFor(
-              memberDesignationColumns,
-              ["memberKey", "designation"],
-              include.designations,
-              ["memberKey"],
-            ),
-          )
-          .from(ddfMemberDesignations)
-          .where(inArray(ddfMemberDesignations.memberKey, memberKeys))
-          .pipe(Effect.mapError(mapClientError("members.designations")));
-        result = appendGroup(
-          result,
-          "designations",
-          groupProjectedRowsBy(
-            designationRows,
-            "memberKey",
-            ["memberKey", "designation"],
-            include.designations,
-            ["memberKey"],
-          ),
-          "memberKey",
-        );
+      if (include.designations !== undefined) {
+        result = result.map((row) => ({
+          ...row,
+          designations:
+            typeof row.memberKey === "string"
+              ? projectRows(
+                  embeddedMemberDesignationRowsFromColumn(
+                    row.memberDesignation,
+                    row.memberKey,
+                  ),
+                  ["memberKey", "designation"],
+                  include.designations,
+                )
+              : [],
+        }));
       }
       return result.map((row) =>
         stripProjectionHelpers(
@@ -1174,36 +1154,22 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
           "officeKey",
         );
       }
-      if (include.socialMedia !== undefined && officeKeys.length > 0) {
-        const socialRows = yield* db
-          .select(
-            selectionFor(
-              socialMediaColumns,
-              ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
-              include.socialMedia,
-              ["resourceKey"],
-            ),
-          )
-          .from(ddfSocialMedia)
-          .where(
-            and(
-              eq(ddfSocialMedia.resource, "Office"),
-              inArray(ddfSocialMedia.resourceKey, officeKeys),
-            ),
-          )
-          .pipe(Effect.mapError(mapClientError("offices.socialMedia")));
-        result = appendGroup(
-          result,
-          "socialMedia",
-          groupProjectedRowsBy(
-            socialRows,
-            "resourceKey",
-            ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
-            include.socialMedia,
-            ["resourceKey"],
-          ),
-          "officeKey",
-        );
+      if (include.socialMedia !== undefined) {
+        result = result.map((row) => ({
+          ...row,
+          socialMedia:
+            typeof row.officeKey === "string"
+              ? projectRows(
+                  embeddedSocialMediaRowsFromColumn(
+                    row.officeSocialMedia,
+                    "Office",
+                    row.officeKey,
+                  ),
+                  ["socialMediaKey", "socialMediaType", "socialMediaUrlOrId"],
+                  include.socialMedia,
+                )
+              : [],
+        }));
       }
       return result.map((row) =>
         stripProjectionHelpers(
@@ -1305,27 +1271,6 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
       return yield* query.pipe(Effect.mapError(mapClientError(name)));
     });
 
-  const getOne = <Field extends string>(
-    name: string,
-    table: PgTable,
-    columns: FieldMap<Field>,
-    defaults: RowSelect<Field>,
-    keyColumn: PgColumn,
-    key: string,
-    options?: BaseOptions<Field>,
-  ) =>
-    Effect.gen(function* () {
-      const rows = yield* simpleList(
-        name,
-        table,
-        columns,
-        defaults,
-        eq(keyColumn, key),
-        { ...options, limit: 1 },
-      );
-      return rows[0] ?? null;
-    });
-
   return {
     properties: {
       get: Effect.fn("DdfDbClient.properties.get")(function* (
@@ -1352,6 +1297,9 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
         if (include?.media !== undefined) hidden.push("media");
+        if (include?.socialMedia !== undefined) hidden.push("memberSocialMedia");
+        if (include?.languages !== undefined) hidden.push("memberLanguages");
+        if (include?.designations !== undefined) hidden.push("memberDesignation");
 
         const rows = yield* simpleList(
           "members.get",
@@ -1387,6 +1335,9 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         const include = options?.include;
         const hidden: MemberField[] = ["memberKey", "officeKey"];
         if (include?.media !== undefined) hidden.push("media");
+        if (include?.socialMedia !== undefined) hidden.push("memberSocialMedia");
+        if (include?.languages !== undefined) hidden.push("memberLanguages");
+        if (include?.designations !== undefined) hidden.push("memberDesignation");
 
         const rows = yield* simpleList(
           "members.list",
@@ -1408,6 +1359,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
         if (include?.media !== undefined) hidden.push("media");
+        if (include?.socialMedia !== undefined) hidden.push("officeSocialMedia");
 
         const rows = yield* simpleList(
           "offices.get",
@@ -1443,6 +1395,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
         const include = options?.include;
         const hidden: OfficeField[] = ["officeKey"];
         if (include?.media !== undefined) hidden.push("media");
+        if (include?.socialMedia !== undefined) hidden.push("officeSocialMedia");
 
         const rows = yield* simpleList(
           "offices.list",
@@ -1496,131 +1449,6 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
           ["listingKey"],
         );
         return yield* withOpenHouseIncludes(rows, options, ["listingKey"]);
-      }),
-    },
-    socialMedia: {
-      get: Effect.fn("DdfDbClient.socialMedia.get")(function* (
-        socialMediaKey: string,
-        options?: GetOptions<SocialMediaField, never>,
-      ) {
-        return yield* getOne(
-          "socialMedia.get",
-          ddfSocialMedia,
-          socialMediaColumns,
-          [
-            "socialMediaKey",
-            "resource",
-            "resourceKey",
-            "socialMediaType",
-            "socialMediaUrlOrId",
-          ],
-          ddfSocialMedia.socialMediaKey,
-          socialMediaKey,
-          options,
-        );
-      }),
-      list: Effect.fn("DdfDbClient.socialMedia.list")(function* (
-        options?: ListOptions<
-          SocialMediaField,
-          {
-            readonly resource?: "Member" | "Office";
-            readonly resourceKey?: string;
-          },
-          never
-        >,
-      ) {
-        const filters = options?.filters;
-        const clauses: SQL[] = [];
-        if (filters?.resource !== undefined)
-          clauses.push(eq(ddfSocialMedia.resource, filters.resource));
-        if (filters?.resourceKey !== undefined)
-          clauses.push(eq(ddfSocialMedia.resourceKey, filters.resourceKey));
-        return yield* simpleList(
-          "socialMedia.list",
-          ddfSocialMedia,
-          socialMediaColumns,
-          [
-            "socialMediaKey",
-            "resource",
-            "resourceKey",
-            "socialMediaType",
-            "socialMediaUrlOrId",
-          ],
-          clauses.length > 0 ? and(...clauses) : undefined,
-          options,
-        );
-      }),
-    },
-    memberLanguages: {
-      get: Effect.fn("DdfDbClient.memberLanguages.get")(function* (
-        memberKey: string,
-        options?: GetOptions<MemberLanguageField, never>,
-      ) {
-        const rows = yield* simpleList(
-          "memberLanguages.get",
-          ddfMemberLanguages,
-          memberLanguageColumns,
-          ["memberKey", "language"],
-          eq(ddfMemberLanguages.memberKey, memberKey),
-          { ...options, limit: 1 },
-        );
-        return rows[0] ?? null;
-      }),
-      list: Effect.fn("DdfDbClient.memberLanguages.list")(function* (
-        options?: ListOptions<
-          MemberLanguageField,
-          { readonly memberKey?: string },
-          never
-        >,
-      ) {
-        const where =
-          options?.filters?.memberKey === undefined
-            ? undefined
-            : eq(ddfMemberLanguages.memberKey, options.filters.memberKey);
-        return yield* simpleList(
-          "memberLanguages.list",
-          ddfMemberLanguages,
-          memberLanguageColumns,
-          ["memberKey", "language"],
-          where,
-          options,
-        );
-      }),
-    },
-    memberDesignations: {
-      get: Effect.fn("DdfDbClient.memberDesignations.get")(function* (
-        memberKey: string,
-        options?: GetOptions<MemberDesignationField, never>,
-      ) {
-        const rows = yield* simpleList(
-          "memberDesignations.get",
-          ddfMemberDesignations,
-          memberDesignationColumns,
-          ["memberKey", "designation"],
-          eq(ddfMemberDesignations.memberKey, memberKey),
-          { ...options, limit: 1 },
-        );
-        return rows[0] ?? null;
-      }),
-      list: Effect.fn("DdfDbClient.memberDesignations.list")(function* (
-        options?: ListOptions<
-          MemberDesignationField,
-          { readonly memberKey?: string },
-          never
-        >,
-      ) {
-        const where =
-          options?.filters?.memberKey === undefined
-            ? undefined
-            : eq(ddfMemberDesignations.memberKey, options.filters.memberKey);
-        return yield* simpleList(
-          "memberDesignations.list",
-          ddfMemberDesignations,
-          memberDesignationColumns,
-          ["memberKey", "designation"],
-          where,
-          options,
-        );
       }),
     },
     destinations: {
