@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "10d0bfc8-63de-485d-82b8-a396f5f6169e",
+  "id": "23bb998f-d2ed-4a79-a75a-14c96f4624cc",
   "prevIds": [
     "00000000-0000-0000-0000-000000000000"
   ],
@@ -145,6 +145,84 @@
       "generated": null,
       "identity": null,
       "name": "destination_status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "member_first_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "member_last_name",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "member_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "original_entry_timestamp",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "modification_timestamp",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "full_nsp",
       "entityType": "columns",
       "schema": "public",
       "table": "ddf_destinations"
@@ -1561,19 +1639,6 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "property_type",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "ddf_properties"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
       "name": "public_remarks",
       "entityType": "columns",
       "schema": "public",
@@ -2750,7 +2815,7 @@
       "table": "ddf_properties"
     },
     {
-      "type": "integer",
+      "type": "double precision",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
@@ -3897,6 +3962,27 @@
       "method": "btree",
       "concurrently": false,
       "name": "ddf_destinations_status_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "ddf_destinations"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "member_key",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "ddf_destinations_member_idx",
       "entityType": "indexes",
       "schema": "public",
       "table": "ddf_destinations"

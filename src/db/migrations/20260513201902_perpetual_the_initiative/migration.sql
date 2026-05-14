@@ -4,6 +4,12 @@ CREATE TABLE "ddf_destinations" (
 	"destination_url" text,
 	"destination_type" text,
 	"destination_status" text,
+	"member_first_name" text,
+	"member_last_name" text,
+	"member_key" text,
+	"original_entry_timestamp" timestamp with time zone,
+	"modification_timestamp" timestamp with time zone,
+	"full_nsp" boolean,
 	"raw" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
@@ -133,7 +139,6 @@ CREATE TABLE "ddf_properties" (
 	"standard_status" text,
 	"property_sub_type" text,
 	"business_type" jsonb,
-	"property_type" text,
 	"public_remarks" text,
 	"list_price" double precision,
 	"lease_amount" double precision,
@@ -225,7 +230,7 @@ CREATE TABLE "ddf_properties" (
 	"property_condition" jsonb,
 	"roof" jsonb,
 	"construction_materials" jsonb,
-	"stories" integer,
+	"stories" double precision,
 	"property_attached" boolean,
 	"accessibility_features" jsonb,
 	"zoning" text,
@@ -330,6 +335,7 @@ CREATE TABLE "ddf_watermarks" (
 );
 --> statement-breakpoint
 CREATE INDEX "ddf_destinations_status_idx" ON "ddf_destinations" ("destination_status");--> statement-breakpoint
+CREATE INDEX "ddf_destinations_member_idx" ON "ddf_destinations" ("member_key");--> statement-breakpoint
 CREATE INDEX "ddf_media_owner_idx" ON "ddf_media" ("resource","resource_key");--> statement-breakpoint
 CREATE INDEX "ddf_media_modified_idx" ON "ddf_media" ("modification_timestamp");--> statement-breakpoint
 CREATE INDEX "ddf_member_designations_member_idx" ON "ddf_member_designations" ("member_key");--> statement-breakpoint
