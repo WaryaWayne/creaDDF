@@ -50,6 +50,7 @@ import {
   ddfSyncFailedCount,
   ddfSyncHydratedCount,
   ddfSyncPersistedCount,
+  ddfSyncSkippedCount,
 } from "./metrics";
 import { DdfWatermarkStore } from "./watermark";
 
@@ -273,6 +274,10 @@ export interface OpenHouseDateWindow {
 
 export interface PropertySyncOptions<SinkError = never> extends BaseSyncOptions {
   readonly sink?: PropertySyncSink<SinkError>;
+  /**
+   * Applied after property hydration because replication identifiers do not expose ListAORKey.
+   * Skipped hydrated properties are logged and counted in `crea_ddf_sync_skipped_total`.
+   */
   readonly includeProperty?: (property: PropertyRecord) => boolean;
 }
 
@@ -665,6 +670,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const failedWatermarks: Array<unknown> =
       collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
+    let skippedRecords = 0;
     const hasParentRecordSink =
       options?.sink?.upsertPropertyGraph !== undefined;
 
@@ -742,6 +748,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           options?.includeProperty !== undefined &&
           !options.includeProperty(property)
         ) {
+          skippedRecords += 1;
           const propertyKey =
             stableReplicationKey(property.ListingKey) ??
             stableReplicationKey(identifier.ListingKey) ??
@@ -821,9 +828,13 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
       errors,
     );
     yield* trackSyncMetrics(counts);
+    yield* Metric.update(ddfSyncSkippedCount, skippedRecords);
     yield* Effect.logInfo(
       "Property sync: complete",
-      countsLogDetails(counts, nextWatermark),
+      {
+        ...countsLogDetails(counts, nextWatermark),
+        skippedOutOfScope: skippedRecords,
+      },
     );
 
     return {
