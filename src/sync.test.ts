@@ -132,6 +132,60 @@ describe("syncProperties", () => {
   );
 
   it.effect(
+    "uses default concurrency 100 and caps hydration batches",
+    () =>
+      Effect.gen(function* () {
+        const events: Array<string> = [];
+        let active = 0;
+        let maxActive = 0;
+        const identifiers = Array.from({ length: 101 }, (_, index) => ({
+          ListingKey: `listing-${index + 1}`,
+          ModificationTimestamp: `2024-01-${String((index % 28) + 1).padStart(
+            2,
+            "0",
+          )}T00:00:00.000Z`,
+        }));
+        const http = emptyHttp({
+          requestJson: <T = unknown>(path: string) => {
+            if (path.startsWith("/odata/v1/Property/PropertyReplication")) {
+              return response<T>({ value: identifiers });
+            }
+            return response<T>({ value: [] });
+          },
+          getOData: <T = unknown>(_path: string, key: string | number) =>
+            Effect.gen(function* () {
+              events.push(`hydrate:${String(key)}`);
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              yield* Effect.yieldNow;
+              active -= 1;
+              return propertyFor(String(key)) as T;
+            }),
+        });
+
+        const result = yield* runWithHttp(
+          syncProperties({
+            sink: {
+              upsertPropertyGraph: (graph) =>
+                Effect.sync(() =>
+                  events.push(`persist:${graph.property.ListingKey}`),
+                ),
+            },
+          }),
+          http,
+        );
+
+        assert.equal(maxActive, 100);
+        assert.equal(result.counts.hydrated, 101);
+        assert.equal(result.counts.persisted, 101);
+        assert.ok(
+          events.indexOf("persist:listing-1") <
+            events.indexOf("hydrate:listing-101"),
+        );
+      }),
+  );
+
+  it.effect(
     "persists hydrated property batches before hydrating every identifier",
     () =>
       Effect.gen(function* () {
@@ -1185,6 +1239,7 @@ describe("syncOpenHouses", () => {
 
         const result = yield* runWithHttp(
           syncOpenHouses({
+            concurrency: 1,
             query: { filter: "OpenHouseStatus eq 'Active'" },
             listingChunkSize: 1,
             listingScopes: [
@@ -1202,6 +1257,39 @@ describe("syncOpenHouses", () => {
           "(OpenHouseStatus eq 'Active') and (ListingKey eq 'listing-2') and (OpenHouseDate ge 2026-05-12 and OpenHouseDate le 2026-06-11)",
         ]);
       }),
+  );
+
+  it.effect("uses bounded concurrency for OpenHouse query chunks", () =>
+    Effect.gen(function* () {
+      let active = 0;
+      let maxActive = 0;
+      const http = emptyHttp({
+        listOData: <T = unknown>() =>
+          Effect.gen(function* () {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            yield* Effect.yieldNow;
+            active -= 1;
+            return { value: [] } as T;
+          }),
+      });
+
+      const result = yield* runWithHttp(
+        syncOpenHouses({
+          concurrency: 2,
+          listingChunkSize: 1,
+          listingScopes: [
+            { listingKey: "listing-1", listingId: null },
+            { listingKey: "listing-2", listingId: null },
+            { listingKey: "listing-3", listingId: null },
+          ],
+        }),
+        http,
+      );
+
+      assert.equal(maxActive, 2);
+      assert.equal(result.counts.hydrated, 0);
+    }),
   );
 
   it.effect(
