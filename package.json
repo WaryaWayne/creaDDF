@@ -1,7 +1,11 @@
 {
-  "name": "crea-ddf-effect-sdk",
+  "name": "@warya/crea-ddf",
   "version": "0.0.1",
-  "description": "",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "description": "An Effect Native SDK for the CREA DDF API",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +18,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "build": "pnpm run typecheck && tsc --noCheck && rm -rf dist/db/migrations && mkdir -p dist/db && cp -R src/db/migrations dist/db/migrations",
+    "build": "pnpm run typecheck && rm -rf dist && tsc --noCheck -p tsconfig.build.json && mkdir -p dist/db && cp -R src/db/migrations dist/db/migrations",
     "test": "pnpm run typecheck && vitest run",
     "check:metadata": "node scripts/check-metadata-parity.mjs",
     "prepare": "effect-language-service patch",
