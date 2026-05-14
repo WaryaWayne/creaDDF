@@ -181,7 +181,7 @@ describe("syncProperties", () => {
   );
 
   it.effect(
-    "uses atomic property graph sink when provided",
+    "persists property records through the compound graph sink",
     () =>
       Effect.gen(function* () {
         const calls: Array<string> = [];
@@ -208,12 +208,6 @@ describe("syncProperties", () => {
             sink: {
               upsertPropertyGraph: (graph) =>
                 Effect.sync(() => calls.push(`graph:${graph.property.ListingKey}:${graph.rooms.length}:${graph.media.length}`)),
-              upsertProperty: (property) =>
-                Effect.sync(() => calls.push(`property:${property.ListingKey}`)),
-              upsertRoom: (room) =>
-                Effect.sync(() => calls.push(`room:${room.ListingKey}`)),
-              upsertMedia: (media) =>
-                Effect.sync(() => calls.push(`media:${media.MediaKey}`)),
             },
           }),
           http,
@@ -225,7 +219,7 @@ describe("syncProperties", () => {
   );
 
   it.effect(
-    "paginates replication next links and calls property persistence sinks",
+    "paginates replication next links and calls property graph persistence",
     () =>
       Effect.gen(function* () {
         const paths: Array<string> = [];
@@ -269,15 +263,9 @@ describe("syncProperties", () => {
             since: "2024-01-01T00:00:00.000Z",
             destinationId: 7,
             sink: {
-              upsertProperty: (property) =>
+              upsertPropertyGraph: (graph) =>
                 Effect.sync(() =>
-                  calls.push(`property:${property.ListingKey}`),
-                ),
-              upsertRoom: (room) =>
-                Effect.sync(() => calls.push(`room:${room.ListingKey}`)),
-              upsertMedia: (media) =>
-                Effect.sync(() =>
-                  calls.push(`media:${media.ResourceRecordKey}`),
+                  calls.push(`graph:${graph.property.ListingKey}:${graph.rooms.length}:${graph.media.length}`),
                 ),
               saveWatermark: (_resource, watermark) =>
                 Effect.sync(() => calls.push(`watermark:${watermark}`)),
@@ -292,12 +280,8 @@ describe("syncProperties", () => {
         ]);
         assert.equal(result.nextWatermark, "2024-01-03T00:00:00.000Z");
         assert.deepEqual(calls, [
-          "property:listing-1",
-          "room:listing-1",
-          "media:listing-1",
-          "property:listing-2",
-          "room:listing-2",
-          "media:listing-2",
+          "graph:listing-1:1:1",
+          "graph:listing-2:1:1",
           "watermark:2024-01-03T00:00:00.000Z",
         ]);
       }),
@@ -382,7 +366,7 @@ describe("syncProperties", () => {
         const result = yield* runWithHttp(
           syncProperties({
             sink: {
-              upsertProperty: () =>
+              upsertPropertyGraph: () =>
                 Effect.fail(new TestSinkError({ reason: "sink unavailable" })),
             },
           }),
@@ -429,7 +413,7 @@ describe("syncProperties", () => {
       });
 
       const result = yield* runWithHttp(
-        syncProperties({ sink: { upsertProperty: () => Effect.void } }),
+        syncProperties({ sink: { upsertPropertyGraph: () => Effect.void } }),
         http,
       );
 
@@ -590,8 +574,8 @@ describe("syncProperties", () => {
         const result = yield* runWithHttp(
           syncProperties({
             sink: {
-              upsertProperty: (property) =>
-                property.ListingKey === "persist-fail"
+              upsertPropertyGraph: (graph) =>
+                graph.property.ListingKey === "persist-fail"
                   ? Effect.fail(
                       new TestSinkError({ reason: "property sink failed" }),
                     )
@@ -637,7 +621,7 @@ describe("syncProperties", () => {
         const result = yield* runWithHttp(
           syncProperties({
             sink: {
-              upsertProperty: () => Effect.void,
+              upsertPropertyGraph: () => Effect.void,
               saveWatermark: () =>
                 Effect.fail(new TestSinkError({ reason: "watermark failed" })),
             },
@@ -699,8 +683,8 @@ describe("syncMembers and syncOffices", () => {
         const members = yield* runWithHttp(
           syncMembers({
             sink: {
-              upsertMember: (member) =>
-                Effect.sync(() => calls.push(`member:${member.MemberKey}`)),
+              upsertMemberWithMedia: (member, media) =>
+                Effect.sync(() => calls.push(`member:${member.MemberKey}:${media.length}`)),
               saveWatermark: (_resource, watermark) =>
                 Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
             },
@@ -710,10 +694,10 @@ describe("syncMembers and syncOffices", () => {
         const offices = yield* runWithHttp(
           syncOffices({
             sink: {
-              upsertOffice: (office) =>
+              upsertOfficeWithMedia: (office, media) =>
                 Effect.sync(() =>
                   calls.push(
-                    `office:${(office as { OfficeKey: string }).OfficeKey}`,
+                    `office:${(office as { OfficeKey: string }).OfficeKey}:${media.length}`,
                   ),
                 ),
               saveWatermark: (_resource, watermark) =>
@@ -740,9 +724,9 @@ describe("syncMembers and syncOffices", () => {
         assert.equal(members.nextWatermark, "2024-02-01T00:00:00.000Z");
         assert.equal(offices.nextWatermark, "2024-03-01T00:00:00.000Z");
         assert.deepEqual(calls, [
-          "member:member-1",
+          "member:member-1:0",
           "member-watermark:2024-02-01T00:00:00.000Z",
-          "office:office-1",
+          "office:office-1:0",
           "office-watermark:2024-03-01T00:00:00.000Z",
         ]);
       }),
@@ -785,7 +769,7 @@ describe("syncMembers and syncOffices", () => {
       const members = yield* runWithHttp(
         syncMembers({
           sink: {
-            upsertMember: () => Effect.void,
+            upsertMemberWithMedia: () => Effect.void,
             saveWatermark: (_resource, watermark) =>
               Effect.sync(() => calls.push(`member-watermark:${watermark}`)),
           },
@@ -795,7 +779,7 @@ describe("syncMembers and syncOffices", () => {
       const offices = yield* runWithHttp(
         syncOffices({
           sink: {
-            upsertOffice: () => Effect.void,
+            upsertOfficeWithMedia: () => Effect.void,
             saveWatermark: (_resource, watermark) =>
               Effect.sync(() => calls.push(`office-watermark:${watermark}`)),
           },
@@ -985,7 +969,7 @@ describe("syncMembers and syncOffices", () => {
       const offices = yield* runWithHttp(
         syncOffices({
           sink: {
-            upsertOffice: (office) =>
+            upsertOfficeWithMedia: (office) =>
               (office as { OfficeKey: string }).OfficeKey === "office-fail"
                 ? Effect.fail(
                     new TestSinkError({ reason: "office sink failed" }),

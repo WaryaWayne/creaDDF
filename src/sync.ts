@@ -202,17 +202,6 @@ export interface PropertySyncSink<SinkError = never> {
   readonly upsertPropertyGraph?: (
     graph: PropertyGraph,
   ) => Effect.Effect<void, SinkError>;
-  readonly upsertProperty?: (
-    property: PropertyRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertRoom?: (
-    room: RoomRecord,
-    property: PropertyRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
-  ) => Effect.Effect<void, SinkError>;
   readonly saveWatermark?: (
     resource: "Property",
     watermark: string,
@@ -226,13 +215,6 @@ export interface MemberSyncSink<SinkError = never> {
   readonly upsertMemberWithMedia?: (
     member: MemberRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMember?: (
-    member: MemberRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly upsertSocialMedia?: (
     socialMedia: SocialMedia,
@@ -251,13 +233,6 @@ export interface OfficeSyncSink<SinkError = never> {
   readonly upsertOfficeWithMedia?: (
     office: OfficeRecord,
     media: ReadonlyArray<MediaRecord>,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertOffice?: (
-    office: OfficeRecord,
-  ) => Effect.Effect<void, SinkError>;
-  readonly upsertMedia?: (
-    media: MediaRecord,
-    owner: SyncOwner,
   ) => Effect.Effect<void, SinkError>;
   readonly upsertSocialMedia?: (
     socialMedia: SocialMedia,
@@ -683,11 +658,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
     const failedWatermarks: Array<unknown> =
       collected.errors.length > 0 ? [null] : [];
     let persistedRecords = 0;
-    const hasRecordSink =
-      options?.sink?.upsertPropertyGraph !== undefined ||
-      options?.sink?.upsertProperty !== undefined ||
-      options?.sink?.upsertRoom !== undefined ||
-      options?.sink?.upsertMedia !== undefined;
+    const hasRecordSink = options?.sink?.upsertPropertyGraph !== undefined;
 
     yield* Effect.logInfo("Property sync: normalizing and persisting records", {
       identifiers: identifiers.length,
@@ -762,35 +733,12 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
         );
         hydratedSuccessRecords += 1;
 
-        const propertyKey = String(graph.property.ListingKey ?? "");
         const persist = Effect.gen(function* () {
           if (options?.sink?.upsertPropertyGraph !== undefined) {
             yield* options.sink.upsertPropertyGraph(graph);
-            return;
-          }
-          if (options?.sink?.upsertProperty !== undefined) {
-            yield* options.sink.upsertProperty(graph.property);
-          }
-          if (options?.sink?.upsertRoom !== undefined) {
-            yield* Effect.forEach(
-              graph.rooms,
-              (room) =>
-                options.sink?.upsertRoom?.(room, graph.property) ?? Effect.void,
-              { discard: true },
-            );
-          }
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              graph.media,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Property",
-                  key: propertyKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
           }
         });
+        const propertyKey = String(graph.property.ListingKey ?? "");
         const persistError = yield* runPersist("Property", propertyKey, persist);
         if (persistError !== null) {
           errors.push(persistError);
@@ -885,8 +833,6 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
   let persistedRecords = 0;
   const hasRecordSink =
     options?.sink?.upsertMemberWithMedia !== undefined ||
-    options?.sink?.upsertMember !== undefined ||
-    options?.sink?.upsertMedia !== undefined ||
     options?.sink?.upsertSocialMedia !== undefined;
 
   yield* Effect.logInfo("Member sync: normalizing and persisting records", {
@@ -970,20 +916,6 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
             result.record,
             memberMedia,
           );
-        } else {
-          if (options?.sink?.upsertMember !== undefined)
-            yield* options.sink.upsertMember(result.record);
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              memberMedia,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Member",
-                  key: memberKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
-          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
@@ -1090,8 +1022,6 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
   let persistedRecords = 0;
   const hasRecordSink =
     options?.sink?.upsertOfficeWithMedia !== undefined ||
-    options?.sink?.upsertOffice !== undefined ||
-    options?.sink?.upsertMedia !== undefined ||
     options?.sink?.upsertSocialMedia !== undefined;
 
   yield* Effect.logInfo("Office sync: normalizing and persisting records", {
@@ -1174,20 +1104,6 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
             result.record,
             officeMedia,
           );
-        } else {
-          if (options?.sink?.upsertOffice !== undefined)
-            yield* options.sink.upsertOffice(result.record);
-          if (options?.sink?.upsertMedia !== undefined) {
-            yield* Effect.forEach(
-              officeMedia,
-              (media) =>
-                options.sink?.upsertMedia?.(media, {
-                  resource: "Office",
-                  key: officeKey,
-                }) ?? Effect.void,
-              { discard: true },
-            );
-          }
         }
         if (options?.sink?.upsertSocialMedia !== undefined) {
           yield* Effect.forEach(
