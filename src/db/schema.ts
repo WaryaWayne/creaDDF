@@ -7,6 +7,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   time,
   timestamp,
@@ -351,20 +352,28 @@ export const ddfDestinations = pgTable(
   ],
 );
 
-export const ddfWatermarks = pgTable("ddf_watermarks", {
-  resource: text("resource").$type<SyncResource>().primaryKey(),
-  watermark: text("watermark").notNull(),
-  cursorKind: text("cursor_kind")
-    .$type<DdfWatermarkCursorKind>()
-    .default("processed_replication_stream")
-    .notNull(),
-  scopeHash: text("scope_hash").default("global").notNull(),
-  scope: jsonb("scope")
-    .$type<DdfWatermarkScope>()
-    .default(sql`'{"destinationId":null,"chosenAorKeys":[]}'::jsonb`)
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const ddfWatermarks = pgTable(
+  "ddf_watermarks",
+  {
+    resource: text("resource").$type<SyncResource>().notNull(),
+    watermark: text("watermark").notNull(),
+    cursorKind: text("cursor_kind")
+      .$type<DdfWatermarkCursorKind>()
+      .default("processed_replication_stream")
+      .notNull(),
+    scopeHash: text("scope_hash").default("global").notNull(),
+    scope: jsonb("scope")
+      .$type<DdfWatermarkScope>()
+      .default(sql`'{"destinationId":null,"chosenAorKeys":[]}'::jsonb`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.resource, table.cursorKind, table.scopeHash],
+    }),
+  ],
+);
 
 export const ddfSyncRuns = pgTable(
   "ddf_sync_runs",
