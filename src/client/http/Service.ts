@@ -1,11 +1,4 @@
-import {
-  Context,
-  Duration,
-  Effect,
-  Layer,
-  Metric,
-  Schema,
-} from "effect";
+import { Context, Duration, Effect, Layer, Metric, Schema } from "effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
