@@ -3,13 +3,15 @@ import { Schema, SchemaTransformation } from "effect"
 const NullableString = Schema.NullOr(Schema.String)
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString)
 
-const ReplicationKeySchema = Schema.NullOr(Schema.String).pipe(
-  Schema.decodeTo(
-    Schema.String,
-    SchemaTransformation.transform({
-      decode: (value) => value ?? "",
-      encode: (value) => value,
-    }),
+const ReplicationKeySchema = Schema.optionalKey(
+  Schema.NullOr(Schema.String).pipe(
+    Schema.decodeTo(
+      Schema.String,
+      SchemaTransformation.transform({
+        decode: (value) => value ?? "",
+        encode: (value) => value,
+      }),
+    ),
   ),
 )
 

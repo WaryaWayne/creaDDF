@@ -36,12 +36,6 @@ export const PropertyListingSchema = Schema.Struct({
     identifier: "PropertySubType",
     examples: ["Multi-family", "Single Family", "Office", "Vacant Land"],
   }),
-  PropertyType: Schema.Union([Schema.String, Schema.Null]).annotate({
-    message: "Value is invalid for PropertyType.",
-    description: "The property resource type supplied by the listing source.",
-    title: "Property Type",
-    identifier: "PropertyType",
-  }),
   DocumentsAvailable: Schema.Union([
     Schema.Array(
       Schema.Literals([
