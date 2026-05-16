@@ -35,7 +35,7 @@ Embedded helpers:
 
 - `getPropertyMedia(property)`
 - `getMemberMedia(member)`
-- `getOfficeMedia(office)` later
+- `getOfficeMedia(office)`
 - `normalizeMedia(parentResource, parentKey, media)`
 
 Optional convenience methods:

@@ -1,6 +1,6 @@
 # Destination
 
-Destination exists in the API and should be wrapped because it matters for feed context and technology-provider accounts.
+Destination exists in the API and is wrapped because it matters for feed context and technology-provider accounts.
 
 ## Endpoints
 
@@ -44,4 +44,4 @@ Technology-provider accounts can use destination-specific replication endpoints:
 - `/odata/v1/Member/MemberReplication(DestinationId={DestinationId})`
 - `/odata/v1/Office/OfficeReplication(DestinationId={DestinationId})`
 
-The SDK should accept `destinationId` in replication options without requiring it for normal destination credentials.
+The SDK accepts `destinationId` in replication options without requiring it for normal destination credentials.

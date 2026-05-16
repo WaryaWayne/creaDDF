@@ -1,160 +1,208 @@
-# Replication Sync
+# Replication And Sync
 
-Replication is the right path for local database sync. The docs say normal pagination should not be used for more than 10,000 listings; use the dedicated replication endpoints.
+Replication is the right path for local Property, Member, and Office database sync. The official docs warn that normal pagination should not be used for more than 10,000 listings; use the dedicated replication endpoints for these resources.
 
-## Replication Endpoints
+OpenHouse has no replication endpoint in the official path list, so OpenHouse sync is query/list based.
+
+## Implemented Replication Endpoints
 
 Property:
 
-- `/odata/v1/Property/PropertyReplication`
-- `/odata/v1/Property/PropertyReplication(DestinationId={DestinationId})`
+- `GET /odata/v1/Property/PropertyReplication()`
+- `GET /odata/v1/Property/PropertyReplication(DestinationId={DestinationId})`
 
 Member:
 
-- `/odata/v1/Member/MemberReplication`
-- `/odata/v1/Member/MemberReplication(DestinationId={DestinationId})`
+- `GET /odata/v1/Member/MemberReplication()`
+- `GET /odata/v1/Member/MemberReplication(DestinationId={DestinationId})`
 
 Office:
 
-- `/odata/v1/Office/OfficeReplication`
-- `/odata/v1/Office/OfficeReplication(DestinationId={DestinationId})`
+- `GET /odata/v1/Office/OfficeReplication()`
+- `GET /odata/v1/Office/OfficeReplication(DestinationId={DestinationId})`
 
-No OpenHouse replication endpoint was exposed in the OpenAPI path list.
+Replication query options:
 
-## Replication Response
+- `$select`
+- `$count`
+- `$filter`
+- `$orderby`
 
-Replication returns identifiers and modification timestamps only:
+The SDK follows `@odata.nextLink` exactly when more identifier pages exist.
 
-```ts
-type PropertyIdentifier = {
-  ListingKey?: string | null;
-  ModificationTimestamp?: string | null;
-};
+## Implemented Sync Functions
 
-type MemberIdentifier = {
-  MemberKey?: string | null;
-  ModificationTimestamp?: string | null;
-};
+- `syncProperties(options?)`
+- `syncMembers(options?)`
+- `syncOffices(options?)`
+- `syncOpenHouses(options?)`
+- `syncDestinations(query?, sink?)`
+- `syncDdfDatabaseOnce(options?)`
 
-type OfficeIdentifier = {
-  OfficeKey?: string | null;
-  ModificationTimestamp?: string | null;
-};
-```
+Property, Member, and Office sync use replication identifiers and hydrate full records by key. OpenHouse sync lists open houses by query/date/listing scope. Destination sync lists destinations and writes them through the optional sink.
 
-Hydrate changed records by calling the main single-record endpoint for each key.
+## Sync Modes And Watermarks
 
-## Initial Load
+Implemented modes:
 
-1. Read the full active identifier set from `PropertyReplication`.
-2. Batch hydrate each `ListingKey` from `/odata/v1/Property/{PropertyKey}`.
-3. Decode the hydrated property with Effect Schema.
-4. Normalize embedded `Rooms` and `Media` into linked records.
-5. Return the property graph, or call optional persistence hooks if supplied.
-6. Return the highest processed `ModificationTimestamp` as `nextWatermark`.
+- `initial` - caller can run without a prior watermark; query options still apply.
+- `incremental` - uses a supplied `since` value or persisted database watermark to build `ModificationTimestamp` filters.
 
-Repeat the same pattern for members if the app needs agent data.
+Implemented watermark support:
 
-## Incremental Sync
+- `DdfWatermarkStore` service for generic application-provided watermarks.
+- `loadDatabaseWatermark`, `saveDatabaseWatermark`, and `makeDatabaseWatermarkStore` for the built-in database adapter.
+- Database watermarks are scoped by destination and optional chosen AOR keys.
 
-Use a timestamp filter on replication:
+## Property Sync Flow
 
-```txt
-/odata/v1/Property/PropertyReplication?$filter=ModificationTimestamp gt 2024-01-25T00:00:00.00Z
-```
+Implemented behavior:
 
-Then hydrate each returned key from the main endpoint.
+1. Build replication query with default order `ModificationTimestamp asc,ListingKey asc` unless the caller overrides `orderby`.
+2. Read Property replication identifiers, including next pages.
+3. Validate that each identifier has a usable `ListingKey`; invalid identifier rows become record errors.
+4. Hydrate changed listings through `getProperty(ListingKey)`.
+5. Normalize the property graph with property, rooms, and media.
+6. Optionally call `PropertySyncSink.upsertPropertyGraph`.
+7. Optionally save a property watermark through the sink and/or `DdfWatermarkStore`.
+8. Return `SyncResult<PropertyReplicationIdentifier>` with identifiers, record errors, counts, and `nextWatermark`.
 
-Suggested SDK orchestration:
+Additional maintenance helpers:
 
-- `getPropertyChangesSince(watermark)`
-- `hydrateProperties(keys, concurrency)`
-- `normalizePropertyGraph(property)` - property plus rooms/media
-- `syncProperties(options)` - returns records/results and optionally calls caller-provided hooks
-- `nextWatermark` - returned to the caller so the app can persist it wherever it wants
+- `getPropertyMasterList(query?)`
+- `diffLocalKeysAgainstMasterList(localKeys, masterKeys)`
+- `pruneMissingProperties(localKeys, sink, query?)`
 
-Example helper-library style:
+## Member Sync Flow
 
-```ts
-syncProperties({
-  mode: "incremental",
-  since: lastWatermark,
-  destinationId,
-  concurrency: 5,
-  onProperty: async (property) => {},
-  onRoom: async (room, property) => {},
-  onMedia: async (media, owner) => {},
-  onWatermark: async (watermark) => {},
-});
-```
+Implemented behavior:
 
-All hooks should be optional. Without hooks, the same function should still return decoded records and a summary so callers can save data themselves.
+1. Build replication query with default order `ModificationTimestamp asc,MemberKey asc` unless overridden.
+2. Read Member replication identifiers, including next pages.
+3. Validate `MemberKey`.
+4. Hydrate members through `getMember(MemberKey)`.
+5. Normalize embedded media and social media.
+6. Optionally filter hydrated members through `includeMember`.
+7. Optionally call member sink hooks.
+8. Optionally save a member watermark through the sink and/or `DdfWatermarkStore`.
+9. Return `SyncResult<MemberReplicationIdentifier>`.
 
-## Delete And Prune
+Additional maintenance helpers:
 
-The docs say the replication master list represents records currently active and approved for distribution. Records in the local database that are missing from the master list should be removed or marked inactive locally.
+- `getMemberMasterList(query?)`
+- `pruneMissingMembers(localKeys, sink, query?)`
 
-Implement this as an explicit maintenance job:
+## Office Sync Flow
 
-- `getPropertyMasterList()`
-- `diffLocalKeysAgainstMasterList()`
-- `pruneMissingProperties()`
+Implemented behavior:
 
-Do not infer deletes from an empty incremental sync. Use the master list comparison.
+1. Build replication query with default order `ModificationTimestamp asc,OfficeKey asc` unless overridden.
+2. Read Office replication identifiers, including next pages.
+3. Validate `OfficeKey`.
+4. Hydrate offices through `getOffice(OfficeKey)`.
+5. Normalize embedded media and social media.
+6. Optionally filter hydrated offices through `includeOffice`.
+7. Optionally call office sink hooks.
+8. Optionally save an office watermark through the sink and/or `DdfWatermarkStore`.
+9. Return `SyncResult<OfficeReplicationIdentifier>`.
 
-## Scheduling
+Additional maintenance helpers:
 
-The API does not schedule for us; the SDK should expose composable sync effects that callers can run hourly, daily, or weekly.
+- `getOfficeMasterList(query?)`
+- `pruneMissingOffices(localKeys, sink, query?)`
 
-Good surface:
+## OpenHouse Sync Flow
 
-```ts
-syncProperties({
-  mode: "incremental",
-  since: lastWatermark,
-  destinationId,
-  concurrency: 5,
-});
-```
+Implemented behavior:
 
-The caller owns cron/timer scheduling. The SDK owns safe request flow, token renewal, pagination, hydration, validation, and sync result reporting.
+1. Build a list query using caller filters, optional listing scopes, and optional date windows.
+2. Page through OpenHouse list results.
+3. Optionally hydrate or persist open-house rows through sink hooks.
+4. Optionally delete open houses for listing scopes before/around replacement, depending on sink behavior.
+5. Return `SyncResult` with counts and errors.
 
-## Persistence Boundary
+Because OpenHouse has no replication endpoint, callers should use stable filters and order-by clauses for scheduled refresh jobs.
 
-The core SDK should remain usable without a database, but the intended persistence adapter target is Drizzle ORM with Effect SQL integration where it fits.
+## Sink Interfaces
 
-The SDK should expose a persistence boundary that can be implemented by the caller's app. This can be plain callback hooks and/or a formal adapter interface:
+All hooks are optional. Without hooks, sync functions still return decoded records/identifiers, errors, counts, and watermarks.
 
-```ts
-type PropertySyncSink = {
-  upsertProperty?: (property: PropertyListing) => Effect.Effect<void, unknown>;
-  upsertRoom?: (
-    room: PropertyRoom,
-    property: PropertyListing,
-  ) => Effect.Effect<void, unknown>;
-  upsertMedia?: (
-    media: Media,
-    owner: SyncOwner,
-  ) => Effect.Effect<void, unknown>;
-  saveWatermark?: (
-    resource: SyncResource,
-    watermark: string,
-  ) => Effect.Effect<void, unknown>;
-  markMissingPropertiesInactive?: (
-    keys: ReadonlyArray<string>,
-  ) => Effect.Effect<void, unknown>;
-};
-```
+Implemented sink types:
 
-The app using this library can implement that sink with Drizzle ORM. Once the data is in the app database, the app owns querying and cross-linking.
+- `PropertySyncSink`
+  - `upsertPropertyGraph(graph)`
+  - `saveWatermark("Property", watermark)`
+  - `markMissingPropertiesInactive(keys)`
+  - `deleteOpenHousesForListings(listings)`
+- `MemberSyncSink`
+  - `upsertMemberWithMedia(member, media)`
+  - `upsertSocialMedia(socialMedia, owner)`
+  - `saveWatermark("Member", watermark)`
+  - `markMissingMembersInactive(keys)`
+- `OfficeSyncSink`
+  - `upsertOfficeWithMedia(office, media)`
+  - `upsertSocialMedia(socialMedia, owner)`
+  - `saveWatermark("Office", watermark)`
+  - `markMissingOfficesInactive(keys)`
+- `OpenHouseSyncSink`
+  - open-house upsert/delete hooks used by query/list sync
 
-Effect SQL is the preferred Effect-native SQL path for the persistence adapter because it provides core SQL abstractions and database-specific adapters. Drizzle ORM should be the intended ORM/query-builder layer for app persistence, with Effect SQL integration/driver support used where it fits cleanly.
+The built-in Drizzle/PostgreSQL implementation is created with `makeDdfDatabaseSyncSink`.
 
-Implementation guidance:
+## Database Sync
 
-- Build the core SDK so list/get/query methods have no required DB dependency.
-- Define the sink/callback interface in core types.
-- Provide an in-memory sink for tests/examples.
-- Add a Drizzle persistence adapter when implementing database save examples.
-- Use Effect SQL integration/driver support for that adapter when it is practical.
-- Do not copy or commit large local reference repos into this package.
+`syncDdfDatabaseOnce(options?)` is the high-level database-oriented sync helper.
+
+Implemented options include:
+
+- `runId`
+- `runMigrations`
+- `destinationId`
+- `concurrency`
+- `destinationQuery`
+- `propertyQuery`
+- `memberQuery`
+- `officeQuery`
+- `openHouseQuery`
+- `openHouseDateWindow`
+- `openHouseListingChunkSize`
+- `chosenAorKeys`
+- dependency overrides for tests/custom orchestration
+
+Implemented behavior:
+
+1. Optionally run migrations.
+2. Build/load a database sink.
+3. Load scoped watermarks.
+4. Sync destinations.
+5. Sync properties, members, and offices with replication cursors.
+6. Sync open houses by query/listing scope/date window.
+7. Persist rows, sync runs, errors, and watermarks.
+8. Return per-resource summaries, watermarks, and chosen AOR scope.
+
+AOR scoping:
+
+- `CREA_CHOSEN_AOR_KEYS` accepts comma-separated values or a JSON array.
+- AOR filtering applies to persisted Property/Member/Office rows and OpenHouse listing scopes where the hydrated row exposes the relevant AOR key.
+- Replication identifier queries themselves are not AOR-filtered because identifier rows do not expose those resource-specific AOR fields.
+
+## Master-List Pruning
+
+The official replication master list represents records currently active and approved for distribution. The SDK exposes explicit prune helpers instead of silently deleting data during ordinary sync:
+
+- `pruneMissingProperties(localKeys, sink, query?)`
+- `pruneMissingMembers(localKeys, sink, query?)`
+- `pruneMissingOffices(localKeys, sink, query?)`
+
+These helpers diff local keys against master-list keys and call the corresponding sink `markMissing*Inactive` hook.
+
+## Observability
+
+Sync updates Effect metrics for:
+
+- hydrated records
+- persisted records
+- skipped records
+- failed records
+
+Sync also logs progress around identifier collection, hydration, persistence, and failures. Telemetry can be captured through `makeDdfOtlpTelemetryLayer` or `captureDdfFileTelemetry`.
