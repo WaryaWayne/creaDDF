@@ -137,8 +137,10 @@ const primaryMediaUrlFromMedia = (media: ReadonlyArray<MediaRecord> | null | und
   const preferred = records.find((record) => record.PreferredPhotoYN === true && stableKey(record.MediaURL) !== null);
   if (preferred !== undefined) return preferred.MediaURL ?? null;
 
-  const orderedPrimary = records.find((record) => record.Order === 1 && stableKey(record.MediaURL) !== null);
-  return orderedPrimary?.MediaURL ?? null;
+  const orderedPrimary = records.find((record) => (record.Order === 0 || record.Order === 1) && stableKey(record.MediaURL) !== null);
+  if (orderedPrimary !== undefined) return orderedPrimary.MediaURL ?? null;
+
+  return records.find((record) => stableKey(record.MediaURL) !== null)?.MediaURL ?? null;
 };
 
 export const propertyRowFromRecord = (property: PropertyRecord) => ({
