@@ -18,6 +18,9 @@ describe("database read client helpers", () => {
     assert.deepEqual(propertyFieldPresets.card, [
       "listingKey",
       "listPrice",
+      "leaseAmount",
+      "leaseAmountFrequency",
+      "totalActualRent",
       "city",
       "province",
       "propertySubType",
