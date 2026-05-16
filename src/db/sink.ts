@@ -132,15 +132,23 @@ const requireNumberKey = (operation: string, key: number | null) =>
       )
     : Effect.succeed(key);
 
+const hasStableMediaUrl = (record: MediaRecord) =>
+  stableKey(record.MediaURL) !== null;
+
 const primaryMediaUrlFromMedia = (media: ReadonlyArray<MediaRecord> | null | undefined): string | null => {
   const records = media ?? [];
-  const preferred = records.find((record) => record.PreferredPhotoYN === true && stableKey(record.MediaURL) !== null);
+  const preferred = records.find((record) => record.PreferredPhotoYN === true && hasStableMediaUrl(record));
   if (preferred !== undefined) return preferred.MediaURL ?? null;
 
-  const orderedPrimary = records.find((record) => (record.Order === 0 || record.Order === 1) && stableKey(record.MediaURL) !== null);
-  if (orderedPrimary !== undefined) return orderedPrimary.MediaURL ?? null;
+  const orderedPrimary =
+    records.find((record) => record.Order === 1 && hasStableMediaUrl(record)) ??
+    records.find((record) => record.Order === 0 && hasStableMediaUrl(record));
 
-  return records.find((record) => stableKey(record.MediaURL) !== null)?.MediaURL ?? null;
+  if (orderedPrimary !== undefined) {
+    return orderedPrimary.MediaURL ?? null;
+  }
+
+  return records.find(hasStableMediaUrl)?.MediaURL ?? null;
 };
 
 export const propertyRowFromRecord = (property: PropertyRecord) => ({

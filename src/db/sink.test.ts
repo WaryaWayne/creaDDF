@@ -84,7 +84,7 @@ describe("database sync sink row mapping", () => {
     assert.equal(row.primaryMediaUrl, "https://example.test/first.jpg");
   });
 
-  it("uses preferred photo as primary and falls back only to order one", () => {
+  it("uses preferred photo as primary and falls back through ordered and available media", () => {
     const row = propertyRowFromRecord(asPropertyRecord({
       ListingKey: "listing-1",
       Media: [
@@ -101,7 +101,17 @@ describe("database sync sink row mapping", () => {
           { MediaKey: "media-3", MediaURL: "https://example.test/not-a-primary.jpg", Order: 2 },
         ],
       })).primaryMediaUrl,
-      null,
+      "https://example.test/not-a-primary.jpg",
+    );
+    assert.equal(
+      propertyRowFromRecord(asPropertyRecord({
+        ListingKey: "listing-3",
+        Media: [
+          { MediaKey: "media-4", MediaURL: "https://example.test/order-zero.jpg", Order: 0 },
+          { MediaKey: "media-5", MediaURL: "https://example.test/order-one.jpg", Order: 1 },
+        ],
+      })).primaryMediaUrl,
+      "https://example.test/order-one.jpg",
     );
   });
 
