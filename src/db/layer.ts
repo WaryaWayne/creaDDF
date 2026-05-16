@@ -7,7 +7,9 @@ export interface DdfDatabaseConfig {
   readonly databaseUrl: Redacted.Redacted<string>;
 }
 
-export type DdfDrizzleDatabase = EffectPgDatabase & { readonly $client: PgClient.PgClient };
+export type DdfDrizzleDatabase = EffectPgDatabase & {
+  readonly $client: PgClient.PgClient;
+};
 
 export class DdfDatabase extends Context.Service<DdfDatabase>()(
   "@warya/crea-ddf/db/layer/DdfDatabase",
