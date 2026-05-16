@@ -187,12 +187,7 @@ const makeFileTelemetryTracer = Effect.fn("DdfTelemetry.makeFileTracer")(
         const span = currentTracer.span(options);
         const events: Array<RecordedSpanEvent> = [];
         const originalEvent = span.event;
-        span.event = function (
-          this: Tracer.Span,
-          name,
-          startTime,
-          attributes,
-        ) {
+        span.event = function (this: Tracer.Span, name, startTime, attributes) {
           events.push({
             name,
             startTimeNanos: startTime.toString(),
@@ -231,7 +226,9 @@ const buildTelemetryDocument = <A>(
 ) => {
   const sortedSpans = spans
     .slice()
-    .sort((left, right) => left.startTimeNanos.localeCompare(right.startTimeNanos));
+    .sort((left, right) =>
+      left.startTimeNanos.localeCompare(right.startTimeNanos),
+    );
   const slowestSpans = sortedSpans
     .slice()
     .sort((left, right) => right.durationMillis - left.durationMillis)
@@ -250,9 +247,10 @@ const buildTelemetryDocument = <A>(
     runId,
     capturedAt,
     status: Exit.isSuccess(exit) ? "success" : "failure",
-    result: options.includeResult === false || Exit.isFailure(exit)
-      ? undefined
-      : exit.value,
+    result:
+      options.includeResult === false || Exit.isFailure(exit)
+        ? undefined
+        : exit.value,
     failure: Exit.isFailure(exit) ? Cause.pretty(exit.cause) : undefined,
     summary: {
       spanCount: sortedSpans.length,
@@ -270,57 +268,63 @@ const buildTelemetryDocument = <A>(
   };
 };
 
-export const captureDdfFileTelemetry = Effect.fn(
-  "DdfTelemetry.captureFile",
-)(function* <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  options: DdfFileTelemetryOptions<A> = {},
-) {
-  const collector = yield* makeFileTelemetryTracer();
-  const exit = yield* effect.pipe(Effect.withTracer(collector.tracer), Effect.exit);
-  const spans = collector.spans();
-  const metrics = yield* Metric.snapshot;
-  const metricDump = yield* Metric.dump;
-  const prometheus = options.includePrometheus === false
-    ? undefined
-    : yield* PrometheusMetrics.format();
-  const capturedAt = DateTime.formatIso(yield* DateTime.now);
-  const runId = options.runId ??
-    (Exit.isSuccess(exit) ? runIdFromValue(exit.value) : undefined) ??
-    `otel-${sanitizeFileSegment(capturedAt)}`;
-  const status = Exit.isSuccess(exit) ? "success" : "failure";
-  const fileName = options.fileName?.({
-    runId,
-    status,
-    value: Exit.isSuccess(exit) ? exit.value : undefined,
-  }) ?? `${sanitizeFileSegment(runId)}.json`;
-  const directory = options.directory ?? defaultTelemetryDirectory;
-  const filePath = `${directory}/${fileName}`;
-  const fileSystem = yield* FileSystem.FileSystem;
-  const document = buildTelemetryDocument(
-    runId,
-    capturedAt,
-    exit,
-    spans,
-    metrics,
-    metricDump,
-    prometheus,
-    options,
-  );
+export const captureDdfFileTelemetry = Effect.fn("DdfTelemetry.captureFile")(
+  function* <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    options: DdfFileTelemetryOptions<A> = {},
+  ) {
+    const collector = yield* makeFileTelemetryTracer();
+    const exit = yield* effect.pipe(
+      Effect.withTracer(collector.tracer),
+      Effect.exit,
+    );
+    const spans = collector.spans();
+    const metrics = yield* Metric.snapshot;
+    const metricDump = yield* Metric.dump;
+    const prometheus =
+      options.includePrometheus === false
+        ? undefined
+        : yield* PrometheusMetrics.format();
+    const capturedAt = DateTime.formatIso(yield* DateTime.now);
+    const runId =
+      options.runId ??
+      (Exit.isSuccess(exit) ? runIdFromValue(exit.value) : undefined) ??
+      `otel-${sanitizeFileSegment(capturedAt)}`;
+    const status = Exit.isSuccess(exit) ? "success" : "failure";
+    const fileName =
+      options.fileName?.({
+        runId,
+        status,
+        value: Exit.isSuccess(exit) ? exit.value : undefined,
+      }) ?? `${sanitizeFileSegment(runId)}.json`;
+    const directory = options.directory ?? defaultTelemetryDirectory;
+    const filePath = `${directory}/${fileName}`;
+    const fileSystem = yield* FileSystem.FileSystem;
+    const document = buildTelemetryDocument(
+      runId,
+      capturedAt,
+      exit,
+      spans,
+      metrics,
+      metricDump,
+      prometheus,
+      options,
+    );
 
-  yield* fileSystem.makeDirectory(directory, { recursive: true });
-  yield* fileSystem.writeFileString(
-    filePath,
-    encodeJson(toJsonValue(document)),
-  );
+    yield* fileSystem.makeDirectory(directory, { recursive: true });
+    yield* fileSystem.writeFileString(
+      filePath,
+      encodeJson(toJsonValue(document)),
+    );
 
-  if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
+    if (Exit.isFailure(exit)) return yield* Effect.failCause(exit.cause);
 
-  return {
-    value: exit.value,
-    filePath,
-    runId,
-    spanCount: spans.length,
-    metricCount: metrics.length,
-  } satisfies DdfFileTelemetryResult<A>;
-});
+    return {
+      value: exit.value,
+      filePath,
+      runId,
+      spanCount: spans.length,
+      metricCount: metrics.length,
+    } satisfies DdfFileTelemetryResult<A>;
+  },
+);
