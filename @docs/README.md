@@ -1,28 +1,8 @@
 # CREA DDF API SDK Guide
 
-Source re-checked on 2026-05-14 from the official DDF API documentation and release notes at https://ddfapi-docs.realtor.ca/.
+Source researched on 2026-05-04 from the official DDF API documentation at https://ddfapi-docs.realtor.ca/.
 
-This directory is a handoff pack and maintenance reference for the Effect TypeScript SDK in this repo. The SDK wraps the official DDF Web API without inventing resources that the OpenAPI definition does not expose.
-
-## Current SDK Status
-
-The implementation has moved past the original planning-only state. Keep these docs aligned with the exported package surface before using them as implementation instructions:
-
-- Package import name: `@warya/crea-ddf`.
-- Layer constructors: `makeDdfLayer(config)` and `makeDdfLayerFromEnv`.
-- Resource helpers are exported for Property, Member, Office, OpenHouse, Destination, Lead, replication, normalization, sync, telemetry, metrics, watermarks, and the optional Drizzle persistence adapter.
-- Read/list/get methods are still database-free. The Drizzle/Effect SQL pieces are optional sync/persistence helpers, not a requirement for direct API reads.
-- The local offline OpenAPI snapshot still matches the live embedded OpenAPI path and schema inventory as of 2026-05-14: 17 paths and 157 schemas.
-
-## Current Upstream Release Notes To Watch
-
-The official release notes now include several post-May-2025 updates that affect schemas and persistence assumptions:
-
-- 2026-05-07: `Media.MediaKey` is changing from numeric/bigint semantics to a stable string format of `<ObjectID>_<MediaCategoryId>_<MediaPosition>`. Consumers should watch each media row's own `ModificationTimestamp`; unrelated parent payload changes should no longer churn every media key after CREA's rollout. A one-time Member media reseed is expected.
-- 2026-02-05: Property responses include National Association ID fields for listing agents and offices, and Lead matching supports `CoListAgentKey2` / `CoListAgentKey3`.
-- 2025-11-26: `MapCoordinateVerifiedYN` is deprecated. Prefer `GeoCodeManualYN` when present in live payloads/metadata. The embedded OpenAPI snapshot currently documents the deprecation text but does not expose a `GeoCodeManualYN` property.
-- 2025-08-01: `$filter=contains(...)` substring filtering is supported on string fields for Property, Office, and Member endpoints. Lookup fields should still use metadata lookup values rather than free-text substring filters.
-- 2025-06-26: Property responses include additional co-listing agent and office key fields (`CoListAgentKey2`, `CoListAgentKey3`, `CoListOfficeKey2`, and `CoListOfficeKey3`).
+This directory is a handoff pack for building the Effect TypeScript SDK in this repo. The SDK should wrap the official DDF Web API without inventing resources that the OpenAPI definition does not expose.
 
 ## Start Here
 
@@ -53,7 +33,7 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 - `resources/04-members.md` - Member endpoint guide.
 - `resources/05-open-houses.md` - OpenHouse endpoint guide.
 - `resources/06-destination.md` - Destination endpoint guide.
-- `resources/07-office-later.md` - Office endpoint notes; despite the filename, Office is exposed and wrapped for thorough coverage.
+- `resources/07-office-later.md` - Office endpoint notes; despite the filename, Office is exposed and should be wrapped for thorough coverage.
 - `resources/08-leads.md` - Lead endpoint, which exists but is not part of replication.
 
 ## Important Findings
@@ -88,7 +68,7 @@ import {
   listDestinations,
   listProperties,
   makeDdfLayer,
-} from "@warya/crea-ddf";
+} from "crea-ddf-effect-sdk";
 
 const appConfig = Config.all({
   clientId: Config.redacted("CREA_DDF_CLIENT_ID"),

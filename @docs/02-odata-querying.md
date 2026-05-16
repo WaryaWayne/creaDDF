@@ -37,8 +37,6 @@ Suggested default ordering:
 
 ## Filters
 
-As of the 2025-08-01 upstream release notes, substring filtering with the OData `contains` function is supported for string fields on Property, Office, and Member endpoints. Do not use `contains` against lookup fields; use the lookup values defined in metadata instead.
-
 The docs show timestamp filtering against replication:
 
 ```txt
@@ -82,7 +80,6 @@ Add helper functions where they remove real footguns:
 ```ts
 filters.modifiedAfter("ModificationTimestamp", date)
 filters.eq("StandardStatus", "Active")
-"contains(City,'Toronto')" // pass as raw filter until a helper is added
 filters.and(a, b)
 filters.or(a, b)
 ```

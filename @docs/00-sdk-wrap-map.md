@@ -1,8 +1,8 @@
 # SDK Wrap Map
 
-This is the method surface the SDK implements and should continue to maintain. Prefer a complete generic OData core with resource-specific methods on top, using the Effect schemas under `src/schema`.
+This is the method surface Codex should build. Prefer a complete generic OData core with resource-specific methods on top, using the Effect schemas already started under `src/schema`.
 
-Do not half-bake future additions. If the local docs/OpenAPI expose a resource or method, implement it unless live API behavior proves it is unavailable or the task explicitly excludes it.
+Do not half-bake the method surface. If the local docs/OpenAPI expose a resource or method, implement it unless live API behavior proves it is unavailable or the task explicitly excludes it.
 
 ## Client Core
 
@@ -88,7 +88,7 @@ Avoid replacing the generic OData surface with hundreds of brittle one-off searc
 
 ## Completeness Target
 
-Maintain broad SDK coverage for the exposed DDF API:
+Implement broad SDK coverage for the exposed DDF API:
 
 - Auth and token lifecycle.
 - Generic OData list/get/pagination/query helpers.
@@ -98,9 +98,8 @@ Maintain broad SDK coverage for the exposed DDF API:
 - Destination list/get.
 - OpenHouse list/get/sync-by-query.
 - Lead creation as a separate non-replication module.
-- Embedded `Rooms`, `Media`, and SocialMedia normalization where those embedded arrays are present.
-- Analytics/log-event helpers.
-- Optional Drizzle persistence, watermarks, metrics, and telemetry helpers for sync workflows.
+- Embedded `Rooms` and `Media` normalization.
+- Analytics/log-event helper if the docs and env config are clear enough.
 
 Prefer a complete, well-factored implementation over a tiny MVP. If something is blocked by unclear docs or live API behavior, leave a typed placeholder or explicit TODO with the reason.
 
@@ -136,8 +135,8 @@ No standalone `/Media` path was exposed in the official OpenAPI path list. Wrap 
 
 - `getPropertyMedia(property: Property): Media[]`
 - `getMemberMedia(member: Member): Media[]`
-- `getOfficeMedia(office: Office): Media[]`
-- `normalizeMedia(parentResource, parentKey, media)` - emit rows keyed by `MediaKey`. Store `MediaKey` as text/string; the 2026-05-07 upstream release notes announce a stable string key format.
+- `getOfficeMedia(office: Office): Media[]` later
+- `normalizeMedia(parentResource, parentKey, media)` - emit rows keyed by `MediaKey`.
 
 ## Members
 
@@ -170,7 +169,7 @@ Use this for technology-provider accounts and destination-specific replication.
 
 ## Office
 
-Office is fully exposed in OpenAPI and wrapped by the SDK. Despite this heading/filename saying "later", keep Office in parity with Property and Member coverage:
+Office is fully exposed in OpenAPI. Despite this heading/filename saying "later", implement the wrapper for thorough coverage once Property, Rooms, Media, Members, OpenHouse, and Destination are in place:
 
 - `listOffices(query?: ODataListQuery<OfficeField>)`
 - `getOffice(officeKey: string, query?: ODataGetQuery<OfficeField>)`
