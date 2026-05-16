@@ -45,7 +45,7 @@ export interface DdfClientConfig {
 }
 
 export class DdfConfig extends Context.Service<DdfConfig, DdfClientConfig>()(
-  "@warya/crea-ddf/client/config/Service/DdfConfig",
+  "crea-ddf/client/config/Service/DdfConfig",
 ) {
   static readonly layer = (config: DdfClientConfig) =>
     Layer.succeed(this, config);

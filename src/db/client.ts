@@ -1636,7 +1636,7 @@ const makeDdfDbClient = Effect.fn("DdfDbClient.make")(function* () {
 })
 
 export class DdfDbClient extends Context.Service<DdfDbClient>()(
-  "@warya/crea-ddf/db/client/DdfDbClient",
+  "crea-ddf/db/client/DdfDbClient",
   { make: makeDdfDbClient() }
 ) {
   static readonly layer = Layer.effect(this, this.make)

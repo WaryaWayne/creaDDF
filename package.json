@@ -1,5 +1,5 @@
 {
-  "name": "@warya/crea-ddf",
+  "name": "crea-ddf",
   "version": "0.0.1",
   "description": "An Effect Native TypeScript SDK for the CREA DDF API.",
   "type": "module",

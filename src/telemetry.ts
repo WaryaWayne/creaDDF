@@ -25,7 +25,7 @@ export const makeDdfOtlpTelemetryLayer = (options: DdfOtlpTelemetryOptions) =>
   Otlp.layerJson({
     baseUrl: options.baseUrl,
     resource: {
-      serviceName: options.serviceName ?? "@warya/crea-ddf",
+      serviceName: options.serviceName ?? "crea-ddf",
       serviceVersion: options.serviceVersion,
       attributes: options.attributes,
     },
@@ -243,7 +243,7 @@ const buildTelemetryDocument = <A>(
     }));
 
   return {
-    schema: "@warya/crea-ddf.file-telemetry.v1",
+    schema: "crea-ddf.file-telemetry.v1",
     runId,
     capturedAt,
     status: Exit.isSuccess(exit) ? "success" : "failure",
