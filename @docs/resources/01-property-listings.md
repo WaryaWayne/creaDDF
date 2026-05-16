@@ -32,6 +32,14 @@ Property includes:
 
 Normalize both into separate local tables if the SDK offers persistence helpers.
 
+## Current Schema Notes
+
+Recent upstream release notes affecting Property payloads:
+
+- 2026-02-05 added National Association ID fields for listing agents and offices; these are present in the local schema and field inventory.
+- 2025-11-26 deprecated `MapCoordinateVerifiedYN`. Prefer `GeoCodeManualYN` when it appears in live payloads/metadata, but keep decoding `MapCoordinateVerifiedYN` for backward compatibility because it is still present in the embedded OpenAPI snapshot.
+- 2025-06-26 added the second and third co-listing agent and office keys.
+
 ## Fields
 
 The OpenAPI model exposes 144 Property fields. See `../model-field-inventory.md` for the full generated list.
@@ -41,7 +49,7 @@ Important groups:
 - Identity and status: `ListingKey`, `ListingId`, `StandardStatus`, `StatusChangeTimestamp`, `ModificationTimestamp`, `OriginalEntryTimestamp`.
 - Pricing: `ListPrice`, `LeaseAmount`, `LeaseAmountFrequency`, `PricePerUnit`.
 - Location: `UnparsedAddress`, `City`, `CityRegion`, `StateOrProvince`, `PostalCode`, `Latitude`, `Longitude`.
-- Listing ownership: `ListAgentKey`, `ListOfficeKey`, co-list agent/office keys, national association IDs.
+- Listing ownership: `ListAgentKey`, `ListOfficeKey`, `CoListAgentKey`, `CoListAgentKey2`, `CoListAgentKey3`, `CoListOfficeKey`, `CoListOfficeKey2`, `CoListOfficeKey3`, and national association IDs.
 - Display permissions: `InternetEntireListingDisplayYN`, `InternetAddressDisplayYN`, `ListingURL`.
 - Counts and structure: `BedroomsTotal`, `BathroomsTotalInteger`, `BuildingAreaTotal`, `LivingArea`, `Stories`, `PhotosCount`.
 - Embedded: `Rooms`, `Media`.

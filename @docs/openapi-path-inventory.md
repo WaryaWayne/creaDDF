@@ -1,6 +1,6 @@
 # OpenAPI Path Inventory
 
-Generated from the embedded OpenAPI model in https://ddfapi-docs.realtor.ca/ on 2026-05-04. Public API host in the docs prose is `https://ddfapi.realtor.ca`; prepend that host to the paths below.
+Generated from the embedded OpenAPI model in https://ddfapi-docs.realtor.ca/ and re-checked against the live embedded OpenAPI on 2026-05-14. Public API host in the docs prose is `https://ddfapi.realtor.ca`; prepend that host to the paths below.
 
 | Method | Path | Tag | Summary | Query/path parameters |
 | --- | --- | --- | --- | --- |
