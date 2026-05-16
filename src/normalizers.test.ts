@@ -71,6 +71,28 @@ describe("normalizers", () => {
       }),
   );
 
+  it.effect("keeps already-decoded property media collections", () =>
+    Effect.gen(function* () {
+      const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
+      const decodedMedia = yield* decodeMedia([
+        media({
+          MediaKey: "decoded-media",
+          MediaURL: "https://example.test/photo.jpg",
+          ModificationTimestamp: "2026-05-04T12:34:56.000Z" as never,
+          ResourceName: "Property",
+        }),
+      ]);
+
+      const mediaRows = getPropertyMedia({ Media: decodedMedia });
+
+      assert.strictEqual(mediaRows[0]?.MediaKey, "decoded-media");
+      assert.strictEqual(
+        DateTime.isDateTime(mediaRows[0]?.ModificationTimestamp),
+        true,
+      );
+    }),
+  );
+
   it.effect("returns no embedded media when media fails schema decoding", () =>
     Effect.sync(() => {
       const decoded = getPropertyMedia({

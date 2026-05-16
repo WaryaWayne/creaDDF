@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { MediaSchema, type MediaType } from "./schema/mediaSchema";
 import type { RoomsType } from "./schema/roomsSchema";
 
@@ -16,6 +16,23 @@ type PropertyWithNestedResources = ResourceWithMedia & {
 const emptyRooms: RoomsType = [];
 const emptyMedia: MediaType = [];
 const decodeMedia = Schema.decodeUnknownOption(MediaSchema);
+const resourceNames = new Set(["Property", "Member", "Office"]);
+
+const isDecodedMediaCollection = (value: unknown): value is MediaType =>
+  Array.isArray(value) &&
+  value.some((item) => {
+    if (item === null || typeof item !== "object") return false;
+    return DateTime.isDateTime(
+      (item as { readonly ModificationTimestamp?: unknown })
+        .ModificationTimestamp,
+    );
+  }) &&
+  value.every((item) => {
+    if (item === null || typeof item !== "object") return false;
+    const resourceName = (item as { readonly ResourceName?: unknown })
+      .ResourceName;
+    return resourceName === null || resourceNames.has(String(resourceName));
+  });
 
 export const getPropertyRooms = (
   property: PropertyWithNestedResources,
@@ -24,7 +41,8 @@ export const getPropertyRooms = (
 
 export const getPropertyMedia = (property: ResourceWithMedia): MediaType => {
   const decoded = decodeMedia(property.Media);
-  return Option.isSome(decoded) ? decoded.value : emptyMedia;
+  if (Option.isSome(decoded)) return decoded.value;
+  return isDecodedMediaCollection(property.Media) ? property.Media : emptyMedia;
 };
 
 export const getMemberMedia = Effect.fn("getMemberMedia")(function* (
