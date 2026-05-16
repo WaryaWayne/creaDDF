@@ -4,8 +4,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "files": ["dist", "README.md", "LICENSE"],
-  "description": "An Effect Native SDK for the CREA DDF API",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "description": "An Effect Native Typescript SDK for the CREA DDF API",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,15 +17,20 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./db": {
+      "types": "./dist/db/index.d.ts",
+      "import": "./dist/db/index.js"
     }
   },
   "sideEffects": false,
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "build": "pnpm run typecheck && rm -rf dist && tsc --noCheck -p tsconfig.build.json && mkdir -p dist/db && cp -R src/db/migrations dist/db/migrations",
+    "publish:npm": "npm publish --access public --ignore-scripts",
+    "typecheck": "tsgo --noEmit",
+    "build": "pnpm run typecheck && rm -rf dist && tsgo --noCheck -p tsconfig.build.json && mkdir -p dist/db && cp -R src/db/migrations dist/db/migrations",
     "test": "pnpm run typecheck && vitest run",
     "check:metadata": "node scripts/check-metadata-parity.mjs",
-    "prepare": "effect-language-service patch",
+    "prepare": "effect-tsgo patch",
     "test:live": "bun test ./src/live.integration.ts",
     "sync:otel": "bun run src/syncDatabaseOtel.ts",
     "db:generate": "drizzle-kit generate",
@@ -38,21 +47,21 @@
   },
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
-    "@effect/platform-bun": "4.0.0-beta.65",
-    "@effect/sql-pg": "4.0.0-beta.65",
+    "@effect/platform-bun": "4.0.0-beta.66",
+    "@effect/sql-pg": "4.0.0-beta.66",
     "drizzle-kit": "1.0.0-rc.2",
     "drizzle-orm": "1.0.0-rc.2",
-    "effect": "4.0.0-beta.65",
+    "effect": "4.0.0-beta.66",
     "pg": "8.20.0"
   },
   "devDependencies": {
-    "@effect/language-service": "0.85.1",
     "@effect/vitest": "4.0.0-beta.65",
     "@types/bun": "1.3.13",
     "@types/node": "25.6.2",
     "@types/pg": "8.20.0",
     "tsx": "^4.21.0",
-    "typescript": "6.0.3",
-    "vitest": "^4.1.6"
+    "@typescript/native-preview": "7.0.0-dev.20260515.1",
+    "vitest": "^4.1.6",
+     "@effect/tsgo": "0.7.2"
   }
 }
