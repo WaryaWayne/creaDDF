@@ -74,11 +74,11 @@ const selectedOpenHouseResponseSchema = Schema.Struct({
   "@odata.context": Schema.optionalKey(Schema.NullOr(Schema.String)),
   "@odata.count": Schema.optionalKey(Schema.NullOr(Schema.Int)),
   "@odata.nextLink": Schema.optionalKey(Schema.NullOr(Schema.String)),
-  value: Schema.NullOr(Schema.Array(
+  value: Schema.Array(
     Schema.Struct({
       ...partialStruct(OpenHouseSchema).fields,
     }),
-  )),
+  ),
 });
 
 const openHousePageSchema = (query?: SelectQuery) =>
@@ -716,7 +716,7 @@ export const syncProperties = Effect.fn("DdfPropertySync.syncProperties")(
           Effect.gen(function* () {
             const result = yield* hydrateOne(
               "Property",
-              identifier.ListingKey,
+              identifier.ListingKey ?? "",
               (key) => getProperty(key),
             );
             hydratedRecords += 1;
@@ -905,7 +905,7 @@ export const syncMembers = Effect.fn("DdfMemberSync.syncMembers")(function* <
         Effect.gen(function* () {
           const result = yield* hydrateOne(
             "Member",
-            identifier.MemberKey,
+            identifier.MemberKey ?? "",
             getMember,
           );
           hydratedRecords += 1;
@@ -1099,7 +1099,7 @@ export const syncOffices = Effect.fn("DdfOfficeSync.syncOffices")(function* <
         Effect.gen(function* () {
           const result = yield* hydrateOne(
             "Office",
-            identifier.OfficeKey,
+            identifier.OfficeKey ?? "",
             getOffice,
           );
           hydratedRecords += 1;
@@ -1357,7 +1357,7 @@ export const syncOpenHouses = Effect.fn("DdfOpenHouseSync.syncOpenHouses")(
             pageSize: page.value?.length ?? 0,
             hasNextPage: next !== null,
           });
-          const pageValue = page.value ?? [];
+          const pageValue = page.value;
           yield* persistPage(pageValue as ReadonlyArray<OpenHouseRecord>);
           yield* logPersistProgress(pageValue.length, next !== null);
 
@@ -1460,7 +1460,9 @@ export const pruneMissingProperties = Effect.fn(
   const masterList = yield* getPropertyMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.ListingKey),
+    masterList.flatMap((identifier) =>
+      identifier.ListingKey === undefined ? [] : [identifier.ListingKey],
+    ),
   );
 
   if (
@@ -1519,7 +1521,9 @@ export const pruneMissingMembers = Effect.fn(
   const masterList = yield* getMemberMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.MemberKey),
+    masterList.flatMap((identifier) =>
+      identifier.MemberKey === undefined ? [] : [identifier.MemberKey],
+    ),
   );
 
   if (
@@ -1544,7 +1548,9 @@ export const pruneMissingOffices = Effect.fn(
   const masterList = yield* getOfficeMasterList(options);
   const diff = diffLocalKeysAgainstMasterList(
     localKeys,
-    masterList.map((identifier) => identifier.OfficeKey),
+    masterList.flatMap((identifier) =>
+      identifier.OfficeKey === undefined ? [] : [identifier.OfficeKey],
+    ),
   );
 
   if (

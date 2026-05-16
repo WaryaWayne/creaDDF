@@ -93,10 +93,12 @@ List responses use:
 ```ts
 type ODataListResponse<T> = {
   "@odata.context"?: string | null
-  value?: T[] | null
+  value: T[]
   "@odata.nextLink"?: string | null
   "@odata.count"?: number
 }
 ```
+
+CREA list probes on 2026-05-13 returned `value` as a present array for Property, Member, Office, Destination, and OpenHouse selected-list calls, so missing or non-array `value` remains a decode error.
 
 Single responses are an OData object envelope in the OpenAPI model. Validate against live responses before overfitting the schema, because many OData APIs return the entity directly with `@odata.context`.
