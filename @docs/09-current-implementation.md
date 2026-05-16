@@ -4,7 +4,7 @@ This document reflects the SDK as implemented in `src/` and complements the offi
 
 ## Package Shape
 
-- Package name: `@warya/crea-ddf`.
+- Package name: `crea-ddf`.
 - Public ESM entrypoint: `.` from `dist/index.js` with types at `dist/index.d.ts`.
 - Public database subpath: `./db` from `dist/db/index.js` with types at `dist/db/index.d.ts`.
 - Published files include `dist`, `@docs`, and `LICENSE.md`.

@@ -69,7 +69,7 @@ import {
   listDestinations,
   listProperties,
   makeDdfLayer,
-} from "@warya/crea-ddf";
+} from "crea-ddf";
 
 const appConfig = Config.all({
   clientId: Config.redacted("CREA_DDF_CLIENT_ID"),
