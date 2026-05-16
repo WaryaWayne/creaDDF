@@ -186,7 +186,7 @@ const encodeQuery = (
   });
 
 export class DdfHttp extends Context.Service<DdfHttp, DdfHttpApi>()(
-  "crea-ddf-effect-sdk/client/http/Service/DdfHttp",
+  "@warya/crea-ddf/client/http/Service/DdfHttp",
   {
     make: Effect.gen(function* () {
       const cfg = yield* DdfConfig;

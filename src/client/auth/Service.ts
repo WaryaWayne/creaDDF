@@ -9,7 +9,7 @@ import type { DdfAuthError } from "../http/errors";
 import type { DdfAuthApi } from "./types";
 
 export class DdfAuth extends Context.Service<DdfAuth, DdfAuthApi>()(
-  "crea-ddf-effect-sdk/client/auth/Service/DdfAuth",
+  "@warya/crea-ddf/client/auth/Service/DdfAuth",
   {
     make: Effect.gen(function* () {
       const cache = yield* makeAccessTokenCache;

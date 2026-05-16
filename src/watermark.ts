@@ -19,7 +19,7 @@ const keyFor = (resource: WatermarkResource) =>
   `crea-ddf:watermark:${resource}`;
 
 export class DdfWatermarkStore extends Context.Service<DdfWatermarkStore>()(
-  "crea-ddf-effect-sdk/watermark/DdfWatermarkStore",
+  "@warya/crea-ddf/watermark/DdfWatermarkStore",
   {
     make: Effect.gen(function* () {
       const kv = yield* KeyValueStore.KeyValueStore;

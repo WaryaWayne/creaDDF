@@ -10,7 +10,7 @@ export interface DdfDatabaseConfig {
 export type DdfDrizzleDatabase = EffectPgDatabase & { readonly $client: PgClient.PgClient };
 
 export class DdfDatabase extends Context.Service<DdfDatabase>()(
-  "crea-ddf-effect-sdk/db/layer/DdfDatabase",
+  "@warya/crea-ddf/db/layer/DdfDatabase",
   {
     make: Effect.gen(function* () {
       const db = yield* PgDrizzle.makeWithDefaults();
@@ -23,7 +23,7 @@ export class DdfDatabase extends Context.Service<DdfDatabase>()(
   static readonly layerFromConfig = (config: DdfDatabaseConfig) => {
     const pgLayer = PgClient.layer({
       url: config.databaseUrl,
-      applicationName: "crea-ddf-effect-sdk",
+      applicationName: "@warya/crea-ddf",
     });
     return Layer.merge(this.layer.pipe(Layer.provide(pgLayer)), pgLayer);
   };
@@ -34,7 +34,7 @@ export class DdfDatabase extends Context.Service<DdfDatabase>()(
   static readonly layerConfig = (() => {
     const pgLayer = PgClient.layerConfig({
       url: Config.redacted("DATABASE_URL"),
-      applicationName: Config.succeed("crea-ddf-effect-sdk"),
+      applicationName: Config.succeed("@warya/crea-ddf"),
     });
     return Layer.merge(this.layer.pipe(Layer.provide(pgLayer)), pgLayer);
   })();

@@ -23,7 +23,7 @@
     "check:metadata": "node scripts/check-metadata-parity.mjs",
     "prepare": "effect-language-service patch",
     "test:live": "bun test ./src/live.integration.ts",
-    "sync:otel": "bun src/syncDatabaseOtel.ts",
+    "sync:otel": "bun run src/syncDatabaseOtel.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src/db/runMigrations.ts",
     "db:push": "drizzle-kit push",
