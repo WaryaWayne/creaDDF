@@ -1,6 +1,6 @@
 # Office
 
-Office is exposed by the official OpenAPI model and metadata. Implement it after Property, Rooms, Media, Members, OpenHouse, and Destination so the SDK has broad method coverage.
+Office is exposed by the official OpenAPI model and metadata, and the SDK now implements the Office HTTP, replication, sync, normalization, and database persistence paths.
 
 ## Endpoints
 
@@ -42,5 +42,8 @@ Important fields:
 - `replicateOffices(query)`
 - `replicateOfficesForDestination(destinationId, query)`
 - `syncOffices(options)`
+- `getOfficeMasterList(query)`
+- `pruneMissingOffices(localKeys, sink, query)`
+- `getOfficeMedia(office)`
 
-Use this for brokerage/office pages, office logos, office-level relationship data, and complete DDF API coverage.
+Use this for brokerage/office pages, office logos, office-level relationship data, complete DDF API coverage, and local database sync.

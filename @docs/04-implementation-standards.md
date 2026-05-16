@@ -75,4 +75,4 @@ Minimum coverage expectations:
 - Replication: all-destination and destination-specific paths for Property, Member, and Office.
 - Sync: identifier filtering, hydration, concurrency, sink calls, normalization, summary results, and next watermark behavior.
 
-The `test` script should eventually run both typechecking and the Effect test suite. Until then, `pnpm run typecheck` is not enough to consider a method implemented.
+The `test` script runs both typechecking and the Effect/Vitest suite. `pnpm run typecheck` remains useful during development, but `pnpm test` is the default verification command for implemented behavior.

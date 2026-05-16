@@ -1,29 +1,30 @@
 # CREA DDF API SDK Guide
 
-Source researched on 2026-05-04 from the official DDF API documentation at https://ddfapi-docs.realtor.ca/.
+Source researched on 2026-05-04 from the official DDF API documentation at https://ddfapi-docs.realtor.ca/. Implementation status updated against this repository on 2026-05-16.
 
-This directory is a handoff pack for building the Effect TypeScript SDK in this repo. The SDK should wrap the official DDF Web API without inventing resources that the OpenAPI definition does not expose.
+This directory documents the implemented Effect TypeScript SDK in this repo and the official DDF Web API surface it wraps. It is no longer only a build handoff pack: use `09-current-implementation.md` for the current package/runtime/database status and the other documents for API-specific notes.
 
 ## Start Here
 
-Core resources, in the order requested. Build broad coverage for the exposed API; do not half-build the SDK surface if the docs/OpenAPI clearly expose a method.
+Core implemented resources:
 
-1. Property listings - primary listing records at `/odata/v1/Property`.
-2. Rooms - embedded child objects on `Property.Rooms`; no standalone room endpoint was exposed in the OpenAPI paths.
-3. Media - embedded child objects on `Property.Media`, `Member.Media`, and `Office.Media`; no standalone media endpoint was exposed in the OpenAPI paths.
-4. Members - agent/broker records at `/odata/v1/Member`.
-5. Open houses - event records at `/odata/v1/OpenHouse`.
-6. Destination - exists in the API at `/odata/v1/Destination`; use it for data feed context, especially technology-provider flows.
-7. Office - exposed by metadata/OpenAPI and replication endpoints; include after the requested core resources rather than omitting it.
-8. Lead - exposed by the API for contact form submission; keep separate from replication, but implement when method coverage is being completed.
+1. Property listings - list/get, replication, destination replication, sync, master-list diff/prune, rooms/media normalization, and database persistence hooks.
+2. Rooms - embedded child objects on `Property.Rooms`; implemented as normalization helpers and database rows, not standalone HTTP endpoints.
+3. Media - embedded child objects on `Property.Media`, `Member.Media`, and `Office.Media`; implemented as normalization helpers and database rows, not standalone HTTP endpoints.
+4. Members - list/get, replication, destination replication, sync, master-list prune, media/social normalization, and database persistence hooks.
+5. Open houses - list/get and query-based sync, including listing/date scoping for database sync.
+6. Destination - list/get and database sync for feed context.
+7. Office - list/get, replication, destination replication, sync, master-list prune, media/social normalization, and database persistence hooks.
+8. Lead - implemented as non-replication contact form submission via `/v1/Lead/CreateLead`.
 
 ## Files
 
-- `00-sdk-wrap-map.md` - the SDK method surface Codex should implement.
+- `00-sdk-wrap-map.md` - the implemented SDK method surface and remaining boundaries.
 - `01-auth-and-client.md` - token, hosts, headers, client behavior.
 - `02-odata-querying.md` - supported OData query options and pagination rules.
 - `03-replication-sync.md` - how to do initial load, incremental sync, delete pruning, and the persistence boundary.
 - `04-implementation-standards.md` - required Effect implementation style and colocated test rules.
+- `09-current-implementation.md` - current implemented package, runtime, sync, database, telemetry, and test status.
 - `ddfapi-openapi.json` - raw embedded OpenAPI 3.0.4 spec from the docs page, included as an offline fallback if live documentation retrieval fails.
 - `openapi-path-inventory.md` - generated list of every path from the embedded OpenAPI model.
 - `model-field-inventory.md` - generated field checklist for core models.
@@ -33,7 +34,7 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 - `resources/04-members.md` - Member endpoint guide.
 - `resources/05-open-houses.md` - OpenHouse endpoint guide.
 - `resources/06-destination.md` - Destination endpoint guide.
-- `resources/07-office-later.md` - Office endpoint notes; despite the filename, Office is exposed and should be wrapped for thorough coverage.
+- `resources/07-office-later.md` - Office endpoint notes; filename is historical, and Office is now implemented.
 - `resources/08-leads.md` - Lead endpoint, which exists but is not part of replication.
 
 ## Important Findings
@@ -50,10 +51,10 @@ Core resources, in the order requested. Build broad coverage for the exposed API
 - Replication endpoints exist for Property, Member, and Office only.
 - Replication responses return identifiers plus `ModificationTimestamp`, not full records. Hydrate details by key from the main resource endpoint.
 - Destination exists and has list/get endpoints.
-- Office exists in OpenAPI and metadata and should be included for thorough SDK coverage after Property, Rooms, Media, Members, OpenHouse, and Destination.
-- Lead creation exists at `/v1/Lead/CreateLead`, but it is not part of data replication.
-- The core SDK should not require a database for read/list/get methods. For persistence examples/adapters, the intended app-side target is Drizzle ORM, with Effect SQL integration where it fits cleanly.
-- Expose sync results and persistence hooks/sinks so the caller can save data with the Drizzle/Effect SQL adapter, or ignore persistence and manage storage itself.
+- Office exists in OpenAPI and metadata and is implemented with list/get/replication/sync/database support.
+- Lead creation exists at `/v1/Lead/CreateLead`, is implemented, and is intentionally not part of data replication.
+- The core SDK does not require a database for read/list/get methods. A Drizzle/PostgreSQL adapter is implemented separately and exported through `./db`.
+- Sync results and persistence hooks/sinks are implemented so callers can use the built-in Drizzle adapter or manage storage themselves.
 - Use a complete OData encoder plus raw `filter` strings and lightweight helpers. Do not replace the generic filter surface with hundreds of brittle one-off search methods.
 - Local reference repos may exist for Codex to inspect, but do not copy or commit reference repos into this package.
 
@@ -68,7 +69,7 @@ import {
   listDestinations,
   listProperties,
   makeDdfLayer,
-} from "crea-ddf-effect-sdk";
+} from "@warya/crea-ddf";
 
 const appConfig = Config.all({
   clientId: Config.redacted("CREA_DDF_CLIENT_ID"),
@@ -99,4 +100,4 @@ const program = Effect.gen(function* () {
 await Effect.runPromise(program);
 ```
 
-Persistence remains an application boundary: replication/sync helpers expose records, errors, watermarks, and optional sink hooks, but the SDK does not own a database.
+Persistence remains optional for the core client: replication/sync helpers expose records, errors, watermarks, and sink hooks. The package also includes an opt-in Drizzle/PostgreSQL adapter for applications that want a ready-made persistence boundary.

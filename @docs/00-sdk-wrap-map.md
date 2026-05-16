@@ -1,187 +1,359 @@
 # SDK Wrap Map
 
-This is the method surface Codex should build. Prefer a complete generic OData core with resource-specific methods on top, using the Effect schemas already started under `src/schema`.
+This is the current implemented SDK surface. The package is an Effect-native helper library for the CREA DDF API, with an optional Drizzle/PostgreSQL adapter for applications that want ready-made persistence.
 
-Do not half-bake the method surface. If the local docs/OpenAPI expose a resource or method, implement it unless live API behavior proves it is unavailable or the task explicitly excludes it.
+## Boundaries
+
+The core SDK owns:
+
+- Auth token acquisition, caching, forced refresh, and proactive renewal.
+- HTTP request construction, bearer-token attachment, retries, status/error mapping, JSON parsing, and schema decoding.
+- OData query encoding and validation.
+- Pagination through `@odata.nextLink`.
+- Resource list/get wrappers.
+- Replication identifier reads for Property, Member, and Office.
+- Hydrating changed records by key.
+- Effect Schema validation, including select-aware partial decoders.
+- Normalizing embedded records like `Rooms`, `Media`, and social media.
+- Structured sync results, per-record errors, metrics, and optional watermarks.
+- Optional persistence sink interfaces.
+
+The optional database adapter owns:
+
+- Drizzle/PostgreSQL schema and migrations.
+- Row mapping from decoded CREA DDF records.
+- Sink implementations for sync persistence.
+- Database-backed watermark storage.
+- Local read/query helpers through `DdfDbClient`.
+- One-shot database sync orchestration.
+
+The caller still owns:
+
+- Scheduling sync runs.
+- Choosing whether to use the built-in database adapter or custom sinks.
+- App-specific indexing/search denormalization beyond the provided schema.
+- Product-specific delete/prune policy, unless using the explicit prune helpers.
+- UI/application handling of lead creation, analytics events, and local reads.
 
 ## Client Core
 
-Implement these before resource wrappers:
+Implemented services/functions:
 
-- `createDdfClient(config)` - accepts `clientId`, `clientSecret`, optional `baseUrl`, optional `identityUrl`, logging, retry policy, and clock.
-- `getAccessToken()` - POST client-credentials form data to `https://identity.crea.ca/connect/token`.
-- `withBearerToken(request)` - attaches `Authorization: Bearer <access_token>`.
-- `requestJson<T>(path, options)` - handles JSON parsing, API errors, and schema decoding.
-- `listOData<T>(resourcePath, query)` - one-page list request.
-- `paginateOData<T>(firstPathOrQuery)` - follows `@odata.nextLink`.
-- `getOData<T>(resourcePath, key, query)` - single record lookup.
-- `replicateIdentifiers<T>(replicationPath, query)` - reads identifier/watermark rows.
+- `makeDdfLayer(config)` - composes config, Effect fetch HTTP, auth, and DDF HTTP services.
+- `makeDdfLayerFromEnv` - reads env-backed config and returns the composed layer.
+- `DdfConfig` - Effect context service for `DdfClientConfig`.
+- `DdfAuth.getAccessToken(options?)` - cached OAuth client-credentials access token, with `forceRefresh` support.
+- `DdfHttp.requestJson<T>(path, init?, schema?)` - authenticated JSON request with retries, 401 refresh, status errors, JSON parsing, and optional schema decoding.
+- `DdfHttp.listOData<T>(path, query?, schema?)` - one-page list request.
+- `DdfHttp.getOData<T>(path, key, query?, schema?)` - single record lookup using OData key syntax.
+- `DdfHttp.replicateIdentifiers<T>(path, query?, schema?)` - one-page replication identifier request.
+- `DdfHttp.paginateOData(first)` - follows `@odata.nextLink` and concatenates `value` arrays.
 
-## SDK Boundary
+Implemented config:
 
-This package should be a helper library, not an app, database schema owner, or scheduler.
-
-The SDK should own:
-
-- Auth token acquisition, caching, and proactive renewal.
-- HTTP request construction and retry behavior.
-- OData query encoding.
-- Pagination through `@odata.nextLink`.
-- Replication identifier reads.
-- Hydrating changed records by key.
-- Effect Schema validation.
-- Normalizing embedded records like `Rooms` and `Media`.
-- Returning structured sync results.
-- Providing an optional persistence sink interface that app code can implement.
-
-The caller should own:
-
-- When sync runs, such as cron, queue, worker, or manual trigger.
-- The final database schema and migrations.
-- How records are queried, indexed, and joined later.
-- Watermark persistence location.
-- Delete/prune policy, unless it passes explicit hooks into the SDK.
-
-Persistence direction:
-
-- Keep read/list/get methods database-free.
-- Make Drizzle ORM the intended persistence adapter target.
-- Use Effect SQL integration/driver support where it fits the Drizzle adapter cleanly.
-- Do not vendor or commit large reference repositories into this SDK. Local references can be inspected during implementation, but this package should stay focused.
+```ts
+interface DdfClientConfig {
+  readonly clientId: string;
+  readonly clientSecret: string | Redacted.Redacted<string>;
+  readonly baseUrl?: string;
+  readonly identityUrl?: string;
+  readonly analyticsUrl?: string;
+  readonly retryPolicy?: DdfRetryPolicy;
+  readonly tokenExpiryBuffer?: Duration.Input;
+  readonly logger?: DdfLogger;
+}
+```
 
 ## Shared Query Types
 
-Use one shared query model for list endpoints:
+List endpoints use:
 
 ```ts
-type ODataListQuery<Field extends string = string> = {
-  select?: Field[];
-  count?: boolean;
-  filter?: string;
-  top?: number;
-  skip?: number;
-  orderby?: string | string[];
-};
+interface ODataListQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+  readonly filter?: string;
+  readonly count?: boolean;
+  readonly top?: number;
+  readonly skip?: number;
+  readonly orderby?: string | ReadonlyArray<string>;
+}
 ```
 
-Use a narrower query for single record lookups:
+Single record lookups use:
 
 ```ts
-type ODataGetQuery<Field extends string = string> = {
-  select?: Field[];
-};
+interface ODataGetQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+}
 ```
 
-Replication supports no `$top` or `$skip` in the published OpenAPI parameters, so keep it separate:
+Replication uses:
 
 ```ts
-type ReplicationQuery<Field extends string = string> = {
-  destinationId?: number;
-  select?: Field[];
-  count?: boolean;
-  filter?: string;
-  orderby?: string | string[];
-};
+interface ReplicationQuery<Field extends string = string> {
+  readonly select?: ReadonlyArray<Field>;
+  readonly count?: boolean;
+  readonly filter?: string;
+  readonly orderby?: string | ReadonlyArray<string>;
+}
 ```
 
-Avoid replacing the generic OData surface with hundreds of brittle one-off search methods. Build the generic query surface thoroughly, then add helpers for common predicates.
+The OData encoder intentionally keeps a raw `filter` string escape hatch and small composable helpers instead of replacing DDF/OData with hundreds of brittle one-off searches.
 
-## Completeness Target
+## OData Helpers
 
-Implement broad SDK coverage for the exposed DDF API:
+Implemented:
 
-- Auth and token lifecycle.
-- Generic OData list/get/pagination/query helpers.
-- Property list/get/replication/sync.
-- Member list/get/replication/sync.
-- Office list/get/replication/sync.
-- Destination list/get.
-- OpenHouse list/get/sync-by-query.
-- Lead creation as a separate non-replication module.
-- Embedded `Rooms` and `Media` normalization.
-- Analytics/log-event helper if the docs and env config are clear enough.
+- `encodeODataQuery(query?)`
+- `keyLiteral(key)`
+- `filters.eq(field, value)`
+- `filters.ne(field, value)`
+- `filters.gt(field, value)`
+- `filters.lt(field, value)`
+- `filters.ge(field, value)`
+- `filters.le(field, value)`
+- `filters.in(field, values)`
+- `filters.has(field, value)`
+- `filters.modifiedAfter(field, dateOrString)`
+- `filters.not(clause)`
+- `filters.any(collection, variable, clause)`
+- `filters.and(...clauses)`
+- `filters.or(...clauses)`
 
-Prefer a complete, well-factored implementation over a tiny MVP. If something is blocked by unclear docs or live API behavior, leave a typed placeholder or explicit TODO with the reason.
+Validation:
 
-## Property Listings
+- `$top` must be an integer from `0` through `100`.
+- `$skip` must be a non-negative integer.
+- Unsupported/invalid query shapes fail with tagged OData errors.
 
-Wrap first:
+## Resource Coverage
 
-- `listProperties(query?: ODataListQuery<PropertyField>)`
-- `getProperty(propertyKey: string, query?: ODataGetQuery<PropertyField>)`
-- `replicateProperties(query?: ReplicationQuery<PropertyIdentifierField>)`
-- `replicatePropertiesForDestination(destinationId: number, query?: ReplicationQuery<PropertyIdentifierField>)`
-- `syncProperties(options)` - orchestration helper that uses replication identifiers, hydrates changed listings by `ListingKey`, validates/normalizes records, calls optional persistence hooks, and returns sync results.
+### Property Listings
+
+Implemented:
+
+- `listProperties(query?)`
+- `getProperty(propertyKey, query?)`
+- `replicateProperties(query?)`
+- `replicatePropertiesForDestination(destinationId, query?)`
+- `syncProperties(options?)`
+- `getPropertyMasterList(query?)`
+- `diffLocalKeysAgainstMasterList(localKeys, masterKeys)`
+- `pruneMissingProperties(localKeys, sink, query?)`
 
 Notes:
 
-- The single route path parameter is called `PropertyKey` in OpenAPI, but the model primary key field is `ListingKey`.
-- Use `ListingKey` as the local database identity unless live payloads prove otherwise.
-- Properties embed `Rooms` and `Media`; the SDK should expose helpers to normalize those children.
-- Do not require a database adapter for read/list/get methods.
-- `syncProperties` may accept optional hooks such as `onProperty`, `onRoom`, `onMedia`, and `onWatermark`, but it should also work in a pure mode that only returns records/results.
+- The API route parameter is `PropertyKey`; local identity is `ListingKey`.
+- Properties embed `Rooms` and `Media`.
+- Property sync hydrates by `ListingKey`, normalizes a `PropertyGraph`, calls optional sink hooks, records errors by stage, and returns counts plus `nextWatermark`.
+- Default list order is `ModificationTimestamp desc,ListingKey asc`.
+- Default sync order is `ModificationTimestamp asc,ListingKey asc`.
 
-## Rooms
+### Rooms
 
-No standalone API path was exposed. Wrap as embedded helpers:
+Rooms remain embedded under Property. Implemented helpers:
 
-- `getPropertyRooms(property: Property): PropertyRoom[]`
-- `normalizePropertyRooms(property: Property)` - emits rows keyed by `RoomKey`, plus `ListingKey`.
-- `upsertRoomsForProperty(property)` - optional persistence adapter hook only if the caller provides one.
+- `getPropertyRooms(property)`
+- `normalizePropertyRooms(property)`
+- `normalizePropertyGraph(property)`
 
-## Media
+The database adapter persists normalized room rows. There is intentionally no standalone HTTP room endpoint.
 
-No standalone `/Media` path was exposed in the official OpenAPI path list. Wrap as embedded helpers:
+### Media
 
-- `getPropertyMedia(property: Property): Media[]`
-- `getMemberMedia(member: Member): Media[]`
-- `getOfficeMedia(office: Office): Media[]` later
-- `normalizeMedia(parentResource, parentKey, media)` - emit rows keyed by `MediaKey`.
+Media remains embedded under Property, Member, and Office. Implemented helpers:
 
-## Members
+- `getPropertyMedia(property)`
+- `getMemberMedia(member)`
+- `getOfficeMedia(office)`
+- `normalizeMedia(parentResource, parentKey, media)`
+- `normalizePropertyGraph(property)`
 
-Wrap with the same list/get/replicate pattern:
+The database adapter persists normalized media rows. There is intentionally no standalone HTTP media endpoint.
 
-- `listMembers(query?: ODataListQuery<MemberField>)`
-- `getMember(memberKey: string, query?: ODataGetQuery<MemberField>)`
-- `replicateMembers(query?: ReplicationQuery<MemberIdentifierField>)`
-- `replicateMembersForDestination(destinationId: number, query?: ReplicationQuery<MemberIdentifierField>)`
-- `syncMembers(options)`
+### Members
 
-Members embed `Media`, so reuse media normalization.
+Implemented:
 
-## Open Houses
+- `listMembers(query?)`
+- `getMember(memberKey, query?)`
+- `replicateMembers(query?)`
+- `replicateMembersForDestination(destinationId, query?)`
+- `syncMembers(options?)`
+- `getMemberMasterList(query?)`
+- `pruneMissingMembers(localKeys, sink, query?)`
 
-OpenHouse has list/get endpoints but no replication endpoint in the published OpenAPI paths:
+Notes:
 
-- `listOpenHouses(query?: ODataListQuery<OpenHouseField>)`
-- `getOpenHouse(openHouseKey: string, query?: ODataGetQuery<OpenHouseField>)`
-- `syncOpenHouses(options)` - use list pagination with `$filter` and `$orderby` if a scheduled refresh is needed.
+- Identity is `MemberKey`.
+- Member sync normalizes embedded `Media` and `MemberSocialMedia`.
+- Sync supports optional include filtering and persistence hooks.
+- Default list order is `ModificationTimestamp desc,MemberKey asc`.
+- Default sync order is `ModificationTimestamp asc,MemberKey asc`.
 
-## Destination
+### Offices
 
-Destination exists:
+Implemented:
 
-- `listDestinations(query?: ODataListQuery<DestinationField>)`
-- `getDestination(destinationId: number, query?: ODataGetQuery<DestinationField>)`
+- `listOffices(query?)`
+- `getOffice(officeKey, query?)`
+- `replicateOffices(query?)`
+- `replicateOfficesForDestination(destinationId, query?)`
+- `syncOffices(options?)`
+- `getOfficeMasterList(query?)`
+- `pruneMissingOffices(localKeys, sink, query?)`
 
-Use this for technology-provider accounts and destination-specific replication.
+Notes:
 
-## Office
+- Identity is `OfficeKey`.
+- Office sync normalizes embedded `Media` and `OfficeSocialMedia`.
+- Sync supports optional include filtering and persistence hooks.
+- Default list order is `ModificationTimestamp desc,OfficeKey asc`.
+- Default sync order is `ModificationTimestamp asc,OfficeKey asc`.
 
-Office is fully exposed in OpenAPI. Despite this heading/filename saying "later", implement the wrapper for thorough coverage once Property, Rooms, Media, Members, OpenHouse, and Destination are in place:
+### Open Houses
 
-- `listOffices(query?: ODataListQuery<OfficeField>)`
-- `getOffice(officeKey: string, query?: ODataGetQuery<OfficeField>)`
-- `replicateOffices(query?: ReplicationQuery<OfficeIdentifierField>)`
-- `replicateOfficesForDestination(destinationId: number, query?: ReplicationQuery<OfficeIdentifierField>)`
+Implemented:
 
-Do not omit Office from the SDK if time is available; it has list/get and replication methods.
+- `listOpenHouses(query?)`
+- `getOpenHouse(openHouseKey, query?)`
+- `syncOpenHouses(options?)`
 
-## Lead
+Notes:
 
-Lead exists but is not a replication resource:
+- Identity is `OpenHouseKey`.
+- There is no OpenHouse replication endpoint in the official path list; sync is query/list based.
+- Sync supports explicit listing scopes, date windows, concurrency, and sink hooks.
+- Default list order is `OpenHouseDate desc,OpenHouseKey asc`.
 
-- `createLead(input: LeadModel, options?: { suppressEmail?: boolean })`
+### Destinations
 
-Keep it separate from sync modules, but implement it for method coverage.
+Implemented:
+
+- `listDestinations(query?)`
+- `getDestination(destinationId, query?)`
+- `syncDestinations(query?, sink?)`
+
+Notes:
+
+- Identity is `DestinationId`.
+- Destination sync is part of the database sync flow.
+- Default list order is `DestinationId asc`.
+
+### Leads
+
+Implemented:
+
+- `createLead(input, options?: { suppressEmail?: boolean })`
+- `LeadResponseSchema`
+- `DdfLeadInputEncodeError`
+
+Notes:
+
+- Lead creation posts to `/v1/Lead/CreateLead`.
+- Lead input is validated/encoded before posting.
+- Lead creation is not part of replication or database sync.
+
+## Select-Aware Schemas
+
+Resource list/get wrappers are select-aware:
+
+- With no `select`, full resource schemas decode the response.
+- With `select`, the wrapper uses partial entity/list schemas so the API can omit unselected fields.
+- TypeScript overloads narrow return types for literal `select` arrays.
+
+This applies to Property, Member, Office, OpenHouse, and Destination resource wrappers.
+
+## Sync Options And Sinks
+
+Implemented common options:
+
+```ts
+interface BaseSyncOptions {
+  readonly mode?: "initial" | "incremental";
+  readonly since?: string;
+  readonly destinationId?: number;
+  readonly concurrency?: number;
+  readonly query?: ReplicationQuery;
+}
+```
+
+Implemented sink interfaces:
+
+- `PropertySyncSink`
+- `MemberSyncSink`
+- `OfficeSyncSink`
+- `OpenHouseSyncSink`
+
+Implemented result shape:
+
+```ts
+interface SyncResult<Identifier = unknown> {
+  readonly resource: SyncResource;
+  readonly identifiers: ReadonlyArray<Identifier>;
+  readonly errors: ReadonlyArray<SyncRecordError>;
+  readonly counts: SyncCounts;
+  readonly nextWatermark: string | null;
+}
+```
+
+Sync functions can run without sinks for pure SDK usage, or with sinks for persistence. A `DdfWatermarkStore` service can be provided to persist watermarks outside the built-in database adapter.
+
+## Database Adapter Surface
+
+Exported from the root package and the `./db` subpath:
+
+- `DdfDatabase`
+- `DdfDatabaseConfig`
+- `ddfDatabaseConfigFromEnv`
+- Drizzle tables and migrations under `src/db/schema.ts` and `src/db/migrations`
+- `runDdfDatabaseMigrations`
+- `makeDdfDatabaseSyncSink`
+- `loadDatabaseWatermark`
+- `saveDatabaseWatermark`
+- `makeDatabaseWatermarkStore`
+- `DdfDbClient`
+- Row mapping helpers for properties, rooms, media, members, social media, offices, destinations, and open houses
+- `syncDdfDatabaseOnce(options?)`
+- `databaseSyncOptionsFromWatermarks(watermarks, options?)`
+- `parseChosenAorKeys(value)` and `chosenAorKeysFromEnv()`
+
+The adapter currently models properties, rooms, media, members, social media, offices, destinations, open houses, sync runs, sync errors, and scoped watermarks.
+
+## Analytics, Metrics, And Telemetry
+
+Implemented analytics helpers:
+
+- `buildAnalyticsLogEventUrl(input, options?)`
+- `logAnalyticsEvent(input, options?)`
+- `DEFAULT_CREA_ANALYTICS_URL`
+
+Implemented metrics:
+
+- token request, refresh, cache hit, and cache miss counters
+- API request, retry, and failure counters
+- request duration timer
+- sync hydrated, persisted, skipped, and failed counters
+- watermark load and save counters
+
+Implemented telemetry helpers:
+
+- `makeDdfOtlpTelemetryLayer(options)`
+- `captureDdfFileTelemetry(effect, options)`
+
+## Verification Commands
+
+Use these from the repo root:
+
+```sh
+pnpm run typecheck
+pnpm test
+pnpm run build
+pnpm run check:metadata
+```
+
+Live API checks remain opt-in:
+
+```sh
+pnpm run test:live
+```
