@@ -8,7 +8,7 @@ This document reflects the SDK as implemented in `src/` and complements the offi
 - Public ESM entrypoint: `.` from `dist/index.js` with types at `dist/index.d.ts`.
 - Public database subpath: `./db` from `dist/db/index.js` with types at `dist/db/index.d.ts`.
 - Published files include `dist`, `@docs`, and `LICENSE.md`.
-- Runtime requirements are Node `>=20.19.0` and Bun `>=1.3.0` for Bun-oriented scripts.
+- Runtime requirements are Node `>=24.14.0` and Bun `>=1.3.0` for Bun-oriented scripts.
 - Default verification is `pnpm test`, which runs `pnpm run typecheck` and `vitest run`.
 
 ## Runtime Layers And Configuration
