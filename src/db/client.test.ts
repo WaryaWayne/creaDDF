@@ -1,4 +1,5 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import { DateTime, Effect, Exit } from "effect";
 import {
   DdfDbClientValidationError,
@@ -11,7 +12,7 @@ import {
   projectionPlan,
   propertyFieldPresets,
   validateListOptions,
-} from "./client";
+} from "#/db/client";
 
 describe("database read client helpers", () => {
   it("keeps website field presets free of raw payloads by default", () => {

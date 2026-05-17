@@ -1,6 +1,7 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe } from "vitest";
 import { Effect, Exit, Schema } from "effect";
-import { ODataListEnvelopeSchema } from "./odata";
+import { ODataListEnvelopeSchema } from "#/schema/odata";
 
 const TestEnvelope = ODataListEnvelopeSchema(
   Schema.Struct({ id: Schema.String }),

@@ -1,12 +1,13 @@
-import { assert, describe, expect, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, expect } from "vitest";
 import { Cause, DateTime, Effect, Exit, Layer, Schema } from "effect";
-import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "./client";
+import { DdfAuth, DdfConfig, DdfHttp, encodeODataQuery } from "#/client";
 import type {
   DdfClientConfig,
   DdfHttpApi,
   DdfHttpError,
   DdfRequestOptions,
-} from "./client";
+} from "#/client";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -28,17 +29,17 @@ import {
   replicateOfficesForDestination,
   replicateProperties,
   replicatePropertiesForDestination,
-} from "./resources";
-import { DestinationSchema } from "./schema/destinationSchema";
-import { MemberSchema } from "./schema/memberSchema";
-import { OfficeSchema } from "./schema/officeSchema";
-import { PropertyListingSchema } from "./schema/propertyListingsSchema";
+} from "#/resources";
+import { DestinationSchema } from "#/schema/destinationSchema";
+import { MemberSchema } from "#/schema/memberSchema";
+import { OfficeSchema } from "#/schema/officeSchema";
+import { PropertyListingSchema } from "#/schema/propertyListingsSchema";
 import type {
   LeadInput,
   ODataGetQuery,
   ODataListQuery,
   ReplicationQuery,
-} from "./types";
+} from "#/types";
 
 const keyLiteral = (key: string | number) =>
   typeof key === "number" ? String(key) : `'${key.replaceAll("'", "''")}'`;

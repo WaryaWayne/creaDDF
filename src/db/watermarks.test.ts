@@ -1,7 +1,7 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
-import { ddfWatermarks } from "./schema";
-import { watermarkScopeHash } from "./watermarks";
+import { ddfWatermarks } from "#/db/schema";
+import { watermarkScopeHash } from "#/db/watermarks";
 
 describe("database watermark scope", () => {
   it("hashes AOR keys in a stable order and separates destination scopes", () => {

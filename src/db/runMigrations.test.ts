@@ -1,8 +1,8 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import {
   migrationFilesWithIds,
   splitSqlStatements,
-} from "./runMigrations";
+} from "#/db/runMigrations";
 
 describe("database migrations runner", () => {
   it("splits drizzle SQL statement breakpoints without executing a database", () => {

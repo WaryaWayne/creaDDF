@@ -4,11 +4,11 @@ import type {
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
-} from "../auth/errors";
+} from "#/client/auth/errors";
 import type {
   DdfInvalidODataQueryError,
   DdfUnsupportedODataParameterError,
-} from "./odata";
+} from "#/client/http/odata";
 
 type DdfSchemaDecodeIssue = ReturnType<
   ReturnType<typeof SchemaIssue.makeFormatterStandardSchemaV1>

@@ -1,7 +1,7 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import { Cause, DateTime } from "effect";
-import type { MediaRecord, MemberRecord, OfficeRecord, OpenHouseRecord, PropertyRecord, RoomRecord } from "../sync";
-import type { Destination } from "../schema/destinationSchema";
+import type { MediaRecord, MemberRecord, OfficeRecord, OpenHouseRecord, PropertyRecord, RoomRecord } from "#/sync";
+import type { Destination } from "#/schema/destinationSchema";
 import {
   destinationRowFromRecord,
   mediaRowFromRecord,
@@ -11,7 +11,7 @@ import {
   propertyRowFromRecord,
   roomRowFromRecord,
   serializeSyncRecordError,
-} from "./sink";
+} from "#/db/sink";
 
 const asPropertyRecord = (record: object): PropertyRecord => record as PropertyRecord;
 const asRoomRecord = (record: object): RoomRecord => record as RoomRecord;

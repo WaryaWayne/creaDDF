@@ -1,15 +1,16 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import { Data, Effect, Exit, Schema } from "effect";
 import {
   DdfApiHttpError,
   DdfApiResponseSchemaDecodeError,
   DdfHttp,
-} from "./client";
+} from "#/client";
 import type {
   DdfHttpApi,
   DdfRequestOptions,
   DdfResponseSchema,
-} from "./client";
+} from "#/client";
 import {
   diffLocalKeysAgainstMasterList,
   getMemberMasterList,
@@ -22,9 +23,9 @@ import {
   syncOffices,
   syncOpenHouses,
   syncProperties,
-} from "./sync";
-import type { OpenHouseListingScope } from "./sync";
-import { OpenHouseSchema } from "./schema/openHouse";
+} from "#/sync";
+import type { OpenHouseListingScope } from "#/sync";
+import { OpenHouseSchema } from "#/schema/openHouse";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
 

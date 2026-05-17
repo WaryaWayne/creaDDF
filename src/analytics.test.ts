@@ -1,11 +1,12 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, it } from "vitest";
 import { Effect, Layer } from "effect";
 import {
   buildAnalyticsLogEventUrl,
   DEFAULT_CREA_ANALYTICS_URL,
   logAnalyticsEvent,
-} from "./analytics";
-import { DdfConfig } from "./client";
+} from "#/analytics";
+import { DdfConfig } from "#/client";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 

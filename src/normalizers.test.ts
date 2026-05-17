@@ -1,16 +1,17 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe } from "vitest";
 import { Cause, DateTime, Effect, Exit, Schema } from "effect";
 import {
   getPropertyMedia,
   normalizeMedia,
   normalizePropertyGraph,
   normalizePropertyRooms,
-} from "./normalizers";
-import { MediaSchema, type MediaType } from "./schema/mediaSchema";
-import { MemberSchema } from "./schema/memberSchema";
-import { OfficeSchema } from "./schema/officeSchema";
-import { PropertyListingSchema } from "./schema/propertyListingsSchema";
-import { RoomsSchema } from "./schema/roomsSchema";
+} from "#/normalizers";
+import { MediaSchema, type MediaType } from "#/schema/mediaSchema";
+import { MemberSchema } from "#/schema/memberSchema";
+import { OfficeSchema } from "#/schema/officeSchema";
+import { PropertyListingSchema } from "#/schema/propertyListingsSchema";
+import { RoomsSchema } from "#/schema/roomsSchema";
 
 const media = (
   overrides: Partial<MediaType[number]> = {},

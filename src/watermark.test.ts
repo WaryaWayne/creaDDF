@@ -1,7 +1,8 @@
-import { assert, describe, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe } from "vitest";
 import { Effect, Metric } from "effect";
-import { DdfWatermarkStore } from "./watermark";
-import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "./metrics";
+import { DdfWatermarkStore } from "#/watermark";
+import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "#/metrics";
 
 describe("watermark persistence", () => {
   it.effect(

@@ -1,4 +1,5 @@
-import { assert, describe, expect, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, expect, it } from "vitest";
 import { ConfigProvider, DateTime, Effect, Exit, Layer } from "effect";
 import {
   DdfAuth,
@@ -10,8 +11,8 @@ import {
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
-} from "./client";
-import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+} from "#/client";
+import type { DdfClientConfig, DdfHttpApi } from "#/client";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";

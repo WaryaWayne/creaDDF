@@ -1,34 +1,34 @@
 import { Data, Effect, Schema } from "effect";
-import { DdfHttp, encodeODataQuery } from "./client";
-import type { DdfHttpError, DdfResponseSchema } from "./client";
-import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema";
+import { DdfHttp, encodeODataQuery } from "#/client";
+import type { DdfHttpError, DdfResponseSchema } from "#/client";
+import { MemberResponseSchema, MemberSchema } from "#/schema/memberSchema";
 import {
   DestinationResponseSchema,
   DestinationSchema,
-} from "./schema/destinationSchema";
-import { OfficeResponseSchema, OfficeSchema } from "./schema/officeSchema";
-import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse";
+} from "#/schema/destinationSchema";
+import { OfficeResponseSchema, OfficeSchema } from "#/schema/officeSchema";
+import { OpenHouseResponseSchema, OpenHouseSchema } from "#/schema/openHouse";
 import {
   MultiplePropertyListingResponseSchema,
   PropertyListingSchema,
   SinglePropertyListingResponseSchema,
-} from "./schema/propertyListingsSchema";
+} from "#/schema/propertyListingsSchema";
 import {
   MemberReplicationIdentifierResponseSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
   type ODataListEnvelope,
-} from "./schema/odata";
+} from "#/schema/odata";
 import {
   entitySchemaForSelect,
   listSchemaForSelect,
-} from "./schema/select";
+} from "#/schema/select";
 import type {
   LeadInput,
   ODataGetQuery,
   ODataListQuery,
   ReplicationQuery,
-} from "./types";
+} from "#/types";
 
 const replicationPath = (
   resource: "Property" | "Member" | "Office",
