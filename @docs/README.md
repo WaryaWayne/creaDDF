@@ -54,6 +54,7 @@ Core implemented resources:
 - Office exists in OpenAPI and metadata and is implemented with list/get/replication/sync/database support.
 - Lead creation exists at `/v1/Lead/CreateLead`, is implemented, and is intentionally not part of data replication.
 - The core SDK does not require a database for read/list/get methods. A Drizzle/PostgreSQL adapter is implemented separately and exported through `./db`.
+- Runtime support starts at Node `24.14.0` because the published ESM output uses package-internal `#/` imports. Bun `1.3.0` or newer is required for Bun-oriented scripts.
 - Sync results and persistence hooks/sinks are implemented so callers can use the built-in Drizzle adapter or manage storage themselves.
 - Use a complete OData encoder plus raw `filter` strings and lightweight helpers. Do not replace the generic filter surface with hundreds of brittle one-off search methods.
 - Local reference repos may exist for Codex to inspect, but do not copy or commit reference repos into this package.

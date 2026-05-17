@@ -13,7 +13,7 @@ You can still use the API client directly for live DDF reads, but the normal app
 ## Requirements
 
 - Bun `1.3.0` or newer
-- Node.js `20.19.0` or newer
+- Node.js `24.14.0` or newer
 - PostgreSQL
 - CREA DDF API credentials
 
