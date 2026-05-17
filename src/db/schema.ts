@@ -12,10 +12,10 @@ import {
   time,
   timestamp,
 } from "drizzle-orm/pg-core";
-import type { Destination } from "../schema/destinationSchema";
-import type { MediaType } from "../schema/mediaSchema";
-import type { RoomsType } from "../schema/roomsSchema";
-import type { SyncDdfDatabaseOnceSummary } from "../syncDatabase";
+import type { Destination } from "#/schema/destinationSchema";
+import type { MediaType } from "#/schema/mediaSchema";
+import type { RoomsType } from "#/schema/roomsSchema";
+import type { SyncDdfDatabaseOnceSummary } from "#/syncDatabase";
 import type {
   MemberRecord,
   OfficeRecord,
@@ -23,7 +23,7 @@ import type {
   PropertyRecord,
   SyncResource,
   SyncStage,
-} from "../sync";
+} from "#/sync";
 
 
 export interface DdfSerializedCause {

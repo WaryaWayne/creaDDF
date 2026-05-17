@@ -2,8 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/Effect-TS/tsgo/refs/heads/main/schema.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
     "rootDir": "src",
@@ -96,12 +96,14 @@
           "unnecessaryFailYieldableError": "warning",
           "unnecessaryPipe": "warning",
           "unnecessaryPipeChain": "warning",
-          "unsupportedServiceAccessors": "warning"
-        }
-      }
+          "unsupportedServiceAccessors": "warning",
+        },
+      },
     ],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "#/*": ["./src/*"],
+    },
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules"],
 }

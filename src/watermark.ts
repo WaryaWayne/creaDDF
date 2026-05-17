@@ -1,7 +1,7 @@
 import { Context, Data, Effect, Layer, Metric } from "effect";
 import * as KeyValueStore from "effect/unstable/persistence/KeyValueStore";
-import type { SyncResource } from "./sync";
-import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "./metrics";
+import type { SyncResource } from "#/sync";
+import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "#/metrics";
 
 export type WatermarkResource = SyncResource;
 

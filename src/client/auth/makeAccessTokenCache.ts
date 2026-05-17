@@ -1,5 +1,5 @@
 import { Cache, Duration } from "effect";
-import { requestNewAccessToken } from "./requestNewAccessToken";
+import { requestNewAccessToken } from "#/client/auth/requestNewAccessToken";
 
 export const makeAccessTokenCache = Cache.makeWith(
   (_key: void) => requestNewAccessToken(),

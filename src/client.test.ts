@@ -1,4 +1,5 @@
-import { assert, describe, expect, it } from "@effect/vitest";
+import { effect as itEffect } from "@effect/vitest";
+import { assert, describe, expect, it } from "vitest";
 import { ConfigProvider, DateTime, Effect, Exit, Layer } from "effect";
 import {
   DdfAuth,
@@ -10,8 +11,8 @@ import {
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
-} from "./client";
-import type { DdfClientConfig, DdfHttpApi, DdfRequestOptions } from "./client";
+} from "#/client";
+import type { DdfClientConfig, DdfHttpApi } from "#/client";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -133,7 +134,7 @@ describe("client", () => {
     );
   });
 
-  it.effect("keeps documented replication query options on direct HTTP calls", () =>
+  itEffect("keeps documented replication query options on direct HTTP calls", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -162,7 +163,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect("loads analyticsUrl from CREA_ANALYTICS_URL for env layers", () =>
+  itEffect("loads analyticsUrl from CREA_ANALYTICS_URL for env layers", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({
         CREA_DDF_CLIENT_ID: "env-client-id",
@@ -235,7 +236,7 @@ describe("client", () => {
     );
   });
 
-  it.effect("sends the expected token body and decodes JSON responses", () =>
+  itEffect("sends the expected token body and decodes JSON responses", () =>
     Effect.gen(function* () {
       const calls: Array<{ url: string; init: MockRequestOptions }> = [];
       const httpHandler = httpHandlerFrom((input, init) => {
@@ -283,7 +284,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect("caches a valid token across API requests", () =>
+  itEffect("caches a valid token across API requests", () =>
     Effect.gen(function* () {
       let tokenCalls = 0;
       let apiCalls = 0;
@@ -309,7 +310,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "fails token requests before caching non-ok or malformed responses",
     () =>
       Effect.gen(function* () {
@@ -365,7 +366,7 @@ describe("client", () => {
       }),
   );
 
-  it.effect("adds JSON accept and authorization headers to API requests", () =>
+  itEffect("adds JSON accept and authorization headers to API requests", () =>
     Effect.gen(function* () {
       let apiHeaders: Headers | undefined;
       const httpHandler = httpHandlerFrom((input, init) => {
@@ -390,7 +391,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect("refreshes auth once after a 401 response", () =>
+  itEffect("refreshes auth once after a 401 response", () =>
     Effect.gen(function* () {
       let tokenCalls = 0;
       const apiAuthorizations: Array<string | null> = [];
@@ -419,7 +420,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "maps common HTTP statuses to typed API errors with response bodies",
     () =>
       Effect.gen(function* () {
@@ -456,7 +457,7 @@ describe("client", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "honors custom retry policy and emits retry logger calls without waiting",
     () =>
       Effect.gen(function* () {
@@ -507,7 +508,7 @@ describe("client", () => {
       }),
   );
 
-  it.effect("does not retry statuses omitted from a custom retry policy", () =>
+  itEffect("does not retry statuses omitted from a custom retry policy", () =>
     Effect.gen(function* () {
       let apiCalls = 0;
       const httpHandler = httpHandlerFrom((input) => {
@@ -540,7 +541,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect("retries bounded transient HTTP responses", () =>
+  itEffect("retries bounded transient HTTP responses", () =>
     Effect.gen(function* () {
       for (const status of [408, 500, 502, 503, 504]) {
         let tokenCalls = 0;
@@ -567,7 +568,7 @@ describe("client", () => {
     }),
   );
 
-  it.effect("does not retry non-transient HTTP responses", () =>
+  itEffect("does not retry non-transient HTTP responses", () =>
     Effect.gen(function* () {
       for (const status of [400, 404]) {
         let apiCalls = 0;

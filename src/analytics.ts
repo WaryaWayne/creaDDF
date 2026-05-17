@@ -1,6 +1,6 @@
-import { Config, Data, Effect } from "effect";
+import { Data, Effect } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { DdfConfig } from "./client";
+import { DdfConfig } from "#/client";
 
 export const DEFAULT_CREA_ANALYTICS_URL =
   "https://analytics.crea.ca/LogEvents.svc/LogEvents";

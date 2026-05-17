@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { MediaSchema } from "./mediaSchema";
-import { ODataListEnvelopeSchema } from "./odata";
+import { MediaSchema } from "#/schema/mediaSchema";
+import { ODataListEnvelopeSchema } from "#/schema/odata";
 
 const SocialMediaTypeSchema = Schema.Literals([
   "Website",

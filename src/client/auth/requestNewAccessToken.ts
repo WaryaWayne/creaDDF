@@ -1,5 +1,5 @@
-import { DdfConfig } from "../config/Service";
-import { ddfTokenRequestCount } from "../../metrics";
+import { DdfConfig } from "#/client/config/Service";
+import { ddfTokenRequestCount } from "#/metrics";
 import { Duration, Effect, Metric, Redacted, Schema } from "effect";
 import { HttpBody, HttpClient, UrlParams } from "effect/unstable/http";
 import {
@@ -7,7 +7,7 @@ import {
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
-} from "./errors";
+} from "#/client/auth/errors";
 
 const TokenResponseSchema = Schema.Struct({
   access_token: Schema.String,
