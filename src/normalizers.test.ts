@@ -30,7 +30,7 @@ const media = (
 });
 
 describe("normalizers", () => {
-  it.effect(
+  itEffect(
     "normalizes room listing keys without overwriting existing values",
     () =>
       Effect.gen(function* () {
@@ -49,7 +49,7 @@ describe("normalizers", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "normalizes property graphs into property, room, and media groups",
     () =>
       Effect.gen(function* () {
@@ -72,7 +72,7 @@ describe("normalizers", () => {
       }),
   );
 
-  it.effect("keeps already-decoded property media collections", () =>
+  itEffect("keeps already-decoded property media collections", () =>
     Effect.gen(function* () {
       const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
       const decodedMedia = yield* decodeMedia([
@@ -94,7 +94,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect("returns no embedded media when media fails schema decoding", () =>
+  itEffect("returns no embedded media when media fails schema decoding", () =>
     Effect.sync(() => {
       const decoded = getPropertyMedia({
         Media: [media({ MediaKey: "bad", ResourceName: "Listing" as never })],
@@ -104,7 +104,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "normalizes media parent values without overwriting existing values",
     () =>
       Effect.sync(() => {
@@ -134,7 +134,7 @@ describe("normalizers", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "decodes nullable parent keys before normalization fills them",
     () =>
       Effect.gen(function* () {
@@ -158,7 +158,7 @@ describe("normalizers", () => {
       }),
   );
 
-  it.effect("decodes nullable CoListOfficeKey values", () =>
+  itEffect("decodes nullable CoListOfficeKey values", () =>
     Effect.gen(function* () {
       const decodeCoListOfficeKey = Schema.decodeUnknownEffect(
         Schema.Struct({
@@ -172,7 +172,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect("decodes nullable Media collections", () =>
+  itEffect("decodes nullable Media collections", () =>
     Effect.gen(function* () {
       const decodePropertyMedia = Schema.decodeUnknownEffect(
         Schema.Struct({ Media: PropertyListingSchema.fields.Media }),
@@ -194,7 +194,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect("decodes nullable social media collections", () =>
+  itEffect("decodes nullable social media collections", () =>
     Effect.gen(function* () {
       const decodeMemberSocial = Schema.decodeUnknownEffect(
         Schema.Struct({
@@ -215,7 +215,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect("decodes nullable child keys before fallback row key derivation", () =>
+  itEffect("decodes nullable child keys before fallback row key derivation", () =>
     Effect.gen(function* () {
       const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
       const decodeRooms = Schema.decodeUnknownEffect(RoomsSchema);
@@ -255,7 +255,7 @@ describe("normalizers", () => {
     }),
   );
 
-  it.effect("decodes media records and reports invalid enum values", () =>
+  itEffect("decodes media records and reports invalid enum values", () =>
     Effect.gen(function* () {
       const decodeMedia = Schema.decodeUnknownEffect(MediaSchema);
 

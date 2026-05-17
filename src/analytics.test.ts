@@ -91,7 +91,7 @@ describe("analytics", () => {
     assert.match(built, /ReferralURL=https%3A%2F%2Fexample\.test/);
   });
 
-  it.effect(
+  itEffect(
     "uses client config analyticsUrl without adding auth or secrets",
     () =>
       Effect.gen(function* () {

@@ -5,7 +5,7 @@ import { DdfWatermarkStore } from "#/watermark";
 import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "#/metrics";
 
 describe("watermark persistence", () => {
-  it.effect(
+  itEffect(
     "loads and saves watermarks through the Effect KeyValueStore service",
     () =>
       Effect.gen(function* () {

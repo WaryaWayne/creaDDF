@@ -145,7 +145,7 @@ describe("syncDdfDatabaseOnce planning", () => {
     }
   });
 
-  it.effect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
+  itEffect("loads chosen AOR keys from CREA_CHOSEN_AOR_KEYS", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({
         CREA_CHOSEN_AOR_KEYS: '["76","77","93"]',
@@ -158,7 +158,7 @@ describe("syncDdfDatabaseOnce planning", () => {
     }),
   );
 
-  it.effect("fails malformed chosen AOR env values clearly", () =>
+  itEffect("fails malformed chosen AOR env values clearly", () =>
     Effect.gen(function* () {
       const provider = ConfigProvider.fromUnknown({
         CREA_CHOSEN_AOR_KEYS: "[76,]",
@@ -176,7 +176,7 @@ describe("syncDdfDatabaseOnce planning", () => {
     }),
   );
 
-  it.effect("pages destinations and persists each destination before returning counts", () =>
+  itEffect("pages destinations and persists each destination before returning counts", () =>
     Effect.gen(function* () {
       const persisted: Array<number> = [];
       const http = emptyHttp({
@@ -241,7 +241,7 @@ describe("syncDdfDatabaseOnce planning", () => {
     }),
   );
 
-  it.effect("continues replication and records a partial failure when destination sync fails", () =>
+  itEffect("continues replication and records a partial failure when destination sync fails", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const recordedErrors: Array<string> = [];
@@ -300,7 +300,7 @@ describe("syncDdfDatabaseOnce planning", () => {
     }),
   );
 
-  it.effect("syncs destinations and saves replication watermarks with the current DB scope", () =>
+  itEffect("syncs destinations and saves replication watermarks with the current DB scope", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const savedScopes: Array<{

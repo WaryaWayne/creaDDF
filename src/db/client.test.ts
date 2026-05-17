@@ -133,7 +133,7 @@ describe("database read client helpers", () => {
     assert.deepEqual(coListOfficeKeysFromRow(propertyRow), ["office-2", "office-3"]);
   });
 
-  it.effect("validates pagination options as typed Effect failures", () =>
+  itEffect("validates pagination options as typed Effect failures", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(
         validateListOptions("properties.list", { limit: 0 }),

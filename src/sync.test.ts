@@ -76,7 +76,7 @@ const listingScopesLabel = (listings: ReadonlyArray<OpenHouseListingScope>) =>
     .join(",");
 
 describe("syncProperties", () => {
-  it.effect(
+  itEffect(
     "hydrates property replication identifiers with bounded concurrency and counts successes",
     () =>
       Effect.gen(function* () {
@@ -138,7 +138,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "uses default concurrency 100 and caps hydration batches",
     () =>
       Effect.gen(function* () {
@@ -192,7 +192,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "persists hydrated property batches before hydrating every identifier",
     () =>
       Effect.gen(function* () {
@@ -241,7 +241,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "persists property records through the compound graph sink",
     () =>
       Effect.gen(function* () {
@@ -279,7 +279,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "marks out-of-scope hydrated property records inactive before advancing the watermark",
     () =>
       Effect.gen(function* () {
@@ -349,7 +349,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "does not advance the property watermark past a failed out-of-scope open house cleanup",
     () =>
       Effect.gen(function* () {
@@ -425,7 +425,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "paginates replication next links and calls property graph persistence",
     () =>
       Effect.gen(function* () {
@@ -494,7 +494,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "composes replication query filters before the incremental watermark filter",
     () =>
       Effect.gen(function* () {
@@ -523,7 +523,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "collects per-record hydration, schema decode, and persistence errors",
     () =>
       Effect.gen(function* () {
@@ -597,7 +597,7 @@ describe("syncProperties", () => {
   );
 
 
-  it.effect("skips null or empty replication keys without hydrating or advancing watermarks", () =>
+  itEffect("skips null or empty replication keys without hydrating or advancing watermarks", () =>
     Effect.gen(function* () {
       const requestedKeys: Array<string> = [];
       const http = emptyHttp({
@@ -638,7 +638,7 @@ describe("syncProperties", () => {
     }),
   );
 
-  it.effect("does not save a property watermark past a hydration failure", () =>
+  itEffect("does not save a property watermark past a hydration failure", () =>
     Effect.gen(function* () {
       const savedWatermarks: Array<string> = [];
       const http = emptyHttp({
@@ -694,7 +694,7 @@ describe("syncProperties", () => {
     }),
   );
 
-  it.effect("reports missing property replication keys without hydrating empty keys", () =>
+  itEffect("reports missing property replication keys without hydrating empty keys", () =>
     Effect.gen(function* () {
       const requestedKeys: Array<string> = [];
       const savedWatermarks: Array<string> = [];
@@ -747,7 +747,7 @@ describe("syncProperties", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "does not save a property watermark past a persistence failure",
     () =>
       Effect.gen(function* () {
@@ -803,7 +803,7 @@ describe("syncProperties", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "counts record persistence independently from watermark persistence",
     () =>
       Effect.gen(function* () {
@@ -851,7 +851,7 @@ describe("syncProperties", () => {
 });
 
 describe("syncMembers and syncOffices", () => {
-  it.effect(
+  itEffect(
     "syncs member and office identifiers through hydration and sinks",
     () =>
       Effect.gen(function* () {
@@ -939,7 +939,7 @@ describe("syncMembers and syncOffices", () => {
       }),
   );
 
-  it.effect("skips out-of-scope hydrated member and office records", () =>
+  itEffect("skips out-of-scope hydrated member and office records", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const http = emptyHttp({
@@ -1054,7 +1054,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect("reports missing member and office replication keys without hydrating empty keys", () =>
+  itEffect("reports missing member and office replication keys without hydrating empty keys", () =>
     Effect.gen(function* () {
       const requestedKeys: Array<string> = [];
       const calls: Array<string> = [];
@@ -1129,7 +1129,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect("runs social-media hooks alongside compound member and office sinks", () =>
+  itEffect("runs social-media hooks alongside compound member and office sinks", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const http = emptyHttp({
@@ -1221,7 +1221,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect("does not count social-only member and office hooks as persisted records", () =>
+  itEffect("does not count social-only member and office hooks as persisted records", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const http = emptyHttp({
@@ -1324,7 +1324,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect("keeps member and office watermarks before failed records", () =>
+  itEffect("keeps member and office watermarks before failed records", () =>
     Effect.gen(function* () {
       const calls: Array<string> = [];
       const http = emptyHttp({
@@ -1422,7 +1422,7 @@ describe("syncMembers and syncOffices", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "keeps nextLink replication page failures structured and does not advance watermarks",
     () =>
       Effect.gen(function* () {
@@ -1507,7 +1507,7 @@ describe("syncMembers and syncOffices", () => {
 });
 
 describe("OpenHouse schema", () => {
-  it.effect("accepts YYYY-MM-DD dates and rejects invalid calendar dates", () =>
+  itEffect("accepts YYYY-MM-DD dates and rejects invalid calendar dates", () =>
     Effect.gen(function* () {
       const OpenHouseDateSchema = Schema.Struct({
         OpenHouseKey: OpenHouseSchema.fields.OpenHouseKey,
@@ -1531,7 +1531,7 @@ describe("OpenHouse schema", () => {
 });
 
 describe("syncOpenHouses", () => {
-  it.effect(
+  itEffect(
     "uses list pagination with caller query options and sink calls",
     () =>
       Effect.gen(function* () {
@@ -1609,7 +1609,7 @@ describe("syncOpenHouses", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "queries OpenHouse by listing scope chunks inside a rolling date window",
     () =>
       Effect.gen(function* () {
@@ -1643,7 +1643,7 @@ describe("syncOpenHouses", () => {
       }),
   );
 
-  it.effect("uses bounded concurrency for OpenHouse query chunks", () =>
+  itEffect("uses bounded concurrency for OpenHouse query chunks", () =>
     Effect.gen(function* () {
       let active = 0;
       let maxActive = 0;
@@ -1676,7 +1676,7 @@ describe("syncOpenHouses", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "does not save a global OpenHouse watermark from event dates",
     () =>
       Effect.gen(function* () {
@@ -1722,7 +1722,7 @@ describe("syncOpenHouses", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "collects OpenHouse page schema failures as structured sync errors",
     () =>
       Effect.gen(function* () {
@@ -1777,7 +1777,7 @@ describe("syncOpenHouses", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "collects OpenHouse nextLink failures without dropping previous page records or advancing watermarks",
     () =>
       Effect.gen(function* () {
@@ -1831,7 +1831,7 @@ describe("syncOpenHouses", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "decodes selected OpenHouse nextLink pages with the selected schema",
     () =>
       Effect.gen(function* () {
@@ -1885,7 +1885,7 @@ describe("master list prune helpers", () => {
     });
   });
 
-  it.effect("fails property pruning on malformed master-list keys", () =>
+  itEffect("fails property pruning on malformed master-list keys", () =>
     Effect.gen(function* () {
       const marked: Array<ReadonlyArray<string>> = [];
       const http = emptyHttp({
@@ -1921,7 +1921,7 @@ describe("master list prune helpers", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "gets property master lists and calls prune sinks without owning a database",
     () =>
       Effect.gen(function* () {
@@ -1957,7 +1957,7 @@ describe("master list prune helpers", () => {
       }),
   );
 
-  it.effect("fails property master lists on invalid replication keys", () =>
+  itEffect("fails property master lists on invalid replication keys", () =>
     Effect.gen(function* () {
       const http = emptyHttp({
         requestJson: <T = unknown>(path: string) => {
@@ -1984,7 +1984,7 @@ describe("master list prune helpers", () => {
     }),
   );
 
-  it.effect("fails member and office pruning on malformed master-list keys", () =>
+  itEffect("fails member and office pruning on malformed master-list keys", () =>
     Effect.gen(function* () {
       const markedMembers: Array<ReadonlyArray<string>> = [];
       const markedOffices: Array<ReadonlyArray<string>> = [];
@@ -2038,7 +2038,7 @@ describe("master list prune helpers", () => {
     }),
   );
 
-  it.effect("gets member and office master lists and calls prune sinks", () =>
+  itEffect("gets member and office master lists and calls prune sinks", () =>
     Effect.gen(function* () {
       const markedMembers: Array<ReadonlyArray<string>> = [];
       const markedOffices: Array<ReadonlyArray<string>> = [];

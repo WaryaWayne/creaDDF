@@ -275,15 +275,15 @@ export class DdfHttp extends Context.Service<DdfHttp, DdfHttpApi>()(
         const json: unknown = yield* finalRes.json.pipe(
           Effect.mapError((cause) => new DdfApiJsonParseError({ url, cause })),
         );
-        return yield* decodeJson(json, url, schema).pipe(
-          Effect.tapError((cause) =>
-            Effect.logWarning("CREA DDF schema decode failed", {
-              url,
-              issues: cause.issues,
-              cause,
-            }),
-          ),
-        );
+        return yield* decodeJson(json, url, schema);
+        //   .pipe(Effect.tapError((cause) =>
+        //     Effect.logWarning("CREA DDF schema decode failed", {
+        //       url,
+        //       issues: cause.issues,
+        //       cause,
+        //     }),
+        //   ),
+        // );
       });
 
       return {

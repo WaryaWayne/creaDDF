@@ -87,8 +87,11 @@ const assertDecodeFailureMentions = <S extends Schema.Top>(
 ) =>
   Effect.gen(function* () {
     const exit = yield* Effect.exit(Schema.decodeUnknownEffect(schema)(payload));
-    if (Exit.isSuccess(exit)) assert.fail("expected schema decode to fail");
-    assert.match(Cause.pretty(exit.cause), expected);
+    if (Exit.isFailure(exit)) {
+      assert.match(Cause.pretty(exit.cause), expected);
+      return;
+    }
+    assert.fail("expected schema decode to fail");
   });
 
 const bodyFromRequest = (request: HttpClientRequest.HttpClientRequest) => {
@@ -228,7 +231,7 @@ const officeRecord = {
 };
 
 describe("odata resource paths", () => {
-  it.effect("requests list endpoints with encoded query options", () =>
+  itEffect("requests list endpoints with encoded query options", () =>
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(
@@ -255,7 +258,7 @@ describe("odata resource paths", () => {
     }),
   );
 
-  it.effect("requests keyed endpoints and escapes string keys", () =>
+  itEffect("requests keyed endpoints and escapes string keys", () =>
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(
@@ -284,25 +287,25 @@ describe("odata resource paths", () => {
 });
 
 describe("canonical resource schema decoding", () => {
-  it.effect("requires ListingKey on full Property payloads", () =>
+  itEffect("requires ListingKey on full Property payloads", () =>
     assertDecodeFailureMentions(PropertyListingSchema, {}, /ListingKey/),
   );
 
-  it.effect("requires MemberKey on full Member payloads", () =>
+  itEffect("requires MemberKey on full Member payloads", () =>
     assertDecodeFailureMentions(MemberSchema, {}, /MemberKey/),
   );
 
-  it.effect("requires OfficeKey on full Office payloads", () =>
+  itEffect("requires OfficeKey on full Office payloads", () =>
     assertDecodeFailureMentions(OfficeSchema, {}, /OfficeKey/),
   );
 
-  it.effect("requires DestinationId on full Destination payloads", () =>
+  itEffect("requires DestinationId on full Destination payloads", () =>
     assertDecodeFailureMentions(DestinationSchema, {}, /DestinationId/),
   );
 });
 
 describe("selected resource decoding", () => {
-  it.effect("decodes a selected property list with only ListingKey", () =>
+  itEffect("decodes a selected property list with only ListingKey", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -325,7 +328,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("requires selected ListingKey on selected property lists", () =>
+  itEffect("requires selected ListingKey on selected property lists", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -345,12 +348,15 @@ describe("selected resource decoding", () => {
         ),
       );
 
-      if (Exit.isSuccess(exit)) assert.fail("expected selected decode to fail");
-      assert.match(Cause.pretty(exit.cause), /ListingKey/);
+      if (Exit.isFailure(exit)) {
+        assert.match(Cause.pretty(exit.cause), /ListingKey/);
+        return;
+      }
+      assert.fail("expected selected decode to fail");
     }),
   );
 
-  it.effect("preserves nullability for selected Property fields", () =>
+  itEffect("preserves nullability for selected Property fields", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -376,7 +382,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("fails before the request when a selected Property field is unknown", () =>
+  itEffect("fails before the request when a selected Property field is unknown", () =>
     Effect.gen(function* () {
       let requests = 0;
       const httpHandler = httpHandlerFrom((input) => {
@@ -394,13 +400,16 @@ describe("selected resource decoding", () => {
         ),
       );
 
-      if (Exit.isSuccess(exit)) assert.fail("expected unknown $select to fail");
       assert.equal(requests, 0);
-      assert.match(Cause.pretty(exit.cause), /NotAField/);
+      if (Exit.isFailure(exit)) {
+        assert.match(Cause.pretty(exit.cause), /NotAField/);
+        return;
+      }
+      assert.fail("expected unknown $select to fail");
     }),
   );
 
-  it.effect(
+  itEffect(
     "decodes selected property, member, and office list rows as partial resources",
     () =>
       Effect.gen(function* () {
@@ -492,7 +501,7 @@ describe("selected resource decoding", () => {
       }),
   );
 
-  it.effect("keeps omitted OData envelope values as schema decode errors", () =>
+  itEffect("keeps omitted OData envelope values as schema decode errors", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -517,7 +526,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("decodes OData envelopes that explicitly contain an empty value array", () =>
+  itEffect("decodes OData envelopes that explicitly contain an empty value array", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -543,7 +552,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect(
+  itEffect(
     "decodes selected keyed resources without requiring non-selected fields",
     () =>
       Effect.gen(function* () {
@@ -616,7 +625,7 @@ describe("selected resource decoding", () => {
       }),
   );
 
-  it.effect(
+  itEffect(
     "decodes full office list and keyed resources with Office schema",
     () =>
       Effect.gen(function* () {
@@ -647,20 +656,26 @@ describe("selected resource decoding", () => {
         assert.equal(result.offices.value[0]?.OfficeKey, "office-1");
         assert.equal(result.office.OfficeName, "Example Brokerage");
         const officeTimestamp = result.office.ModificationTimestamp;
+        if (officeTimestamp == null) {
+          throw new Error("expected office ModificationTimestamp to decode as Effect DateTime.Utc");
+        }
         if (!DateTime.isDateTime(officeTimestamp) || !DateTime.isUtc(officeTimestamp)) {
-          assert.fail("expected office ModificationTimestamp to decode as Effect DateTime.Utc");
+          throw new Error("expected office ModificationTimestamp to decode as Effect DateTime.Utc");
         }
         assert.equal(DateTime.formatIso(officeTimestamp), "2024-01-25T00:00:00.000Z");
 
         const socialTimestamp = result.office.OfficeSocialMedia?.[0]?.ModificationTimestamp;
+        if (socialTimestamp == null) {
+          throw new Error("expected office social ModificationTimestamp to decode as Effect DateTime.Utc");
+        }
         if (!DateTime.isDateTime(socialTimestamp) || !DateTime.isUtc(socialTimestamp)) {
-          assert.fail("expected office social ModificationTimestamp to decode as Effect DateTime.Utc");
+          throw new Error("expected office social ModificationTimestamp to decode as Effect DateTime.Utc");
         }
         assert.equal(DateTime.formatIso(socialTimestamp), "2024-01-20T00:00:00.000Z");
       }),
   );
 
-  it.effect("decodes full Destination list and keyed resources", () =>
+  itEffect("decodes full Destination list and keyed resources", () =>
     Effect.gen(function* () {
       const destinationRecord = {
         "@odata.context": "https://ddf.test/$metadata#Destination/$entity",
@@ -710,7 +725,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("decodes OData integer enum values for Destination responses", () =>
+  itEffect("decodes OData integer enum values for Destination responses", () =>
     Effect.gen(function* () {
       const destinationRecord = {
         DestinationId: 456,
@@ -743,7 +758,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("decodes selected Property national association id fields", () =>
+  itEffect("decodes selected Property national association id fields", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -787,7 +802,7 @@ describe("selected resource decoding", () => {
     }),
   );
 
-  it.effect("rejects invalid office payloads at the resource boundary", () =>
+  itEffect("rejects invalid office payloads at the resource boundary", () =>
     Effect.gen(function* () {
       const httpHandler = httpHandlerFrom((input) => {
         const url = String(input);
@@ -814,7 +829,7 @@ describe("selected resource decoding", () => {
 });
 
 describe("replication resource paths", () => {
-  it.effect("requests all-destination replication functions", () =>
+  itEffect("requests all-destination replication functions", () =>
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(replicateProperties()),
@@ -831,7 +846,7 @@ describe("replication resource paths", () => {
     }),
   );
 
-  it.effect("requests destination-specific replication functions", () =>
+  itEffect("requests destination-specific replication functions", () =>
     Effect.gen(function* () {
       assert.equal(
         yield* requestedUrlFor(replicatePropertiesForDestination(123)),
@@ -848,7 +863,7 @@ describe("replication resource paths", () => {
     }),
   );
 
-  it.effect("appends replication query options after destination path", () =>
+  itEffect("appends replication query options after destination path", () =>
     Effect.gen(function* () {
       const url = yield* requestedUrlFor(
         replicatePropertiesForDestination(123, {
@@ -868,7 +883,7 @@ describe("replication resource paths", () => {
 });
 
 describe("lead resource", () => {
-  it.effect("creates a lead without suppressing email by default", () =>
+  itEffect("creates a lead without suppressing email by default", () =>
     Effect.gen(function* () {
       const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
       const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -897,7 +912,7 @@ describe("lead resource", () => {
     }),
   );
 
-  it.effect("creates a lead with email suppressed when requested", () =>
+  itEffect("creates a lead with email suppressed when requested", () =>
     Effect.gen(function* () {
       const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
       const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -922,7 +937,7 @@ describe("lead resource", () => {
     }),
   );
 
-  it.effect("does not suppress lead email when explicitly disabled", () =>
+  itEffect("does not suppress lead email when explicitly disabled", () =>
     Effect.gen(function* () {
       const requests: Array<{ url: string; init?: DdfRequestOptions }> = [];
       const response = <T>(value: unknown) => Effect.succeed(value as T);
@@ -947,7 +962,7 @@ describe("lead resource", () => {
     }),
   );
 
-  it.effect("rejects invalid lead inputs before sending the request", () =>
+  itEffect("rejects invalid lead inputs before sending the request", () =>
     Effect.gen(function* () {
       let called = false;
       const http: DdfHttpApi = {

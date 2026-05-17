@@ -9,7 +9,7 @@ const TestEnvelope = ODataListEnvelopeSchema(
 const decodeTestEnvelope = Schema.decodeUnknownEffect(TestEnvelope);
 
 describe("ODataListEnvelopeSchema", () => {
-  it.effect("decodes an absent @odata.count", () =>
+  itEffect("decodes an absent @odata.count", () =>
     Effect.gen(function* () {
       const decoded = yield* decodeTestEnvelope({ value: [{ id: "one" }] });
 
@@ -18,7 +18,7 @@ describe("ODataListEnvelopeSchema", () => {
     }),
   );
 
-  it.effect("decodes a present integer @odata.count", () =>
+  itEffect("decodes a present integer @odata.count", () =>
     Effect.gen(function* () {
       const decoded = yield* decodeTestEnvelope({
         "@odata.count": 1,
@@ -29,7 +29,7 @@ describe("ODataListEnvelopeSchema", () => {
     }),
   );
 
-  it.effect("decodes a nullable @odata.count", () =>
+  itEffect("decodes a nullable @odata.count", () =>
     Effect.gen(function* () {
       const decoded = yield* decodeTestEnvelope({
         "@odata.count": null,
@@ -40,7 +40,7 @@ describe("ODataListEnvelopeSchema", () => {
     }),
   );
 
-  it.effect("rejects a non-integer @odata.count", () =>
+  itEffect("rejects a non-integer @odata.count", () =>
     Effect.gen(function* () {
       const exit = yield* Effect.exit(
         decodeTestEnvelope({ "@odata.count": 1.5, value: [] }),
