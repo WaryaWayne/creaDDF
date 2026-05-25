@@ -154,3 +154,10 @@ Generated build output goes to `dist/`. Database migrations are copied to `dist/
 ## Docs
 
 Start with [`@docs/README.md`](@docs/README.md) for the full SDK/API guide and [`@docs/09-current-implementation.md`](@docs/09-current-implementation.md) for the current package, runtime, database, sync, telemetry, and test status.
+
+## Author
+
+Built by Warya Wayne, `@waryawayne`.
+
+- GitHub: [@WaryaWayne](https://github.com/WaryaWayne)
+- X: [@waryawayne](https://x.com/waryawayne)
