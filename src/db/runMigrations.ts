@@ -2,9 +2,9 @@ import { Config, Data, Effect, FileSystem, Layer } from "effect";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { SqlClient } from "effect/unstable/sql/SqlClient";
 import { fileURLToPath } from "node:url";
-import { DdfDatabase } from "#/db/layer";
-import { splitSqlStatements } from "#/db/migrationUtils";
-export { splitSqlStatements } from "#/db/migrationUtils";
+import { DdfDatabase } from "./layer.js";
+import { splitSqlStatements } from "./migrationUtils.js";
+export { splitSqlStatements } from "./migrationUtils.js";
 
 export class DdfDatabaseMigrationLoadError extends Data.TaggedError(
   "DdfDatabaseMigrationLoadError",

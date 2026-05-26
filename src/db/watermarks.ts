@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { Data, Effect, Metric } from "effect";
-import type { SyncResource } from "#/sync";
-import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "#/metrics";
-import { DdfDatabase } from "#/db/layer";
-import type { DdfWatermarkScope } from "#/db/schema";
-import { ddfWatermarks, touchUpdatedAt } from "#/db/schema";
+import type { SyncResource } from "../sync.js";
+import { ddfWatermarkLoadCount, ddfWatermarkSaveCount } from "../metrics.js";
+import { DdfDatabase } from "./layer.js";
+import type { DdfWatermarkScope } from "./schema.js";
+import { ddfWatermarks, touchUpdatedAt } from "./schema.js";
 
 export class DdfDatabaseWatermarkError extends Data.TaggedError(
   "DdfDatabaseWatermarkError",

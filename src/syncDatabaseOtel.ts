@@ -2,10 +2,10 @@ import { BunFileSystem, BunRuntime } from "@effect/platform-bun";
 import { Config, Effect, Layer, Redacted } from "effect";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { makeDdfLayer } from "#/client";
-import { DdfDatabase } from "#/db/layer";
-import { syncDdfDatabaseOnce } from "#/syncDatabase";
-import { captureDdfFileTelemetry } from "#/telemetry";
+import { makeDdfLayer } from "./client.js";
+import { DdfDatabase } from "./db/layer.js";
+import { syncDdfDatabaseOnce } from "./syncDatabase.js";
+import { captureDdfFileTelemetry } from "./telemetry.js";
 
 const SyncOtelConfig = Config.all({
   clientId: Config.redacted("CREA_DDF_CLIENT_ID"),

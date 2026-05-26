@@ -1,5 +1,5 @@
 import type { Effect, Schema } from "effect";
-import type { DdfHttpError } from "#/client/http/errors";
+import type { DdfHttpError } from "./errors.js";
 
 export type DdfResponseSchema<T> = Schema.Decoder<T, never>;
 

@@ -6,12 +6,12 @@ import {
   normalizeMedia,
   normalizePropertyGraph,
   normalizePropertyRooms,
-} from "#/normalizers";
-import { MediaSchema, type MediaType } from "#/schema/mediaSchema";
-import { MemberSchema } from "#/schema/memberSchema";
-import { OfficeSchema } from "#/schema/officeSchema";
-import { PropertyListingSchema } from "#/schema/propertyListingsSchema";
-import { RoomsSchema } from "#/schema/roomsSchema";
+} from "./normalizers.js";
+import { MediaSchema, type MediaType } from "./schema/mediaSchema.js";
+import { MemberSchema } from "./schema/memberSchema.js";
+import { OfficeSchema } from "./schema/officeSchema.js";
+import { PropertyListingSchema } from "./schema/propertyListingsSchema.js";
+import { RoomsSchema } from "./schema/roomsSchema.js";
 
 const media = (
   overrides: Partial<MediaType[number]> = {},

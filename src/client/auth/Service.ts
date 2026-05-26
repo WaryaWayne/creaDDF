@@ -1,12 +1,12 @@
 import { Cache, Context, Effect, Layer, Metric } from "effect";
-import { makeAccessTokenCache } from "#/client/auth/makeAccessTokenCache";
+import { makeAccessTokenCache } from "./makeAccessTokenCache.js";
 import {
   ddfAuthCacheHitCount,
   ddfAuthCacheMissCount,
   ddfTokenRefreshCount,
-} from "#/metrics";
-import type { DdfAuthError } from "#/client/http/errors";
-import type { DdfAuthApi } from "#/client/auth/types";
+} from "../../metrics.js";
+import type { DdfAuthError } from "../http/errors.js";
+import type { DdfAuthApi } from "./types.js";
 
 export class DdfAuth extends Context.Service<DdfAuth, DdfAuthApi>()(
   "crea-ddf/client/auth/Service/DdfAuth",

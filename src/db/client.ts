@@ -1,22 +1,22 @@
 import { and, asc, desc, eq, getColumns, inArray, or, sql } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import type { MediaRecord, PropertyRecord, RoomRecord } from "#/sync"
-import type { SocialMedia } from "#/schema/officeSchema"
+import type { MediaRecord, PropertyRecord, RoomRecord } from "../sync.js"
+import type { SocialMedia } from "../schema/officeSchema.js"
 import type { PgColumn, PgTable, SelectedFields } from "drizzle-orm/pg-core"
 import { Context, Data, Effect, Layer } from "effect"
-import { DdfDatabase } from "#/db/layer"
+import { DdfDatabase } from "./layer.js"
 import {
   mediaRowFromRecord,
   roomRowFromRecord,
   socialMediaRowFromRecord,
-} from "#/db/sink"
+} from "./sink.js"
 import {
   ddfDestinations,
   ddfMembers,
   ddfOffices,
   ddfOpenHouses,
   ddfProperties,
-} from "#/db/schema"
+} from "./schema.js"
 
 type DbValue = string | number | boolean | Date | unknown | null
 export type DbRow = Readonly<Record<string, DbValue>>

@@ -6,12 +6,6 @@
   "publishConfig": {
     "access": "public"
   },
-  "imports": {
-    "#/*": {
-      "types": "./dist/*.d.ts",
-      "import": "./dist/*.js"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/WaryaWayne/creaDDF.git"

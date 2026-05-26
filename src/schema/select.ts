@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
-import { DdfInvalidODataQueryError } from "#/client/http/odata";
-import type { DdfResponseSchema } from "#/client/http/types";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
+import { DdfInvalidODataQueryError } from "../client/http/odata.js";
+import type { DdfResponseSchema } from "../client/http/types.js";
+import { ODataListEnvelopeSchema } from "./odata.js";
 
 export type SelectQuery = { readonly select?: ReadonlyArray<string> };
 

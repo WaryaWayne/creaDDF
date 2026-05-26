@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Config, Effect, Redacted } from "effect";
-import { makeDdfLayer } from "#/client";
+import { makeDdfLayer } from "./client.js";
 import {
   getDestination,
   getMember,
@@ -19,7 +19,7 @@ import {
   replicateOfficesForDestination,
   replicateProperties,
   replicatePropertiesForDestination,
-} from "#/resources";
+} from "./resources.js";
 
 const liveEnvNames = [
   "CREA_DDF_CLIENT_ID",

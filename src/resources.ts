@@ -1,34 +1,34 @@
 import { Data, Effect, Schema } from "effect";
-import { DdfHttp, encodeODataQuery } from "#/client";
-import type { DdfHttpError, DdfResponseSchema } from "#/client";
-import { MemberResponseSchema, MemberSchema } from "#/schema/memberSchema";
+import { DdfHttp, encodeODataQuery } from "./client.js";
+import type { DdfHttpError, DdfResponseSchema } from "./client.js";
+import { MemberResponseSchema, MemberSchema } from "./schema/memberSchema.js";
 import {
   DestinationResponseSchema,
   DestinationSchema,
-} from "#/schema/destinationSchema";
-import { OfficeResponseSchema, OfficeSchema } from "#/schema/officeSchema";
-import { OpenHouseResponseSchema, OpenHouseSchema } from "#/schema/openHouse";
+} from "./schema/destinationSchema.js";
+import { OfficeResponseSchema, OfficeSchema } from "./schema/officeSchema.js";
+import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse.js";
 import {
   MultiplePropertyListingResponseSchema,
   PropertyListingSchema,
   SinglePropertyListingResponseSchema,
-} from "#/schema/propertyListingsSchema";
+} from "./schema/propertyListingsSchema.js";
 import {
   MemberReplicationIdentifierResponseSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
   type ODataListEnvelope,
-} from "#/schema/odata";
+} from "./schema/odata.js";
 import {
   entitySchemaForSelect,
   listSchemaForSelect,
-} from "#/schema/select";
+} from "./schema/select.js";
 import type {
   LeadInput,
   ODataGetQuery,
   ODataListQuery,
   ReplicationQuery,
-} from "#/types";
+} from "./types.js";
 
 const replicationPath = (
   resource: "Property" | "Member" | "Office",

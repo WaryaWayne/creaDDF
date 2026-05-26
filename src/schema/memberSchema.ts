@@ -1,7 +1,7 @@
 import { Schema } from "effect";
-import { MediaSchema } from "#/schema/mediaSchema";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
-import { ResourceNameSchema, SocialMediaTypeSchema } from "#/schema/officeSchema";
+import { MediaSchema } from "./mediaSchema.js";
+import { ODataListEnvelopeSchema } from "./odata.js";
+import { ResourceNameSchema, SocialMediaTypeSchema } from "./officeSchema.js";
 
 export const MemberSchema = Schema.Struct({
   MemberKey: Schema.NullOr(Schema.String),

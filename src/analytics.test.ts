@@ -5,8 +5,8 @@ import {
   buildAnalyticsLogEventUrl,
   DEFAULT_CREA_ANALYTICS_URL,
   logAnalyticsEvent,
-} from "#/analytics";
-import { DdfConfig } from "#/client";
+} from "./analytics.js";
+import { DdfConfig } from "./client.js";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 

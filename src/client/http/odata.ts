@@ -3,7 +3,7 @@ import type {
   DdfODataGetQuery,
   DdfODataListQuery,
   DdfReplicationQuery,
-} from "#/client/http/types";
+} from "./types.js";
 
 const ODATA_TOP_MAX = 100;
 

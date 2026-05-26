@@ -5,12 +5,12 @@ import {
   DdfApiHttpError,
   DdfApiResponseSchemaDecodeError,
   DdfHttp,
-} from "#/client";
+} from "./client.js";
 import type {
   DdfHttpApi,
   DdfRequestOptions,
   DdfResponseSchema,
-} from "#/client";
+} from "./client.js";
 import {
   diffLocalKeysAgainstMasterList,
   getMemberMasterList,
@@ -23,9 +23,9 @@ import {
   syncOffices,
   syncOpenHouses,
   syncProperties,
-} from "#/sync";
-import type { OpenHouseListingScope } from "#/sync";
-import { OpenHouseSchema } from "#/schema/openHouse";
+} from "./sync.js";
+import type { OpenHouseListingScope } from "./sync.js";
+import { OpenHouseSchema } from "./schema/openHouse.js";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
 

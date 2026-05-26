@@ -2,7 +2,7 @@ import { assert, describe, it } from "vitest";
 import {
   migrationFilesWithIds,
   splitSqlStatements,
-} from "#/db/runMigrations";
+} from "./runMigrations.js";
 
 describe("database migrations runner", () => {
   it("splits drizzle SQL statement breakpoints without executing a database", () => {
