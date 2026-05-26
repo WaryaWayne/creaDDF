@@ -1,6 +1,6 @@
 {
   "name": "crea-ddf",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "An Effect Native Typescript SDK for the CREA DDF API with Postgres sync and frontend-ready database queries.",
   "type": "module",
   "publishConfig": {
