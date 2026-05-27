@@ -1,5 +1,5 @@
 import type { Effect, Redacted } from "effect";
-import type { DdfAuthError } from "#/client/http/errors";
+import type { DdfAuthError } from "../http/errors.js";
 
 export interface DdfAuthApi {
   readonly getAccessToken: (options?: {

@@ -1,5 +1,5 @@
 import { Schema, SchemaTransformation } from "effect";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
+import { ODataListEnvelopeSchema } from "./odata.js";
 
 const NullableString = Schema.NullOr(Schema.String);
 const NullableDateTime = Schema.NullOr(Schema.DateTimeUtcFromString);

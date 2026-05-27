@@ -1,6 +1,6 @@
 import { DateTime, Effect, Option, Schema } from "effect";
-import { MediaSchema, type MediaType } from "#/schema/mediaSchema";
-import type { RoomsType } from "#/schema/roomsSchema";
+import { MediaSchema, type MediaType } from "./schema/mediaSchema.js";
+import type { RoomsType } from "./schema/roomsSchema.js";
 
 type UnknownRecord = Record<string, unknown>;
 

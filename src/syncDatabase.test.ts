@@ -1,11 +1,11 @@
 import { effect as itEffect } from "@effect/vitest";
 import { assert, describe, it } from "vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
-import { DdfHttp } from "#/client";
-import type { DdfHttpApi } from "#/client";
-import type { DdfWatermarkScope } from "#/db/schema";
-import type { Destination } from "#/schema/destinationSchema";
-import type { SyncRecordError, SyncResource, SyncResult } from "#/sync";
+import { DdfHttp } from "./client.js";
+import type { DdfHttpApi } from "./client.js";
+import type { DdfWatermarkScope } from "./db/schema.js";
+import type { Destination } from "./schema/destinationSchema.js";
+import type { SyncRecordError, SyncResource, SyncResult } from "./sync.js";
 import {
   chosenAorKeysFromEnv,
   databaseSyncOptionsFromWatermarks,
@@ -14,7 +14,7 @@ import {
   syncDestinations,
   type SyncDdfDatabaseDependencies,
   type SyncDdfDatabaseOnceSummary,
-} from "#/syncDatabase";
+} from "./syncDatabase.js";
 
 const response = <T>(value: unknown) => Effect.succeed(value as T);
 

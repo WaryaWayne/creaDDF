@@ -9,8 +9,8 @@ import {
   Schema,
 } from "effect";
 import type { Success as EffectSuccess } from "effect/Effect";
-import { DdfHttp } from "#/client";
-import type { DdfHttpError } from "#/client";
+import { DdfHttp } from "./client.js";
+import type { DdfHttpError } from "./client.js";
 import {
   getMember,
   getOffice,
@@ -23,36 +23,36 @@ import {
   replicateOfficesForDestination,
   replicateProperties,
   replicatePropertiesForDestination,
-} from "#/resources";
+} from "./resources.js";
 import {
   normalizeMedia,
   normalizePropertyGraph,
   normalizePropertyRooms,
-} from "#/normalizers";
-import { OpenHouseResponseSchema, OpenHouseSchema } from "#/schema/openHouse";
-import { listSchemaForSelect } from "#/schema/select";
-import type { MediaType } from "#/schema/mediaSchema";
-import type { SocialMedia } from "#/schema/officeSchema";
-import type { RoomsType } from "#/schema/roomsSchema";
+} from "./normalizers.js";
+import { OpenHouseResponseSchema, OpenHouseSchema } from "./schema/openHouse.js";
+import { listSchemaForSelect } from "./schema/select.js";
+import type { MediaType } from "./schema/mediaSchema.js";
+import type { SocialMedia } from "./schema/officeSchema.js";
+import type { RoomsType } from "./schema/roomsSchema.js";
 import type {
   MemberReplicationIdentifier,
   ODataListEnvelope,
   OfficeReplicationIdentifier,
   PropertyReplicationIdentifier,
-} from "#/schema/odata";
+} from "./schema/odata.js";
 import {
   MemberReplicationIdentifierResponseSchema,
   OfficeReplicationIdentifierResponseSchema,
   PropertyReplicationIdentifierResponseSchema,
-} from "#/schema/odata";
-import type { ODataListQuery, ReplicationQuery } from "#/types";
+} from "./schema/odata.js";
+import type { ODataListQuery, ReplicationQuery } from "./types.js";
 import {
   ddfSyncFailedCount,
   ddfSyncHydratedCount,
   ddfSyncPersistedCount,
   ddfSyncSkippedCount,
-} from "#/metrics";
-import { DdfWatermarkStore } from "#/watermark";
+} from "./metrics.js";
+import { DdfWatermarkStore } from "./watermark.js";
 
 export const SyncModeSchema = Schema.Literals(["initial", "incremental"]);
 export const SyncResourceSchema = Schema.Literals([

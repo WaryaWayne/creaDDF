@@ -1,11 +1,11 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { Cause, Config, Data, DateTime, Effect, Exit } from "effect";
 import { randomUUID } from "node:crypto";
-import { DdfHttp } from "#/client";
-import { listDestinations } from "#/resources";
-import type { Destination } from "#/schema/destinationSchema";
-import { DestinationResponseSchema } from "#/schema/destinationSchema";
-import type { ODataListEnvelope } from "#/schema/odata";
+import { DdfHttp } from "./client.js";
+import { listDestinations } from "./resources.js";
+import type { Destination } from "./schema/destinationSchema.js";
+import { DestinationResponseSchema } from "./schema/destinationSchema.js";
+import type { ODataListEnvelope } from "./schema/odata.js";
 import type {
   MemberRecord,
   MemberSyncOptions,
@@ -18,24 +18,24 @@ import type {
   SyncRecordError,
   SyncResource,
   SyncResult,
-} from "#/sync";
+} from "./sync.js";
 import {
   syncMembers,
   syncOffices,
   syncOpenHouses,
   syncProperties,
-} from "#/sync";
-import { DdfDatabase } from "#/db/layer";
-import { runDdfDatabaseMigrations } from "#/db/runMigrations";
-import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "#/db/sink";
-import type { DdfDatabaseSyncSink } from "#/db/sink";
-import type { SerializedSyncRecordError } from "#/db/sink";
-import { ddfProperties, ddfSyncRuns } from "#/db/schema";
+} from "./sync.js";
+import { DdfDatabase } from "./db/layer.js";
+import { runDdfDatabaseMigrations } from "./db/runMigrations.js";
+import { makeDdfDatabaseSyncSink, serializeSyncRecordError } from "./db/sink.js";
+import type { DdfDatabaseSyncSink } from "./db/sink.js";
+import type { SerializedSyncRecordError } from "./db/sink.js";
+import { ddfProperties, ddfSyncRuns } from "./db/schema.js";
 import {
   loadDatabaseWatermark,
   saveDatabaseWatermark,
-} from "#/db/watermarks";
-import type { DdfWatermarkScope } from "#/db/schema";
+} from "./db/watermarks.js";
+import type { DdfWatermarkScope } from "./db/schema.js";
 
 export class DdfDatabaseSyncError extends Data.TaggedError(
   "DdfDatabaseSyncError",

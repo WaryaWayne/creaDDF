@@ -1,5 +1,5 @@
 import { Option, Schema } from "effect";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
+import { ODataListEnvelopeSchema } from "./odata.js";
 
 const isLeapYear = (year: number) =>
   (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;

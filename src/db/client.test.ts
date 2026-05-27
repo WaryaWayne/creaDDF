@@ -12,7 +12,7 @@ import {
   projectionPlan,
   propertyFieldPresets,
   validateListOptions,
-} from "#/db/client";
+} from "./client.js";
 
 describe("database read client helpers", () => {
   it("keeps website field presets free of raw payloads by default", () => {

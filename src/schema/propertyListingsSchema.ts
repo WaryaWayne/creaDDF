@@ -1,7 +1,7 @@
 import { DateTime, Effect, Schema } from "effect";
-import { RoomsSchema } from "#/schema/roomsSchema";
-import { MediaSchema } from "#/schema/mediaSchema";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
+import { RoomsSchema } from "./roomsSchema.js";
+import { MediaSchema } from "./mediaSchema.js";
+import { ODataListEnvelopeSchema } from "./odata.js";
 
 export const PropertyListingSchema = Schema.Struct({
   ListingKey: Schema.NullOr(Schema.String).annotate({

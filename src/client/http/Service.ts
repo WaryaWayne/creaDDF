@@ -3,35 +3,35 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import { DdfConfig } from "#/client/config/Service";
-import type { DdfClientConfig } from "#/client/config/Service";
+import { DdfConfig } from "../config/Service.js";
+import type { DdfClientConfig } from "../config/Service.js";
 import {
   ddfApiFailureCount,
   ddfApiRequestCount,
   ddfApiRetryCount,
   ddfRequestDuration,
-} from "#/metrics";
-import { ODataUnknownListEnvelopeSchema } from "#/schema/odata";
+} from "../../metrics.js";
+import { ODataUnknownListEnvelopeSchema } from "../../schema/odata.js";
 import {
   DdfTokenTransportError,
   DdfTokenHttpError,
   DdfTokenJsonParseError,
   DdfTokenResponseValidationError,
-} from "#/client/auth/errors";
-import { DdfAuth } from "#/client/auth/Service";
+} from "../auth/errors.js";
+import { DdfAuth } from "../auth/Service.js";
 import {
   DdfApiJsonParseError,
   DdfApiResponseSchemaDecodeError,
   DdfApiTransportError,
   schemaDecodeIssuesFromCause,
   statusError,
-} from "#/client/http/errors";
+} from "./errors.js";
 import {
   DdfInvalidODataQueryError,
   DdfUnsupportedODataParameterError,
   encodeODataQuery,
   keyLiteral,
-} from "#/client/http/odata";
+} from "./odata.js";
 import type {
   DdfHttpApi,
   DdfODataGetQuery,
@@ -39,7 +39,7 @@ import type {
   DdfReplicationQuery,
   DdfRequestOptions,
   DdfResponseSchema,
-} from "#/client/http/types";
+} from "./types.js";
 
 const DEFAULT_RETRY_POLICY = {
   maxRetries: 2,

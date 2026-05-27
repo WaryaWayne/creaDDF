@@ -1,7 +1,7 @@
 import { effect as itEffect } from "@effect/vitest";
 import { assert, describe } from "vitest";
 import { Effect, Exit, Schema } from "effect";
-import { ODataListEnvelopeSchema } from "#/schema/odata";
+import { ODataListEnvelopeSchema } from "./odata.js";
 
 const TestEnvelope = ODataListEnvelopeSchema(
   Schema.Struct({ id: Schema.String }),

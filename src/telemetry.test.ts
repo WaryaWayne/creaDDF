@@ -1,5 +1,5 @@
 import { assert, describe, it } from "vitest";
-import { makeDdfOtlpTelemetryLayer } from "#/telemetry";
+import { makeDdfOtlpTelemetryLayer } from "./telemetry.js";
 
 describe("telemetry", () => {
   it("constructs the optional OTLP telemetry layer without requiring callers to use it", () => {

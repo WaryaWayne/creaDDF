@@ -11,8 +11,8 @@ import {
   DdfInvalidODataQueryError,
   encodeODataQuery,
   filters,
-} from "#/client";
-import type { DdfClientConfig, DdfHttpApi } from "#/client";
+} from "./client.js";
+import type { DdfClientConfig, DdfHttpApi } from "./client.js";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";

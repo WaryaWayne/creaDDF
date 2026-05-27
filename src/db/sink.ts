@@ -14,11 +14,11 @@ import type {
   RoomRecord,
   SyncOwner,
   SyncRecordError,
-} from "#/sync";
-import type { Destination } from "#/schema/destinationSchema";
-import type { SocialMedia } from "#/schema/officeSchema";
-import { DdfDatabase } from "#/db/layer";
-import type { DdfSerializedCause } from "#/db/schema";
+} from "../sync.js";
+import type { Destination } from "../schema/destinationSchema.js";
+import type { SocialMedia } from "../schema/officeSchema.js";
+import { DdfDatabase } from "./layer.js";
+import type { DdfSerializedCause } from "./schema.js";
 import {
   ddfDestinations,
   ddfMembers,
@@ -27,7 +27,7 @@ import {
   ddfProperties,
   ddfSyncErrors,
   touchUpdatedAt,
-} from "#/db/schema";
+} from "./schema.js";
 
 export class DdfDatabaseSinkError extends Data.TaggedError(
   "DdfDatabaseSinkError",
